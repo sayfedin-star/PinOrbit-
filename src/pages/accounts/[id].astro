@@ -6,15 +6,12 @@ import { getAccounts } from '../../lib/supabase';
 
 export async function getStaticPaths() {
   const accounts = await getAccounts();
-  if (!accounts || accounts.length === 0) {
-    return [
-      { params: { id: 'acc-1' } },
-      { params: { id: 'acc-2' } },
-      { params: { id: 'acc-3' } },
-    ];
-  }
-  return accounts.map((acc) => ({
-    params: { id: acc.id },
+  const fallbackIds = ['acc-1', 'acc-2', 'acc-3'];
+  const fetchedIds = (accounts || []).map((a) => a.id);
+  const allIds = Array.from(new Set([...fallbackIds, ...fetchedIds]));
+
+  return allIds.map((id) => ({
+    params: { id },
   }));
 }
 
