@@ -1,0 +1,246 @@
+---
+import Layout from '../layouts/Layout.astro';
+import SectionHeader from '../components/ui/SectionHeader.astro';
+---
+
+<Layout title="Audit Trail" description="Automated database audit logs tracking administrative mutations on accounts and boards.">
+  <SectionHeader
+    title="Audit Trail"
+    description="Automated database audit logs tracking administrative mutations on accounts and boards."
+  />
+
+  <div id="audit-container">
+    <div class="overflow-hidden rounded-xl border border-border bg-card p-12 text-center text-xs text-muted-foreground animate-pulse">
+      Loading database audit trail...
+    </div>
+  </div>
+
+  <!-- Detail Inspection Modal -->
+  <div id="audit-detail-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" aria-modal="true" role="dialog">
+    <div id="audit-detail-backdrop" class="fixed inset-0"></div>
+    <div class="relative w-full max-w-2xl rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-4 z-10 max-h-[85vh] flex flex-col">
+      <div class="flex items-center justify-between border-b border-border pb-4 flex-shrink-0">
+        <div>
+          <h3 class="text-base font-bold text-foreground">Audit Record Inspection</h3>
+          <p id="audit-modal-subtitle" class="text-xs text-muted-foreground mt-0.5"></p>
+        </div>
+        <button id="close-audit-modal" class="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div class="flex-1 overflow-y-auto space-y-4 pr-1">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- Old Data Payload -->
+          <div class="space-y-1.5">
+            <span class="text-xs font-semibold text-rose-500 flex items-center gap-1">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              Before (OLD Data)
+            </span>
+            <pre id="audit-old-json" class="rounded-xl border border-border bg-muted/60 p-3 font-mono text-[11px] text-foreground overflow-x-auto whitespace-pre-wrap max-h-60"></pre>
+          </div>
+
+          <!-- New Data Payload -->
+          <div class="space-y-1.5">
+            <span class="text-xs font-semibold text-emerald-500 flex items-center gap-1">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              After (NEW Data)
+            </span>
+            <pre id="audit-new-json" class="rounded-xl border border-border bg-muted/60 p-3 font-mono text-[11px] text-foreground overflow-x-auto whitespace-pre-wrap max-h-60"></pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end border-t border-border pt-4 flex-shrink-0">
+        <button
+          id="dismiss-audit-modal"
+          class="rounded-xl border border-border px-4 py-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+</Layout>
+
+<script>
+  import { requireAuth } from '../lib/auth';
+  import { getAuditLogs } from '../lib/supabase';
+  import { formatDate, renderEmptyStateHTML, escapeHtml, maskWebhookUrl } from '../lib/ui-helpers';
+  import type { AuditLog } from '../lib/types';
+
+  let auditEntries: AuditLog[] = [];
+
+  async function init() {
+    const isAuth = await requireAuth();
+    if (!isAuth) return;
+    setupModalListeners();
+    await loadAuditLogs();
+  }
+
+  async function loadAuditLogs() {
+    const container = document.getElementById('audit-container');
+    if (!container) return;
+
+    try {
+      auditEntries = await getAuditLogs(100);
+
+      if (!auditEntries || auditEntries.length === 0) {
+        container.innerHTML = renderEmptyStateHTML(
+          'No Audit Events Recorded',
+          'Admin mutation actions on accounts and boards will be logged here automatically.',
+          'alert-circle'
+        );
+        return;
+      }
+
+      const rowsHtml = auditEntries
+        .map((item, idx) => {
+          let actionBadge = 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20';
+          if (item.action === 'INSERT') {
+            actionBadge = 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20';
+          } else if (item.action === 'UPDATE') {
+            actionBadge = 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20';
+          } else if (item.action === 'DELETE') {
+            actionBadge = 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20';
+          }
+
+          const userLabel = item.changed_by
+            ? 'User #' + item.changed_by.slice(0, 8)
+            : 'System Trigger';
+
+          return `
+            <tr class="transition-colors hover:bg-muted/40">
+              <td class="px-6 py-4 font-mono text-xs font-semibold text-foreground">
+                <span class="rounded-md bg-muted px-2 py-1">${escapeHtml(item.table_name)}</span>
+              </td>
+              <td class="px-6 py-4">
+                <span class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-bold ${actionBadge}">
+                  ${escapeHtml(item.action)}
+                </span>
+              </td>
+              <td class="px-6 py-4 font-mono text-xs text-muted-foreground">
+                ${escapeHtml(item.record_id)}
+              </td>
+              <td class="px-6 py-4 text-xs font-medium text-foreground">
+                ${escapeHtml(userLabel)}
+              </td>
+              <td class="px-6 py-4 text-xs text-muted-foreground whitespace-nowrap">
+                ${formatDate(item.changed_at)}
+              </td>
+              <td class="px-6 py-4 text-right">
+                <button
+                  data-action="inspect-audit"
+                  data-idx="${idx}"
+                  class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-all"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                  <span>Diff</span>
+                </button>
+              </td>
+            </tr>
+          `;
+        })
+        .join('');
+
+      container.innerHTML = `
+        <div class="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+              <thead class="border-b border-border bg-muted/50 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th class="px-6 py-3.5">Table</th>
+                  <th class="px-6 py-3.5">Action</th>
+                  <th class="px-6 py-3.5">Record ID</th>
+                  <th class="px-6 py-3.5">Changed By</th>
+                  <th class="px-6 py-3.5">Timestamp</th>
+                  <th class="px-6 py-3.5 text-right">Inspection</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-border">
+                ${rowsHtml}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+
+      bindInspectListeners();
+    } catch (err) {
+      console.error('Failed to load audit logs client-side:', err);
+      container.innerHTML = renderEmptyStateHTML(
+        'Error Loading Audit Trail',
+        'Could not fetch audit log records. Please try refreshing.',
+        'alert-circle'
+      );
+    }
+  }
+
+  function maskPayloadSecrets(data: Record<string, any> | null): Record<string, any> | null {
+    if (!data) return null;
+    const sanitized = { ...data };
+    if (sanitized.webhook_url) {
+      sanitized.webhook_url = maskWebhookUrl(sanitized.webhook_url);
+    }
+    return sanitized;
+  }
+
+  function bindInspectListeners() {
+    document.querySelectorAll('[data-action="inspect-audit"]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        const idxStr = (e.currentTarget as HTMLElement).getAttribute('data-idx');
+        if (idxStr === null) return;
+        const item = auditEntries[parseInt(idxStr, 10)];
+        if (item) openInspectModal(item);
+      });
+    });
+  }
+
+  function openInspectModal(item: AuditLog) {
+    const modal = document.getElementById('audit-detail-modal');
+    const subtitle = document.getElementById('audit-modal-subtitle');
+    const oldJson = document.getElementById('audit-old-json');
+    const newJson = document.getElementById('audit-new-json');
+
+    if (subtitle) {
+      subtitle.textContent = `${item.action} on table "${item.table_name}" (Record: ${item.record_id})`;
+    }
+
+    const maskedOld = maskPayloadSecrets(item.old_data);
+    const maskedNew = maskPayloadSecrets(item.new_data);
+
+    if (oldJson) {
+      oldJson.textContent = maskedOld ? JSON.stringify(maskedOld, null, 2) : '(None)';
+    }
+    if (newJson) {
+      newJson.textContent = maskedNew ? JSON.stringify(maskedNew, null, 2) : '(None)';
+    }
+
+    modal?.classList.remove('hidden');
+    modal?.classList.add('flex');
+  }
+
+  function setupModalListeners() {
+    const modal = document.getElementById('audit-detail-modal');
+    const closeBtn = document.getElementById('close-audit-modal');
+    const dismissBtn = document.getElementById('dismiss-audit-modal');
+    const backdrop = document.getElementById('audit-detail-backdrop');
+
+    function closeModal() {
+      modal?.classList.add('hidden');
+      modal?.classList.remove('flex');
+    }
+
+    closeBtn?.addEventListener('click', closeModal);
+    dismissBtn?.addEventListener('click', closeModal);
+    backdrop?.addEventListener('click', closeModal);
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && modal && !modal.classList.contains('hidden')) {
+        closeModal();
+      }
+    });
+  }
+
+  init();
+</script>

@@ -10,8 +10,8 @@ import KPIStatCard from '../components/ui/KPIStatCard.astro';
     description="Real-time status monitor for automated Pinterest recipe publishing."
   />
 
-  <!-- 4 KPI Cards -->
-  <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+  <!-- 4 Primary KPI Cards -->
+  <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
     <div id="kpi-total-accounts">
       <KPIStatCard
         title="Total Accounts"
@@ -47,6 +47,50 @@ import KPIStatCard from '../components/ui/KPIStatCard.astro';
         iconName="alert-triangle"
         color="rose"
       />
+    </div>
+  </div>
+
+  <!-- Webhook Orchestration Metrics Bar -->
+  <div class="mb-8 rounded-2xl border border-border bg-card p-5 shadow-sm space-y-4">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border pb-3">
+      <div class="flex items-center gap-2">
+        <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        </div>
+        <div>
+          <h3 class="text-sm font-bold text-foreground">Multi-Webhook Orchestration Engine</h3>
+          <p class="text-xs text-muted-foreground">Outbound capacity routing and Make.com channel health</p>
+        </div>
+      </div>
+      <a href="/accounts" class="text-xs font-semibold text-primary hover:underline flex items-center gap-1">
+        Manage account webhooks &rarr;
+      </a>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div class="rounded-xl border border-border bg-background p-3.5 flex items-center justify-between">
+        <div>
+          <span class="text-xs text-muted-foreground font-medium">Total Webhook Channels</span>
+          <p id="wb-total-count" class="text-xl font-bold text-foreground mt-0.5">---</p>
+        </div>
+        <span class="rounded-full bg-slate-500/10 px-2.5 py-1 text-xs font-semibold text-slate-500">Channels</span>
+      </div>
+
+      <div class="rounded-xl border border-border bg-background p-3.5 flex items-center justify-between">
+        <div>
+          <span class="text-xs text-muted-foreground font-medium">Active Channels</span>
+          <p id="wb-active-count" class="text-xl font-bold text-emerald-500 mt-0.5">---</p>
+        </div>
+        <span class="rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">Operational</span>
+      </div>
+
+      <div class="rounded-xl border border-border bg-background p-3.5 flex items-center justify-between">
+        <div>
+          <span class="text-xs text-muted-foreground font-medium">Exhausted Channels</span>
+          <p id="wb-exhausted-count" class="text-xl font-bold text-amber-500 mt-0.5">---</p>
+        </div>
+        <span class="rounded-full bg-amber-500/10 px-2.5 py-1 text-xs font-semibold text-amber-600 dark:text-amber-400">Capacity Alert</span>
+      </div>
     </div>
   </div>
 
@@ -106,6 +150,15 @@ import KPIStatCard from '../components/ui/KPIStatCard.astro';
         getPins('all'),
         getLogs(5),
       ]);
+
+      // Update Webhook Metrics
+      const totalWb = document.getElementById('wb-total-count');
+      const activeWb = document.getElementById('wb-active-count');
+      const exhaustedWb = document.getElementById('wb-exhausted-count');
+
+      if (totalWb) totalWb.textContent = String(kpis.totalWebhooks ?? 0);
+      if (activeWb) activeWb.textContent = String(kpis.activeWebhooks ?? 0);
+      if (exhaustedWb) exhaustedWb.textContent = String(kpis.exhaustedWebhooks ?? 0);
 
       // Update KPI Total Accounts
       const totalAccElem = document.getElementById('kpi-total-accounts');

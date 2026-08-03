@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import type { Account, Board, Pin, Log, DashboardKPIs } from './types';
+import type { Account, Board, Pin, Log, AuditLog, AccountWebhook, DashboardKPIs } from './types';
 
 const supabaseUrl = import.meta.env.PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY || '';
@@ -24,6 +24,9 @@ let mockAccounts: Account[] = [
     is_active: true,
     created_at: new Date(Date.now() - 86400000 * 10).toISOString(),
     boards_count: 3,
+    webhooks_count: 2,
+    active_webhooks_count: 2,
+    primary_webhook_label: 'Primary Hook',
   },
   {
     id: 'acc-2',
@@ -33,6 +36,9 @@ let mockAccounts: Account[] = [
     is_active: true,
     created_at: new Date(Date.now() - 86400000 * 7).toISOString(),
     boards_count: 2,
+    webhooks_count: 1,
+    active_webhooks_count: 1,
+    primary_webhook_label: 'Primary',
   },
   {
     id: 'acc-3',
@@ -42,6 +48,80 @@ let mockAccounts: Account[] = [
     is_active: false,
     created_at: new Date(Date.now() - 86400000 * 4).toISOString(),
     boards_count: 4,
+    webhooks_count: 1,
+    active_webhooks_count: 0,
+    primary_webhook_label: 'Backup Hook',
+  },
+];
+
+let mockWebhooks: AccountWebhook[] = [
+  {
+    id: 'hook-1',
+    account_id: 'acc-1',
+    label: 'Primary Hook',
+    webhook_url: 'https://hook.make.com/abc123healthy1',
+    monthly_capacity: 500,
+    monthly_usage: 45,
+    remaining_capacity: 455,
+    priority: 1,
+    is_active: true,
+    is_primary: true,
+    last_used_at: new Date(Date.now() - 3600000 * 2).toISOString(),
+    last_failed_at: null,
+    last_failure_reason: null,
+    created_at: new Date(Date.now() - 86400000 * 10).toISOString(),
+    updated_at: new Date(Date.now() - 86400000 * 10).toISOString(),
+  },
+  {
+    id: 'hook-2',
+    account_id: 'acc-1',
+    label: 'Secondary Channel',
+    webhook_url: 'https://hook.make.com/abc123healthy2',
+    monthly_capacity: 500,
+    monthly_usage: 0,
+    remaining_capacity: 500,
+    priority: 2,
+    is_active: true,
+    is_primary: false,
+    last_used_at: null,
+    last_failed_at: null,
+    last_failure_reason: null,
+    created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
+    updated_at: new Date(Date.now() - 86400000 * 5).toISOString(),
+  },
+  {
+    id: 'hook-3',
+    account_id: 'acc-2',
+    label: 'Primary',
+    webhook_url: 'https://hook.make.com/def456dessert2',
+    monthly_capacity: 500,
+    monthly_usage: 120,
+    remaining_capacity: 380,
+    priority: 1,
+    is_active: true,
+    is_primary: true,
+    last_used_at: new Date(Date.now() - 3600000 * 5).toISOString(),
+    last_failed_at: null,
+    last_failure_reason: null,
+    created_at: new Date(Date.now() - 86400000 * 7).toISOString(),
+    updated_at: new Date(Date.now() - 86400000 * 7).toISOString(),
+  },
+  {
+    id: 'hook-4',
+    account_id: 'acc-3',
+    label: 'Backup Hook',
+    webhook_url: 'https://hook.make.com/ghi789keto3',
+    monthly_capacity: 300,
+    monthly_usage: 300,
+    remaining_capacity: 0,
+    priority: 1,
+    is_active: false,
+    is_primary: true,
+    last_used_at: new Date(Date.now() - 86400000 * 2).toISOString(),
+    last_failed_at: new Date(Date.now() - 86400000 * 2).toISOString(),
+    last_failure_reason: 'HTTP 429 Too Many Requests',
+    created_at: new Date(Date.now() - 86400000 * 4).toISOString(),
+    updated_at: new Date(Date.now() - 86400000 * 2).toISOString(),
   },
 ];
 
@@ -136,28 +216,40 @@ let mockLogs: Log[] = [
     id: 'log-1',
     pin_id: 'pin-1',
     account_id: 'acc-1',
+    webhook_id: 'hook-1',
     status: 'success',
     message: 'Sent to Make successfully',
     webhook_used: 'https://hook.make.com/abc123healthy1',
     created_at: new Date(Date.now() - 3600000 * 2).toISOString(),
     account_name: 'HealthyBites_US',
     pin_title: '30-Minute Creamy Garlic Chicken',
+    webhook_label: 'Primary Hook',
   },
   {
     id: 'log-2',
     pin_id: 'pin-4',
     account_id: 'acc-3',
+    webhook_id: 'hook-4',
     status: 'error',
     message: 'Board not found for this account',
     webhook_used: null,
     created_at: new Date(Date.now() - 86400000 * 1).toISOString(),
     account_name: 'KetoRecipes_Hub',
     pin_title: 'Avocado Keto Salad',
+    webhook_label: 'Backup Hook',
   },
 ];
 
+let mockAuditLogs: AuditLog[] = [];
+
 interface RawAccount extends Account {
   boards?: { id: string }[];
+  account_webhooks?: {
+    id: string;
+    label: string;
+    is_active: boolean;
+    is_primary: boolean;
+  }[];
 }
 
 interface RawBoard extends Board {
@@ -171,15 +263,16 @@ interface RawPin extends Pin {
 interface RawLog extends Log {
   accounts?: { account_name: string } | null;
   pins?: { title: string } | null;
+  account_webhooks?: { label: string } | null;
 }
 
-// 1. Fetch Accounts
+// 1. Fetch Accounts with Webhook Summary
 export async function getAccounts(): Promise<Account[]> {
   if (!supabase) return mockAccounts;
   try {
     const { data, error } = await supabase
       .from('accounts')
-      .select('*, boards(id)')
+      .select('*, boards(id), account_webhooks(id, label, is_active, is_primary)')
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -192,21 +285,59 @@ export async function getAccounts(): Promise<Account[]> {
       return (basicData as Account[]).map((acc) => ({
         ...acc,
         boards_count: 0,
+        webhooks_count: 0,
+        active_webhooks_count: 0,
+        primary_webhook_label: 'None',
       }));
     }
 
     if (!data) return [];
-    return (data as RawAccount[]).map((acc) => ({
-      ...acc,
-      boards_count: acc.boards ? acc.boards.length : 0,
-    }));
+    return (data as RawAccount[]).map((acc) => {
+      const hooks = acc.account_webhooks || [];
+      const primaryHook = hooks.find((h) => h.is_primary);
+
+      return {
+        ...acc,
+        boards_count: acc.boards ? acc.boards.length : 0,
+        webhooks_count: hooks.length,
+        active_webhooks_count: hooks.filter((h) => h.is_active).length,
+        primary_webhook_label: primaryHook ? primaryHook.label : 'None',
+      };
+    });
   } catch (err) {
     console.warn('Supabase fetch accounts error, using fallback:', err);
     return mockAccounts;
   }
 }
 
-// 2. Fetch Boards
+// 2. Fetch Account Webhooks
+export async function getAccountWebhooks(accountId?: string): Promise<AccountWebhook[]> {
+  if (!supabase) {
+    if (!accountId) return mockWebhooks;
+    return mockWebhooks.filter((w) => w.account_id === accountId);
+  }
+  try {
+    let query = supabase
+      .from('account_webhooks')
+      .select('*')
+      .order('priority', { ascending: true })
+      .order('created_at', { ascending: true });
+
+    if (accountId) {
+      query = query.eq('account_id', accountId);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return (data as AccountWebhook[]) || [];
+  } catch (err) {
+    console.warn('Supabase fetch account_webhooks error, using fallback:', err);
+    if (!accountId) return mockWebhooks;
+    return mockWebhooks.filter((w) => w.account_id === accountId);
+  }
+}
+
+// 3. Fetch Boards
 export async function getBoards(): Promise<Board[]> {
   if (!supabase) return mockBoards;
   try {
@@ -236,7 +367,7 @@ export async function getBoards(): Promise<Board[]> {
   }
 }
 
-// 3. Fetch Pins
+// 4. Fetch Pins
 export async function getPins(statusFilter?: string): Promise<Pin[]> {
   if (!supabase) {
     if (!statusFilter || statusFilter === 'all') return mockPins;
@@ -275,13 +406,13 @@ export async function getPins(statusFilter?: string): Promise<Pin[]> {
   }
 }
 
-// 4. Fetch Logs
+// 5. Fetch Logs
 export async function getLogs(limit = 50): Promise<Log[]> {
   if (!supabase) return mockLogs.slice(0, limit);
   try {
     const { data, error } = await supabase
       .from('logs')
-      .select('*, accounts(account_name), pins(title)')
+      .select('*, accounts(account_name), pins(title), account_webhooks(label)')
       .order('created_at', { ascending: false })
       .limit(limit);
 
@@ -301,6 +432,7 @@ export async function getLogs(limit = 50): Promise<Log[]> {
       ...l,
       account_name: l.accounts?.account_name || (l.account_id ? 'Account #' + l.account_id.slice(0, 6) : 'System'),
       pin_title: l.pins?.title || 'System Operation',
+      webhook_label: l.account_webhooks?.label || 'Default Webhook',
     }));
   } catch (err) {
     console.warn('Supabase fetch logs error, using fallback:', err);
@@ -308,10 +440,29 @@ export async function getLogs(limit = 50): Promise<Log[]> {
   }
 }
 
-// 5. Fetch Dashboard KPIs
+// 6. Fetch Audit Logs
+export async function getAuditLogs(limit = 100): Promise<AuditLog[]> {
+  if (!supabase) return mockAuditLogs.slice(0, limit);
+  try {
+    const { data, error } = await supabase
+      .from('audit_log')
+      .select('*')
+      .order('changed_at', { ascending: false })
+      .limit(limit);
+
+    if (error) throw error;
+    return (data as AuditLog[]) || [];
+  } catch (err) {
+    console.warn('Supabase fetch audit logs error, using fallback:', err);
+    return mockAuditLogs.slice(0, limit);
+  }
+}
+
+// 7. Fetch Dashboard KPIs
 export async function getDashboardKPIs(): Promise<DashboardKPIs> {
-  const [accounts, pins, logs] = await Promise.all([
+  const [accounts, webhooks, pins, logs] = await Promise.all([
     getAccounts(),
+    getAccountWebhooks(),
     getPins(),
     getLogs(100),
   ]);
@@ -323,10 +474,13 @@ export async function getDashboardKPIs(): Promise<DashboardKPIs> {
     postedPins: pins.filter((p) => p.status === 'posted').length,
     failedPins: pins.filter((p) => p.status === 'failed').length,
     totalLogs: logs.length,
+    totalWebhooks: webhooks.length,
+    activeWebhooks: webhooks.filter((w) => w.is_active).length,
+    exhaustedWebhooks: webhooks.filter((w) => w.remaining_capacity <= 0).length,
   };
 }
 
-// 6. Admin Mutations
+// 8. Admin Mutations & Webhook Operations
 
 export async function createAccount(payload: {
   account_name: string;
@@ -343,8 +497,28 @@ export async function createAccount(payload: {
       is_active: payload.is_active ?? true,
       created_at: new Date().toISOString(),
       boards_count: 0,
+      webhooks_count: 1,
+      active_webhooks_count: 1,
+      primary_webhook_label: 'Primary',
     };
     mockAccounts.unshift(newAcc);
+    mockWebhooks.unshift({
+      id: 'hook-' + Date.now(),
+      account_id: newAcc.id,
+      label: 'Primary',
+      webhook_url: payload.webhook_url,
+      monthly_capacity: 500,
+      monthly_usage: 0,
+      remaining_capacity: 500,
+      priority: 1,
+      is_active: payload.is_active ?? true,
+      is_primary: true,
+      last_used_at: null,
+      last_failed_at: null,
+      last_failure_reason: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
     return { data: newAcc, error: null };
   }
 
@@ -362,6 +536,21 @@ export async function createAccount(payload: {
   if (error) {
     return { data: null, error: error.message };
   }
+
+  // Also insert corresponding primary webhook in account_webhooks
+  if (data) {
+    await supabase.from('account_webhooks').insert({
+      account_id: data.id,
+      label: 'Primary',
+      webhook_url: payload.webhook_url,
+      monthly_capacity: 500,
+      monthly_usage: 0,
+      priority: 1,
+      is_active: payload.is_active ?? true,
+      is_primary: true,
+    });
+  }
+
   return { data: data as Account, error: null };
 }
 
@@ -453,4 +642,255 @@ export async function createBoard(payload: {
     return { data: null, error: error.message };
   }
   return { data: data as Board, error: null };
+}
+
+export async function updateBoard(
+  id: string,
+  payload: {
+    board_name: string;
+    board_id: string;
+    account_id?: string;
+  }
+): Promise<{ data: Board | null; error: string | null }> {
+  if (!supabase) {
+    const target = mockBoards.find((b) => b.id === id);
+    if (target) {
+      target.board_name = payload.board_name;
+      target.board_id = payload.board_id;
+      if (payload.account_id) {
+        target.account_id = payload.account_id;
+        const acc = mockAccounts.find((a) => a.id === payload.account_id);
+        if (acc) target.account_name = acc.account_name;
+      }
+      return { data: target, error: null };
+    }
+    return { data: null, error: 'Board not found' };
+  }
+
+  const updateData: { board_name: string; board_id: string; account_id?: string } = {
+    board_name: payload.board_name,
+    board_id: payload.board_id,
+  };
+  if (payload.account_id) {
+    updateData.account_id = payload.account_id;
+  }
+
+  const { data, error } = await supabase
+    .from('boards')
+    .update(updateData)
+    .eq('id', id)
+    .select('*')
+    .single();
+
+  if (error) {
+    return { data: null, error: error.message };
+  }
+  return { data: data as Board, error: null };
+}
+
+// 9. Multi-Webhook Specific Operations
+
+export async function createAccountWebhook(payload: {
+  account_id: string;
+  label: string;
+  webhook_url: string;
+  monthly_capacity?: number;
+  priority?: number;
+  is_active?: boolean;
+  is_primary?: boolean;
+}): Promise<{ data: AccountWebhook | null; error: string | null }> {
+  if (!supabase) {
+    // If set as primary, unset other primaries for this account
+    if (payload.is_primary) {
+      mockWebhooks.forEach((w) => {
+        if (w.account_id === payload.account_id) w.is_primary = false;
+      });
+    }
+
+    const cap = payload.monthly_capacity ?? 500;
+    const newHook: AccountWebhook = {
+      id: 'hook-' + Date.now(),
+      account_id: payload.account_id,
+      label: payload.label,
+      webhook_url: payload.webhook_url,
+      monthly_capacity: cap,
+      monthly_usage: 0,
+      remaining_capacity: cap,
+      priority: payload.priority ?? 1,
+      is_active: payload.is_active ?? true,
+      is_primary: payload.is_primary ?? false,
+      last_used_at: null,
+      last_failed_at: null,
+      last_failure_reason: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    mockWebhooks.unshift(newHook);
+    return { data: newHook, error: null };
+  }
+
+  try {
+    if (payload.is_primary) {
+      await supabase
+        .from('account_webhooks')
+        .update({ is_primary: false })
+        .eq('account_id', payload.account_id);
+    }
+
+    const { data, error } = await supabase
+      .from('account_webhooks')
+      .insert({
+        account_id: payload.account_id,
+        label: payload.label,
+        webhook_url: payload.webhook_url,
+        monthly_capacity: payload.monthly_capacity ?? 500,
+        priority: payload.priority ?? 1,
+        is_active: payload.is_active ?? true,
+        is_primary: payload.is_primary ?? false,
+      })
+      .select('*')
+      .single();
+
+    if (error) return { data: null, error: error.message };
+    return { data: data as AccountWebhook, error: null };
+  } catch (err: any) {
+    return { data: null, error: err.message || 'Error creating webhook' };
+  }
+}
+
+export async function updateAccountWebhook(
+  id: string,
+  payload: Partial<{
+    label: string;
+    webhook_url: string;
+    monthly_capacity: number;
+    monthly_usage: number;
+    priority: number;
+    is_active: boolean;
+    is_primary: boolean;
+    last_failure_reason: string | null;
+  }>
+): Promise<{ data: AccountWebhook | null; error: string | null }> {
+  if (!supabase) {
+    const target = mockWebhooks.find((w) => w.id === id);
+    if (target) {
+      if (payload.is_primary) {
+        mockWebhooks.forEach((w) => {
+          if (w.account_id === target.account_id) w.is_primary = false;
+        });
+      }
+      Object.assign(target, payload);
+      target.remaining_capacity = target.monthly_capacity - target.monthly_usage;
+      target.updated_at = new Date().toISOString();
+      return { data: target, error: null };
+    }
+    return { data: null, error: 'Webhook not found' };
+  }
+
+  try {
+    if (payload.is_primary) {
+      const { data: targetHook } = await supabase
+        .from('account_webhooks')
+        .select('account_id')
+        .eq('id', id)
+        .single();
+
+      if (targetHook) {
+        await supabase
+          .from('account_webhooks')
+          .update({ is_primary: false })
+          .eq('account_id', targetHook.account_id);
+      }
+    }
+
+    const { data, error } = await supabase
+      .from('account_webhooks')
+      .update(payload)
+      .eq('id', id)
+      .select('*')
+      .single();
+
+    if (error) return { data: null, error: error.message };
+    return { data: data as AccountWebhook, error: null };
+  } catch (err: any) {
+    return { data: null, error: err.message || 'Error updating webhook' };
+  }
+}
+
+export async function setPrimaryWebhook(
+  id: string,
+  accountId: string
+): Promise<{ success: boolean; error: string | null }> {
+  if (!supabase) {
+    mockWebhooks.forEach((w) => {
+      if (w.account_id === accountId) {
+        w.is_primary = w.id === id;
+      }
+    });
+    return { success: true, error: null };
+  }
+
+  try {
+    await supabase
+      .from('account_webhooks')
+      .update({ is_primary: false })
+      .eq('account_id', accountId);
+
+    const { error } = await supabase
+      .from('account_webhooks')
+      .update({ is_primary: true })
+      .eq('id', id);
+
+    if (error) return { success: false, error: error.message };
+    return { success: true, error: null };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Failed setting primary webhook' };
+  }
+}
+
+export async function toggleAccountWebhookActive(
+  id: string,
+  is_active: boolean
+): Promise<{ data: AccountWebhook | null; error: string | null }> {
+  return updateAccountWebhook(id, { is_active });
+}
+
+// Selection strategy for backend execution engine
+export async function selectOptimalWebhookForAccount(
+  accountId: string
+): Promise<{ webhook: AccountWebhook | null; error: string | null }> {
+  const webhooks = await getAccountWebhooks(accountId);
+
+  const eligible = webhooks.filter((w) => w.is_active && w.remaining_capacity > 0);
+
+  if (eligible.length === 0) {
+    return {
+      webhook: null,
+      error: 'No eligible webhook with remaining capacity for this account',
+    };
+  }
+
+  // 1. Prefer Primary webhook if active and has remaining capacity
+  const primary = eligible.find((w) => w.is_primary);
+  if (primary) {
+    return { webhook: primary, error: null };
+  }
+
+  // 2. Sort remaining eligible webhooks:
+  //    - Lowest priority number first (1 is top priority)
+  //    - Highest remaining_capacity
+  //    - Oldest last_used_at (null first)
+  eligible.sort((a, b) => {
+    if (a.priority !== b.priority) {
+      return a.priority - b.priority;
+    }
+    if (a.remaining_capacity !== b.remaining_capacity) {
+      return b.remaining_capacity - a.remaining_capacity;
+    }
+    if (!a.last_used_at) return -1;
+    if (!b.last_used_at) return 1;
+    return new Date(a.last_used_at).getTime() - new Date(b.last_used_at).getTime();
+  });
+
+  return { webhook: eligible[0], error: null };
 }

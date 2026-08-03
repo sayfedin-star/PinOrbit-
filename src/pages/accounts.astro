@@ -67,7 +67,7 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
         </div>
 
         <div class="space-y-1.5">
-          <label for="acc-webhook" class="block text-xs font-semibold text-foreground">Make.com Webhook URL *</label>
+          <label for="acc-webhook" class="block text-xs font-semibold text-foreground">Initial Webhook URL *</label>
           <input
             id="acc-webhook"
             type="url"
@@ -75,7 +75,7 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
             placeholder="https://hook.make.com/abc123healthy1"
             class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
           />
-          <p class="text-[11px] text-muted-foreground">URL will be masked in public interface tables.</p>
+          <p class="text-[11px] text-muted-foreground">Will be created as the Primary webhook for this account.</p>
         </div>
 
         <div class="grid grid-cols-2 gap-4">
@@ -218,15 +218,154 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
       </div>
     </div>
   </div>
+
+  <!-- MODAL 4: Manage Webhooks Modal -->
+  <div id="webhooks-manage-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" aria-modal="true" role="dialog">
+    <div id="webhooks-manage-backdrop" class="fixed inset-0"></div>
+    <div class="relative w-full max-w-3xl rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-5 z-10 max-h-[90vh] flex flex-col">
+      <!-- Modal Header -->
+      <div class="flex items-center justify-between border-b border-border pb-4 flex-shrink-0">
+        <div>
+          <h3 class="text-base font-bold text-foreground">Multi-Webhook Orchestration</h3>
+          <p id="manage-webhooks-subtitle" class="text-xs text-muted-foreground mt-0.5">Managing webhooks for account...</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button
+            id="open-add-webhook-btn"
+            class="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow hover:bg-primary/90 transition-all"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span>+ Add Webhook</span>
+          </button>
+          <button id="close-webhooks-modal" class="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="webhooks-modal-error" class="hidden rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-500 flex-shrink-0"></div>
+      <div id="webhooks-modal-success" class="hidden rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-600 dark:text-emerald-400 flex-shrink-0"></div>
+
+      <!-- Webhook List Container -->
+      <div id="webhooks-list-container" class="flex-1 overflow-y-auto space-y-3 pr-1">
+        <div class="p-8 text-center text-xs text-muted-foreground animate-pulse">
+          Loading account webhooks...
+        </div>
+      </div>
+
+      <!-- In-Modal Add/Edit Form (Hidden by default) -->
+      <div id="webhook-form-container" class="hidden rounded-xl border border-border bg-muted/40 p-4 space-y-4 flex-shrink-0">
+        <h4 id="webhook-form-title" class="text-xs font-bold text-foreground uppercase tracking-wider">Add New Webhook Channel</h4>
+        <input type="hidden" id="form-webhook-id" />
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="space-y-1">
+            <label for="form-hook-label" class="block text-[11px] font-semibold text-foreground">Channel Label *</label>
+            <input
+              id="form-hook-label"
+              type="text"
+              required
+              placeholder="e.g. Channel B - Make #2"
+              class="w-full rounded-lg border border-border bg-background py-1.5 px-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+            />
+          </div>
+
+          <div class="space-y-1">
+            <label for="form-hook-url" class="block text-[11px] font-semibold text-foreground">Make.com Webhook URL *</label>
+            <input
+              id="form-hook-url"
+              type="url"
+              required
+              placeholder="https://hook.make.com/abc456channel2"
+              class="w-full rounded-lg border border-border bg-background py-1.5 px-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+            />
+          </div>
+
+          <div class="space-y-1">
+            <label for="form-hook-capacity" class="block text-[11px] font-semibold text-foreground">Monthly Capacity *</label>
+            <input
+              id="form-hook-capacity"
+              type="number"
+              min="1"
+              value="500"
+              required
+              class="w-full rounded-lg border border-border bg-background py-1.5 px-3 text-xs text-foreground focus:border-primary focus:outline-none"
+            />
+          </div>
+
+          <div class="space-y-1">
+            <label for="form-hook-priority" class="block text-[11px] font-semibold text-foreground">Routing Priority (1 = Highest) *</label>
+            <input
+              id="form-hook-priority"
+              type="number"
+              min="1"
+              value="1"
+              required
+              class="w-full rounded-lg border border-border bg-background py-1.5 px-3 text-xs text-foreground focus:border-primary focus:outline-none"
+            />
+          </div>
+        </div>
+
+        <div class="flex items-center gap-6 pt-1">
+          <label class="flex items-center gap-2 cursor-pointer text-xs font-medium text-foreground">
+            <input id="form-hook-active" type="checkbox" checked class="h-4 w-4 rounded border-border text-primary" />
+            <span>Active</span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer text-xs font-medium text-foreground">
+            <input id="form-hook-primary" type="checkbox" class="h-4 w-4 rounded border-border text-primary" />
+            <span>Set as Primary Webhook</span>
+          </label>
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-2 border-t border-border">
+          <button
+            type="button"
+            id="cancel-webhook-form"
+            class="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            Cancel
+          </button>
+          <button
+            id="submit-webhook-form"
+            type="button"
+            class="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow hover:bg-primary/90"
+          >
+            <span id="webhook-form-submit-text">Save Webhook</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end border-t border-border pt-3 flex-shrink-0">
+        <button
+          id="dismiss-webhooks-modal"
+          class="rounded-xl border border-border px-4 py-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          Done
+        </button>
+      </div>
+    </div>
+  </div>
 </Layout>
 
 <script>
   import { requireAuth } from '../lib/auth';
-  import { getAccounts, createAccount, updateAccountDailyLimit, toggleAccountActive } from '../lib/supabase';
+  import {
+    getAccounts,
+    createAccount,
+    updateAccountDailyLimit,
+    toggleAccountActive,
+    getAccountWebhooks,
+    createAccountWebhook,
+    updateAccountWebhook,
+    setPrimaryWebhook,
+    toggleAccountWebhookActive,
+  } from '../lib/supabase';
   import { renderStatusBadge, formatDate, renderEmptyStateHTML, escapeHtml, maskWebhookUrl } from '../lib/ui-helpers';
-  import type { Account } from '../lib/types';
+  import type { Account, AccountWebhook } from '../lib/types';
 
   let currentAccounts: Account[] = [];
+  let activeManageAccount: Account | null = null;
+  let activeAccountWebhooks: AccountWebhook[] = [];
   let pendingDeactivateAccount: Account | null = null;
 
   async function init() {
@@ -255,7 +394,6 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
       const rowsHtml = currentAccounts
         .map((account) => {
           const initials = (account.account_name || 'AC').slice(0, 2).toUpperCase();
-          const maskedWebhook = maskWebhookUrl(account.webhook_url);
 
           return `
             <tr class="transition-colors hover:bg-muted/40">
@@ -300,13 +438,27 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
               <td class="px-6 py-4 text-muted-foreground">
                 <span class="font-medium text-foreground">${account.boards_count ?? 0}</span> boards
               </td>
-              <td class="px-6 py-4 font-mono text-xs text-muted-foreground">
-                <div class="max-w-xs truncate rounded bg-muted/60 px-2 py-1" title="Webhook endpoint configured">
-                  ${escapeHtml(maskedWebhook)}
+              <td class="px-6 py-4 text-xs">
+                <div class="space-y-1">
+                  <div class="flex items-center gap-2 font-medium text-foreground">
+                    <span class="rounded-md bg-primary/10 text-primary px-2 py-0.5 font-bold text-[11px]">
+                      Primary: ${escapeHtml(account.primary_webhook_label || 'Primary')}
+                    </span>
+                  </div>
+                  <div class="text-[11px] text-muted-foreground">
+                    ${account.active_webhooks_count ?? 0} of ${account.webhooks_count ?? 0} webhooks active
+                  </div>
                 </div>
               </td>
-              <td class="px-6 py-4 text-xs text-muted-foreground whitespace-nowrap">
-                ${formatDate(account.created_at)}
+              <td class="px-6 py-4 text-xs text-right whitespace-nowrap">
+                <button
+                  data-action="manage-webhooks"
+                  data-id="${account.id}"
+                  class="inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary hover:text-primary-foreground transition-all"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                  <span>Manage Webhooks</span>
+                </button>
               </td>
             </tr>
           `;
@@ -323,8 +475,8 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
                   <th class="px-6 py-3.5">Status & Actions</th>
                   <th class="px-6 py-3.5">Daily Limit</th>
                   <th class="px-6 py-3.5">Linked Boards</th>
-                  <th class="px-6 py-3.5">Webhook URL</th>
-                  <th class="px-6 py-3.5">Added Date</th>
+                  <th class="px-6 py-3.5">Webhooks Summary</th>
+                  <th class="px-6 py-3.5 text-right">Orchestration</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-border">
@@ -377,10 +529,8 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
         if (!account) return;
 
         if (isActive) {
-          // Confirm before deactivating
           openDeactivateModal(account);
         } else {
-          // Reactivate directly
           const { error } = await toggleAccountActive(id, true);
           if (error) {
             alert('Failed to activate account: ' + error);
@@ -391,10 +541,245 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
         }
       });
     });
+
+    document.querySelectorAll('[data-action="manage-webhooks"]').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        const id = (e.currentTarget as HTMLElement).getAttribute('data-id') || '';
+        const account = currentAccounts.find((a) => a.id === id);
+        if (account) {
+          await openManageWebhooksModal(account);
+        }
+      });
+    });
+  }
+
+  // Webhooks Manager
+  async function openManageWebhooksModal(account: Account) {
+    activeManageAccount = account;
+    const modal = document.getElementById('webhooks-manage-modal');
+    const subtitle = document.getElementById('manage-webhooks-subtitle');
+
+    if (subtitle) {
+      subtitle.textContent = `Managing Webhooks for: ${account.account_name}`;
+    }
+
+    hideWebhookForm();
+    hideWebhooksModalFeedback();
+
+    modal?.classList.remove('hidden');
+    modal?.classList.add('flex');
+
+    await refreshWebhooksList();
+  }
+
+  async function refreshWebhooksList() {
+    if (!activeManageAccount) return;
+    const container = document.getElementById('webhooks-list-container');
+    if (!container) return;
+
+    container.innerHTML = '<div class="p-8 text-center text-xs text-muted-foreground animate-pulse">Loading account webhooks...</div>';
+
+    activeAccountWebhooks = await getAccountWebhooks(activeManageAccount.id);
+
+    if (!activeAccountWebhooks || activeAccountWebhooks.length === 0) {
+      container.innerHTML = renderEmptyStateHTML(
+        'No Webhooks Configured',
+        'Click "+ Add Webhook" above to create your first Make.com outbound channel.',
+        'inbox'
+      );
+      return;
+    }
+
+    const cardsHtml = activeAccountWebhooks
+      .map((hook) => {
+        const masked = maskWebhookUrl(hook.webhook_url);
+        const remCap = hook.remaining_capacity ?? (hook.monthly_capacity - hook.monthly_usage);
+        const capPct = Math.min(100, Math.max(0, Math.round((remCap / hook.monthly_capacity) * 100)));
+
+        return `
+          <div class="rounded-xl border border-border bg-background p-4 space-y-3 shadow-sm transition-all hover:border-muted-foreground/30">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="font-bold text-sm text-foreground">${escapeHtml(hook.label)}</span>
+                ${
+                  hook.is_primary
+                    ? `<span class="rounded-full bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 text-[10px] font-bold">PRIMARY</span>`
+                    : ''
+                }
+                <span class="rounded-md bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">Priority ${hook.priority}</span>
+              </div>
+              <div class="flex items-center gap-2">
+                ${renderStatusBadge(hook.is_active)}
+              </div>
+            </div>
+
+            <!-- Masked URL -->
+            <div class="font-mono text-xs text-muted-foreground bg-muted/50 rounded-lg px-2.5 py-1.5 truncate" title="Masked Endpoint">
+              ${escapeHtml(masked)}
+            </div>
+
+            <!-- Capacity Progress Bar -->
+            <div class="space-y-1">
+              <div class="flex items-center justify-between text-xs">
+                <span class="text-muted-foreground font-medium">Monthly Capacity:</span>
+                <span class="font-semibold text-foreground">${remCap} / ${hook.monthly_capacity} pins remaining</span>
+              </div>
+              <div class="h-2 w-full rounded-full bg-muted overflow-hidden">
+                <div
+                  class="h-full rounded-full transition-all duration-300 ${remCap > 50 ? 'bg-emerald-500' : remCap > 0 ? 'bg-amber-500' : 'bg-rose-500'}"
+                  style="width: ${capPct}%"
+                ></div>
+              </div>
+            </div>
+
+            ${
+              hook.last_failure_reason
+                ? `<div class="rounded-lg bg-rose-500/10 border border-rose-500/20 p-2 text-[11px] text-rose-500 flex items-start gap-1.5">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    <span>Failure Reason: ${escapeHtml(hook.last_failure_reason)}</span>
+                  </div>`
+                : ''
+            }
+
+            <!-- Action buttons -->
+            <div class="flex items-center justify-between border-t border-border pt-2.5 text-xs">
+              <span class="text-[11px] text-muted-foreground">
+                ${hook.last_used_at ? 'Last used: ' + formatDate(hook.last_used_at) : 'Never used'}
+              </span>
+              <div class="flex items-center gap-2">
+                ${
+                  !hook.is_primary
+                    ? `<button
+                        data-webhook-action="set-primary"
+                        data-id="${hook.id}"
+                        class="text-xs text-primary font-semibold hover:underline"
+                      >Set Primary</button>`
+                    : ''
+                }
+                <button
+                  data-webhook-action="toggle-active"
+                  data-id="${hook.id}"
+                  data-active="${hook.is_active}"
+                  class="text-xs text-muted-foreground hover:text-foreground font-medium"
+                >${hook.is_active ? 'Deactivate' : 'Activate'}</button>
+                <button
+                  data-webhook-action="edit"
+                  data-id="${hook.id}"
+                  class="rounded border border-border px-2 py-0.5 text-xs text-foreground hover:bg-muted font-medium"
+                >Edit</button>
+              </div>
+            </div>
+          </div>
+        `;
+      })
+      .join('');
+
+    container.innerHTML = cardsHtml;
+    bindWebhookCardListeners();
+  }
+
+  function bindWebhookCardListeners() {
+    document.querySelectorAll('[data-webhook-action="set-primary"]').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        const id = (e.currentTarget as HTMLElement).getAttribute('data-id') || '';
+        if (!activeManageAccount) return;
+        const { success, error } = await setPrimaryWebhook(id, activeManageAccount.id);
+        if (error) showWebhooksModalError(error);
+        else {
+          showWebhooksModalSuccess('Primary webhook updated successfully.');
+          await refreshWebhooksList();
+          await loadAccounts();
+        }
+      });
+    });
+
+    document.querySelectorAll('[data-webhook-action="toggle-active"]').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        const id = (e.currentTarget as HTMLElement).getAttribute('data-id') || '';
+        const isActive = (e.currentTarget as HTMLElement).getAttribute('data-active') === 'true';
+        const { error } = await toggleAccountWebhookActive(id, !isActive);
+        if (error) showWebhooksModalError(error);
+        else {
+          showWebhooksModalSuccess(`Webhook ${!isActive ? 'activated' : 'deactivated'}.`);
+          await refreshWebhooksList();
+          await loadAccounts();
+        }
+      });
+    });
+
+    document.querySelectorAll('[data-webhook-action="edit"]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        const id = (e.currentTarget as HTMLElement).getAttribute('data-id') || '';
+        const target = activeAccountWebhooks.find((w) => w.id === id);
+        if (target) showWebhookForm(target);
+      });
+    });
+  }
+
+  function showWebhookForm(target?: AccountWebhook) {
+    const formContainer = document.getElementById('webhook-form-container');
+    const formTitle = document.getElementById('webhook-form-title');
+    const idInput = document.getElementById('form-webhook-id') as HTMLInputElement;
+    const labelInput = document.getElementById('form-hook-label') as HTMLInputElement;
+    const urlInput = document.getElementById('form-hook-url') as HTMLInputElement;
+    const capInput = document.getElementById('form-hook-capacity') as HTMLInputElement;
+    const prioInput = document.getElementById('form-hook-priority') as HTMLInputElement;
+    const activeCheck = document.getElementById('form-hook-active') as HTMLInputElement;
+    const primaryCheck = document.getElementById('form-hook-primary') as HTMLInputElement;
+
+    hideWebhooksModalFeedback();
+
+    if (target) {
+      if (formTitle) formTitle.textContent = 'Edit Webhook Channel';
+      idInput.value = target.id;
+      labelInput.value = target.label;
+      urlInput.value = target.webhook_url;
+      capInput.value = String(target.monthly_capacity);
+      prioInput.value = String(target.priority);
+      activeCheck.checked = target.is_active;
+      primaryCheck.checked = target.is_primary;
+    } else {
+      if (formTitle) formTitle.textContent = 'Add New Webhook Channel';
+      idInput.value = '';
+      labelInput.value = '';
+      urlInput.value = '';
+      capInput.value = '500';
+      prioInput.value = '1';
+      activeCheck.checked = true;
+      primaryCheck.checked = activeAccountWebhooks.length === 0;
+    }
+
+    formContainer?.classList.remove('hidden');
+  }
+
+  function hideWebhookForm() {
+    document.getElementById('webhook-form-container')?.classList.add('hidden');
+  }
+
+  function showWebhooksModalError(msg: string) {
+    const err = document.getElementById('webhooks-modal-error');
+    if (err) {
+      err.textContent = msg;
+      err.classList.remove('hidden');
+    }
+  }
+
+  function showWebhooksModalSuccess(msg: string) {
+    const succ = document.getElementById('webhooks-modal-success');
+    if (succ) {
+      succ.textContent = msg;
+      succ.classList.remove('hidden');
+      setTimeout(() => succ.classList.add('hidden'), 4000);
+    }
+  }
+
+  function hideWebhooksModalFeedback() {
+    document.getElementById('webhooks-modal-error')?.classList.add('hidden');
+    document.getElementById('webhooks-modal-success')?.classList.add('hidden');
   }
 
   function setupModalListeners() {
-    // Add Account Modal controls
+    // Add Account Modal
     const openAddBtn = document.getElementById('open-add-account-modal');
     const addModal = document.getElementById('add-account-modal');
     const closeAddBtn = document.getElementById('close-add-modal');
@@ -428,7 +813,6 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
       const limit = parseInt((document.getElementById('acc-limit') as HTMLInputElement).value, 10);
       const active = (document.getElementById('acc-active') as HTMLInputElement).checked;
 
-      // Validation
       if (!name) {
         showAddError('Account name is required.');
         return;
@@ -444,7 +828,7 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
 
       setAddLoading(true);
 
-      const { data, error } = await createAccount({
+      const { error } = await createAccount({
         account_name: name,
         webhook_url: webhook,
         max_pins_per_day: limit,
@@ -483,7 +867,7 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
       }
     }
 
-    // Edit Limit Modal controls
+    // Edit Limit Modal
     const limitModal = document.getElementById('edit-limit-modal');
     const closeLimitBtn = document.getElementById('close-limit-modal');
     const cancelLimitBtn = document.getElementById('cancel-limit-modal');
@@ -542,7 +926,7 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
       }
     });
 
-    // Deactivate Modal controls
+    // Deactivate Modal
     const deactModal = document.getElementById('deactivate-modal');
     const cancelDeactBtn = document.getElementById('cancel-deactivate');
     const confirmDeactBtn = document.getElementById('confirm-deactivate-btn');
@@ -573,16 +957,133 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
       }
     });
 
+    // Webhook Manage Modal listeners
+    const webhooksModal = document.getElementById('webhooks-manage-modal');
+    const closeWebhooksBtn = document.getElementById('close-webhooks-modal');
+    const dismissWebhooksBtn = document.getElementById('dismiss-webhooks-modal');
+    const webhooksBackdrop = document.getElementById('webhooks-manage-backdrop');
+    const openAddWebhookBtn = document.getElementById('open-add-webhook-btn');
+    const cancelWebhookFormBtn = document.getElementById('cancel-webhook-form');
+    const submitWebhookFormBtn = document.getElementById('submit-webhook-form');
+
+    function closeWebhooksModal() {
+      webhooksModal?.classList.add('hidden');
+      webhooksModal?.classList.remove('flex');
+      activeManageAccount = null;
+      hideWebhookForm();
+    }
+
+    closeWebhooksBtn?.addEventListener('click', closeWebhooksModal);
+    dismissWebhooksBtn?.addEventListener('click', closeWebhooksModal);
+    webhooksBackdrop?.addEventListener('click', closeWebhooksModal);
+
+    openAddWebhookBtn?.addEventListener('click', () => {
+      showWebhookForm();
+    });
+
+    cancelWebhookFormBtn?.addEventListener('click', hideWebhookForm);
+
+    submitWebhookFormBtn?.addEventListener('click', async () => {
+      if (!activeManageAccount) return;
+      hideWebhooksModalFeedback();
+
+      const webhookId = (document.getElementById('form-webhook-id') as HTMLInputElement).value;
+      const label = (document.getElementById('form-hook-label') as HTMLInputElement).value.trim();
+      const url = (document.getElementById('form-hook-url') as HTMLInputElement).value.trim();
+      const cap = parseInt((document.getElementById('form-hook-capacity') as HTMLInputElement).value, 10);
+      const prio = parseInt((document.getElementById('form-hook-priority') as HTMLInputElement).value, 10);
+      const active = (document.getElementById('form-hook-active') as HTMLInputElement).checked;
+      const primary = (document.getElementById('form-hook-primary') as HTMLInputElement).checked;
+
+      if (!label) {
+        showWebhooksModalError('Label is required.');
+        return;
+      }
+      if (!url || !url.startsWith('http')) {
+        showWebhooksModalError('Valid HTTP/HTTPS Webhook URL is required.');
+        return;
+      }
+      if (isNaN(cap) || cap < 1) {
+        showWebhooksModalError('Monthly capacity must be a positive integer (minimum 1).');
+        return;
+      }
+      if (isNaN(prio) || prio < 1) {
+        showWebhooksModalError('Priority must be a positive integer (minimum 1).');
+        return;
+      }
+
+      // Check duplicates
+      const labelDup = activeAccountWebhooks.some(
+        (w) => w.id !== webhookId && w.label.toLowerCase() === label.toLowerCase()
+      );
+      if (labelDup) {
+        showWebhooksModalError(`A webhook labeled "${label}" already exists for this account.`);
+        return;
+      }
+
+      const urlDup = activeAccountWebhooks.some(
+        (w) => w.id !== webhookId && w.webhook_url.toLowerCase() === url.toLowerCase()
+      );
+      if (urlDup) {
+        showWebhooksModalError('This webhook URL is already registered for this account.');
+        return;
+      }
+
+      const submitBtn = document.getElementById('submit-webhook-form') as HTMLButtonElement;
+      submitBtn.disabled = true;
+
+      if (webhookId) {
+        // Edit existing
+        const { error } = await updateAccountWebhook(webhookId, {
+          label,
+          webhook_url: url,
+          monthly_capacity: cap,
+          priority: prio,
+          is_active: active,
+          is_primary: primary,
+        });
+        submitBtn.disabled = false;
+        if (error) {
+          showWebhooksModalError('Failed to update webhook: ' + error);
+        } else {
+          showWebhooksModalSuccess('Webhook updated successfully.');
+          hideWebhookForm();
+          await refreshWebhooksList();
+          await loadAccounts();
+        }
+      } else {
+        // Create new
+        const { error } = await createAccountWebhook({
+          account_id: activeManageAccount.id,
+          label,
+          webhook_url: url,
+          monthly_capacity: cap,
+          priority: prio,
+          is_active: active,
+          is_primary: primary,
+        });
+        submitBtn.disabled = false;
+        if (error) {
+          showWebhooksModalError('Failed to create webhook: ' + error);
+        } else {
+          showWebhooksModalSuccess('New webhook channel added successfully.');
+          hideWebhookForm();
+          await refreshWebhooksList();
+          await loadAccounts();
+        }
+      }
+    });
+
     // Keyboard navigation (Escape key to close any open modal)
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         if (addModal && !addModal.classList.contains('hidden')) closeAddModal();
         if (limitModal && !limitModal.classList.contains('hidden')) closeLimitModal();
         if (deactModal && !deactModal.classList.contains('hidden')) closeDeactModal();
+        if (webhooksModal && !webhooksModal.classList.contains('hidden')) closeWebhooksModal();
       }
     });
 
-    // Dismiss banner listener
     document.getElementById('dismiss-success-banner')?.addEventListener('click', () => {
       document.getElementById('accounts-success-banner')?.classList.add('hidden');
     });

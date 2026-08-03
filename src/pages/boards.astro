@@ -41,7 +41,7 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
     </div>
   </div>
 
-  <!-- MODAL: Add Board Modal -->
+  <!-- MODAL 1: Add Board Modal -->
   <div id="add-board-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" aria-modal="true" role="dialog">
     <div id="add-board-backdrop" class="fixed inset-0"></div>
     <div class="relative w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-5 z-10">
@@ -111,11 +111,81 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
       </form>
     </div>
   </div>
+
+  <!-- MODAL 2: Edit Board Modal -->
+  <div id="edit-board-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" aria-modal="true" role="dialog">
+    <div id="edit-board-backdrop" class="fixed inset-0"></div>
+    <div class="relative w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-5 z-10">
+      <div class="flex items-center justify-between border-b border-border pb-4">
+        <h3 class="text-base font-bold text-foreground">Edit Pinterest Board Mapping</h3>
+        <button id="close-edit-board-modal" class="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div id="edit-board-error" class="hidden rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-500"></div>
+
+      <form id="edit-board-form" class="space-y-4">
+        <input type="hidden" id="edit-target-board-id" />
+
+        <div class="space-y-1.5">
+          <label for="edit-board-account-select" class="block text-xs font-semibold text-foreground">Target Account *</label>
+          <select
+            id="edit-board-account-select"
+            required
+            class="w-full rounded-xl border border-border bg-background py-2.5 px-3 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          >
+          </select>
+        </div>
+
+        <div class="space-y-1.5">
+          <label for="edit-board-name-input" class="block text-xs font-semibold text-foreground">Board Name *</label>
+          <input
+            id="edit-board-name-input"
+            type="text"
+            required
+            class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+        </div>
+
+        <div class="space-y-1.5">
+          <label for="edit-board-id-input" class="block text-xs font-semibold text-foreground">Pinterest Board ID *</label>
+          <input
+            id="edit-board-id-input"
+            type="text"
+            required
+            class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+        </div>
+
+        <div class="flex items-center justify-end gap-3 border-t border-border pt-4">
+          <button
+            type="button"
+            id="cancel-edit-board-modal"
+            class="rounded-xl border border-border px-4 py-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            Cancel
+          </button>
+          <button
+            id="submit-edit-board-modal"
+            type="submit"
+            class="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow hover:bg-primary/90 disabled:opacity-50"
+          >
+            <span id="edit-board-btn-text">Save Changes</span>
+            <svg id="edit-board-btn-spinner" class="hidden h-3.5 w-3.5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
 </Layout>
 
 <script>
   import { requireAuth } from '../lib/auth';
-  import { getBoards, getAccounts, createBoard } from '../lib/supabase';
+  import { getBoards, getAccounts, createBoard, updateBoard } from '../lib/supabase';
   import { formatDate, renderEmptyStateHTML, escapeHtml } from '../lib/ui-helpers';
   import type { Board, Account } from '../lib/types';
 
@@ -136,7 +206,7 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
     try {
       [currentBoards, currentAccounts] = await Promise.all([getBoards(), getAccounts()]);
 
-      populateAccountDropdown();
+      populateAccountDropdowns();
 
       if (!currentBoards || currentBoards.length === 0) {
         container.innerHTML = renderEmptyStateHTML(
@@ -188,8 +258,22 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
                         <p class="text-xs font-mono text-muted-foreground">ID: ${escapeHtml(board.board_id)}</p>
                       </div>
                     </div>
-                    <div class="text-xs text-muted-foreground">
-                      Added ${formatDate(board.created_at)}
+                    <div class="flex items-center gap-4">
+                      <span class="text-xs text-muted-foreground hidden sm:inline">
+                        Added ${formatDate(board.created_at)}
+                      </span>
+                      <button
+                        data-action="edit-board"
+                        data-id="${board.id}"
+                        data-name="${escapeHtml(board.board_name)}"
+                        data-boardid="${escapeHtml(board.board_id)}"
+                        data-accid="${board.account_id}"
+                        class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-all"
+                        title="Edit board mapping"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                        <span>Edit</span>
+                      </button>
                     </div>
                   </div>
                 `
@@ -236,8 +320,19 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
                       <p class="text-sm font-semibold text-foreground">${escapeHtml(board.board_name)}</p>
                       <p class="text-xs font-mono text-muted-foreground">ID: ${escapeHtml(board.board_id)}</p>
                     </div>
-                    <div class="text-xs text-muted-foreground">
-                      ${escapeHtml(board.account_name || 'Unassigned')}
+                    <div class="flex items-center gap-4">
+                      <span class="text-xs text-muted-foreground">${escapeHtml(board.account_name || 'Unassigned')}</span>
+                      <button
+                        data-action="edit-board"
+                        data-id="${board.id}"
+                        data-name="${escapeHtml(board.board_name)}"
+                        data-boardid="${escapeHtml(board.board_id)}"
+                        data-accid="${board.account_id}"
+                        class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-all"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                        <span>Edit</span>
+                      </button>
                     </div>
                   </div>
                 `
@@ -250,6 +345,8 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
 
       contentHtml += '</div>';
       container.innerHTML = contentHtml;
+
+      bindEditBoardListeners();
     } catch (err) {
       console.error('Failed to load boards client-side:', err);
       container.innerHTML = renderEmptyStateHTML(
@@ -260,22 +357,36 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
     }
   }
 
-  function populateAccountDropdown() {
-    const select = document.getElementById('board-account-select') as HTMLSelectElement | null;
-    if (!select) return;
+  function populateAccountDropdowns() {
+    const addSelect = document.getElementById('board-account-select') as HTMLSelectElement | null;
+    const editSelect = document.getElementById('edit-board-account-select') as HTMLSelectElement | null;
 
     const activeAccounts = currentAccounts.filter((a) => a.is_active);
 
-    if (activeAccounts.length === 0) {
-      select.innerHTML = '<option value="" disabled selected>No active accounts found. Please activate an account first.</option>';
-      return;
-    }
+    const optionsHtml = activeAccounts.length === 0
+      ? '<option value="" disabled selected>No active accounts found.</option>'
+      : activeAccounts
+          .map((acc) => `<option value="${acc.id}">${escapeHtml(acc.account_name)}</option>`)
+          .join('');
 
-    select.innerHTML =
-      '<option value="" disabled selected>Select an active Pinterest account...</option>' +
-      activeAccounts
-        .map((acc) => `<option value="${acc.id}">${escapeHtml(acc.account_name)}</option>`)
-        .join('');
+    if (addSelect) {
+      addSelect.innerHTML = '<option value="" disabled selected>Select an active Pinterest account...</option>' + optionsHtml;
+    }
+    if (editSelect) {
+      editSelect.innerHTML = optionsHtml;
+    }
+  }
+
+  function bindEditBoardListeners() {
+    document.querySelectorAll('[data-action="edit-board"]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        const id = (e.currentTarget as HTMLElement).getAttribute('data-id') || '';
+        const name = (e.currentTarget as HTMLElement).getAttribute('data-name') || '';
+        const boardId = (e.currentTarget as HTMLElement).getAttribute('data-boardid') || '';
+        const accId = (e.currentTarget as HTMLElement).getAttribute('data-accid') || '';
+        openEditBoardModal(id, name, boardId, accId);
+      });
+    });
   }
 
   function showSuccessBanner(message: string) {
@@ -290,50 +401,67 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
     }
   }
 
-  function setupModalListeners() {
-    const openBtn = document.getElementById('open-add-board-modal');
-    const modal = document.getElementById('add-board-modal');
-    const closeBtn = document.getElementById('close-add-board-modal');
-    const cancelBtn = document.getElementById('cancel-add-board-modal');
-    const backdrop = document.getElementById('add-board-backdrop');
-    const form = document.getElementById('add-board-form') as HTMLFormElement | null;
-    const errorElem = document.getElementById('add-board-error');
+  function openEditBoardModal(id: string, name: string, boardId: string, accId: string) {
+    const modal = document.getElementById('edit-board-modal');
+    const targetIdInput = document.getElementById('edit-target-board-id') as HTMLInputElement | null;
+    const nameInput = document.getElementById('edit-board-name-input') as HTMLInputElement | null;
+    const idInput = document.getElementById('edit-board-id-input') as HTMLInputElement | null;
+    const accSelect = document.getElementById('edit-board-account-select') as HTMLSelectElement | null;
 
-    function closeModal() {
-      modal?.classList.add('hidden');
-      modal?.classList.remove('flex');
-      errorElem?.classList.add('hidden');
-      form?.reset();
+    if (targetIdInput) targetIdInput.value = id;
+    if (nameInput) nameInput.value = name;
+    if (idInput) idInput.value = boardId;
+    if (accSelect && accId) accSelect.value = accId;
+
+    modal?.classList.remove('hidden');
+    modal?.classList.add('flex');
+  }
+
+  function setupModalListeners() {
+    // Add Board Modal controls
+    const openBtn = document.getElementById('open-add-board-modal');
+    const addModal = document.getElementById('add-board-modal');
+    const closeAddBtn = document.getElementById('close-add-board-modal');
+    const cancelAddBtn = document.getElementById('cancel-add-board-modal');
+    const addBackdrop = document.getElementById('add-board-backdrop');
+    const addForm = document.getElementById('add-board-form') as HTMLFormElement | null;
+    const addError = document.getElementById('add-board-error');
+
+    function closeAddModal() {
+      addModal?.classList.add('hidden');
+      addModal?.classList.remove('flex');
+      addError?.classList.add('hidden');
+      addForm?.reset();
     }
 
     openBtn?.addEventListener('click', () => {
-      populateAccountDropdown();
-      modal?.classList.remove('hidden');
-      modal?.classList.add('flex');
+      populateAccountDropdowns();
+      addModal?.classList.remove('hidden');
+      addModal?.classList.add('flex');
     });
 
-    closeBtn?.addEventListener('click', closeModal);
-    cancelBtn?.addEventListener('click', closeModal);
-    backdrop?.addEventListener('click', closeModal);
+    closeAddBtn?.addEventListener('click', closeAddModal);
+    cancelAddBtn?.addEventListener('click', closeAddModal);
+    addBackdrop?.addEventListener('click', closeAddModal);
 
-    form?.addEventListener('submit', async (e) => {
+    addForm?.addEventListener('submit', async (e) => {
       e.preventDefault();
-      errorElem?.classList.add('hidden');
+      addError?.classList.add('hidden');
 
       const accountId = (document.getElementById('board-account-select') as HTMLSelectElement).value;
       const boardName = (document.getElementById('board-name-input') as HTMLInputElement).value.trim();
       const boardId = (document.getElementById('board-id-input') as HTMLInputElement).value.trim();
 
       if (!accountId) {
-        showError('Please select a target account.');
+        showAddError('Please select a target account.');
         return;
       }
       if (!boardName) {
-        showError('Board name is required.');
+        showAddError('Board name is required.');
         return;
       }
       if (!boardId) {
-        showError('Pinterest Board ID is required.');
+        showAddError('Pinterest Board ID is required.');
         return;
       }
 
@@ -343,37 +471,37 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
       );
 
       if (isDuplicate) {
-        showError(`A board named "${boardName}" is already registered for this account.`);
+        showAddError(`A board named "${boardName}" is already registered for this account.`);
         return;
       }
 
-      setSubmitLoading(true);
+      setAddLoading(true);
 
-      const { data, error } = await createBoard({
+      const { error } = await createBoard({
         account_id: accountId,
         board_name: boardName,
         board_id: boardId,
       });
 
-      setSubmitLoading(false);
+      setAddLoading(false);
 
       if (error) {
-        showError('Failed to create board mapping: ' + error);
+        showAddError('Failed to create board mapping: ' + error);
       } else {
-        closeModal();
+        closeAddModal();
         showSuccessBanner(`Board "${boardName}" added successfully!`);
         await loadBoards();
       }
     });
 
-    function showError(msg: string) {
-      if (errorElem) {
-        errorElem.textContent = msg;
-        errorElem.classList.remove('hidden');
+    function showAddError(msg: string) {
+      if (addError) {
+        addError.textContent = msg;
+        addError.classList.remove('hidden');
       }
     }
 
-    function setSubmitLoading(loading: boolean) {
+    function setAddLoading(loading: boolean) {
       const submitBtn = document.getElementById('submit-add-board-modal') as HTMLButtonElement | null;
       const text = document.getElementById('board-btn-text');
       const spinner = document.getElementById('board-btn-spinner');
@@ -388,10 +516,99 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
       }
     }
 
-    // Keyboard navigation (Escape to close)
+    // Edit Board Modal controls
+    const editModal = document.getElementById('edit-board-modal');
+    const closeEditBtn = document.getElementById('close-edit-board-modal');
+    const cancelEditBtn = document.getElementById('cancel-edit-board-modal');
+    const editBackdrop = document.getElementById('edit-board-backdrop');
+    const editForm = document.getElementById('edit-board-form') as HTMLFormElement | null;
+    const editError = document.getElementById('edit-board-error');
+
+    function closeEditModal() {
+      editModal?.classList.add('hidden');
+      editModal?.classList.remove('flex');
+      editError?.classList.add('hidden');
+      editForm?.reset();
+    }
+
+    closeEditBtn?.addEventListener('click', closeEditModal);
+    cancelEditBtn?.addEventListener('click', closeEditModal);
+    editBackdrop?.addEventListener('click', closeEditModal);
+
+    editForm?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      editError?.classList.add('hidden');
+
+      const targetId = (document.getElementById('edit-target-board-id') as HTMLInputElement).value;
+      const accountId = (document.getElementById('edit-board-account-select') as HTMLSelectElement).value;
+      const boardName = (document.getElementById('edit-board-name-input') as HTMLInputElement).value.trim();
+      const boardId = (document.getElementById('edit-board-id-input') as HTMLInputElement).value.trim();
+
+      if (!boardName) {
+        showEditError('Board name is required.');
+        return;
+      }
+      if (!boardId) {
+        showEditError('Pinterest Board ID is required.');
+        return;
+      }
+
+      // Duplicate check (excluding current board being edited)
+      const isDuplicate = currentBoards.some(
+        (b) => b.id !== targetId && b.account_id === accountId && b.board_name.toLowerCase() === boardName.toLowerCase()
+      );
+
+      if (isDuplicate) {
+        showEditError(`Another board named "${boardName}" already exists for this account.`);
+        return;
+      }
+
+      setEditLoading(true);
+
+      const { error } = await updateBoard(targetId, {
+        account_id: accountId,
+        board_name: boardName,
+        board_id: boardId,
+      });
+
+      setEditLoading(false);
+
+      if (error) {
+        showEditError('Failed to update board mapping: ' + error);
+      } else {
+        closeEditModal();
+        showSuccessBanner(`Board "${boardName}" updated successfully!`);
+        await loadBoards();
+      }
+    });
+
+    function showEditError(msg: string) {
+      if (editError) {
+        editError.textContent = msg;
+        editError.classList.remove('hidden');
+      }
+    }
+
+    function setEditLoading(loading: boolean) {
+      const submitBtn = document.getElementById('submit-edit-board-modal') as HTMLButtonElement | null;
+      const text = document.getElementById('edit-board-btn-text');
+      const spinner = document.getElementById('edit-board-btn-spinner');
+
+      if (submitBtn) submitBtn.disabled = loading;
+      if (loading) {
+        text?.classList.add('hidden');
+        spinner?.classList.remove('hidden');
+      } else {
+        text?.classList.remove('hidden');
+        spinner?.classList.add('hidden');
+      }
+    }
+
+    // Keyboard navigation (Escape key to close open modals)
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && modal && !modal.classList.contains('hidden')) {
-        closeModal();
+      if (e.key === 'Escape') {
+        if (addModal && !addModal.classList.contains('hidden')) closeAddModal();
+        if (editModal && !editModal.classList.contains('hidden')) closeEditModal();
       }
     });
 

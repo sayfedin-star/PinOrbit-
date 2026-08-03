@@ -1,11 +1,32 @@
+export interface AccountWebhook {
+  id: string;
+  account_id: string;
+  label: string;
+  webhook_url: string;
+  monthly_capacity: number;
+  monthly_usage: number;
+  remaining_capacity: number;
+  priority: number;
+  is_active: boolean;
+  is_primary: boolean;
+  last_used_at: string | null;
+  last_failed_at: string | null;
+  last_failure_reason: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Account {
   id: string;
   account_name: string;
-  webhook_url: string;
+  webhook_url?: string;
   max_pins_per_day: number;
   is_active: boolean;
   created_at: string;
   boards_count?: number;
+  webhooks_count?: number;
+  active_webhooks_count?: number;
+  primary_webhook_label?: string;
 }
 
 export interface Board {
@@ -36,12 +57,25 @@ export interface Log {
   id: string;
   pin_id: string | null;
   account_id: string | null;
+  webhook_id?: string | null;
   status: 'success' | 'error';
   message: string | null;
   webhook_used: string | null;
   created_at: string;
   account_name?: string;
   pin_title?: string;
+  webhook_label?: string;
+}
+
+export interface AuditLog {
+  id: string;
+  table_name: string;
+  record_id: string;
+  action: 'INSERT' | 'UPDATE' | 'DELETE' | string;
+  old_data: Record<string, any> | null;
+  new_data: Record<string, any> | null;
+  changed_by: string | null;
+  changed_at: string;
 }
 
 export interface DashboardKPIs {
@@ -51,4 +85,7 @@ export interface DashboardKPIs {
   postedPins: number;
   failedPins: number;
   totalLogs: number;
+  totalWebhooks: number;
+  activeWebhooks: number;
+  exhaustedWebhooks: number;
 }
