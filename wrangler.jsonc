@@ -3,6 +3,8 @@
   "name": "pinorbit",
   "compatibility_date": "2026-08-03",
   "assets": {
-    "directory": "./dist"
+    "directory": "./dist",
+    "html_handling": "drop-trailing-slash",
+    "not_found_handling": "single-page-application"
   }
 }

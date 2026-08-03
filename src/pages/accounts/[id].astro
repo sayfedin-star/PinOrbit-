@@ -274,11 +274,18 @@ const { id } = Astro.params;
     const isAuth = await requireAuth();
     if (!isAuth) return;
 
-    // Extract Account ID from URL
+    // Extract Account ID from URL (path or query string)
+    const urlParams = new URLSearchParams(window.location.search);
+    const queryId = urlParams.get('id');
     const parts = window.location.pathname.split('/accounts/');
+    let pathId = '';
     if (parts.length > 1) {
-      accountId = parts[1].split('/')[0].split('?')[0];
-    } else {
+      pathId = parts[1].split('/')[0].split('?')[0];
+    }
+
+    accountId = queryId || (pathId && pathId !== '[id]' && pathId !== 'details' ? pathId : '');
+
+    if (!accountId) {
       const elem = document.getElementById('display-account-id');
       accountId = elem ? elem.textContent || '' : '';
     }
