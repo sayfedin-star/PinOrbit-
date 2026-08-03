@@ -170,6 +170,7 @@ let mockPins: Pin[] = [
 
 let mockLogs: Log[] = [];
 let mockAuditLogs: AuditLog[] = [];
+let mockImportSessions: ImportSession[] = [];
 
 interface RawAccount extends Account {
   boards?: { id: string }[];
@@ -317,10 +318,16 @@ export async function getBoardsForAccount(accountId: string): Promise<Board[]> {
 }
 
 // 4. Fetch Pins
-export async function getPins(statusFilter?: string): Promise<Pin[]> {
+export async function getPins(statusFilter?: string, accountIdFilter?: string): Promise<Pin[]> {
   if (!supabase) {
-    if (!statusFilter || statusFilter === 'all') return mockPins;
-    return mockPins.filter((p) => p.status === statusFilter);
+    let pins = mockPins;
+    if (statusFilter && statusFilter !== 'all') {
+      pins = pins.filter((p) => p.status === statusFilter);
+    }
+    if (accountIdFilter && accountIdFilter !== 'all') {
+      pins = pins.filter((p) => p.account_id === accountIdFilter);
+    }
+    return pins;
   }
   try {
     let query = supabase
@@ -331,12 +338,18 @@ export async function getPins(statusFilter?: string): Promise<Pin[]> {
     if (statusFilter && statusFilter !== 'all') {
       query = query.eq('status', statusFilter);
     }
+    if (accountIdFilter && accountIdFilter !== 'all') {
+      query = query.eq('account_id', accountIdFilter);
+    }
 
     const { data, error } = await query;
     if (error) {
       let basicQuery = supabase.from('pins').select('*').order('created_at', { ascending: false });
       if (statusFilter && statusFilter !== 'all') {
         basicQuery = basicQuery.eq('status', statusFilter);
+      }
+      if (accountIdFilter && accountIdFilter !== 'all') {
+        basicQuery = basicQuery.eq('account_id', accountIdFilter);
       }
       const { data: basicData, error: basicErr } = await basicQuery;
       if (basicErr || !basicData) throw basicErr || new Error('No data');
@@ -350,8 +363,14 @@ export async function getPins(statusFilter?: string): Promise<Pin[]> {
     }));
   } catch (err) {
     console.warn('Supabase fetch pins error, using fallback:', err);
-    if (!statusFilter || statusFilter === 'all') return mockPins;
-    return mockPins.filter((p) => p.status === statusFilter);
+    let pins = mockPins;
+    if (statusFilter && statusFilter !== 'all') {
+      pins = pins.filter((p) => p.status === statusFilter);
+    }
+    if (accountIdFilter && accountIdFilter !== 'all') {
+      pins = pins.filter((p) => p.account_id === accountIdFilter);
+    }
+    return pins;
   }
 }
 
@@ -407,7 +426,28 @@ export async function getAuditLogs(limit = 100): Promise<AuditLog[]> {
   }
 }
 
-// 7. Fetch Dashboard KPIs
+// 7. Fetch Import Sessions History
+export async function getImportSessions(limit = 10): Promise<ImportSession[]> {
+  if (!supabase) return mockImportSessions.slice(0, limit);
+  try {
+    const { data, error } = await supabase
+      .from('import_sessions')
+      .select('*, accounts(account_name)')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) throw error;
+    return (data as any[]).map((s) => ({
+      ...s,
+      account_name: s.accounts?.account_name || 'Account #' + s.account_id.slice(0, 6),
+    }));
+  } catch (err) {
+    console.warn('Supabase fetch import_sessions error, using fallback:', err);
+    return mockImportSessions.slice(0, limit);
+  }
+}
+
+// 8. Fetch Dashboard KPIs
 export async function getDashboardKPIs(): Promise<DashboardKPIs> {
   const [accounts, webhooks, pins, logs] = await Promise.all([
     getAccounts(),
@@ -429,7 +469,7 @@ export async function getDashboardKPIs(): Promise<DashboardKPIs> {
   };
 }
 
-// 8. Admin Mutations & Webhook Operations
+// 9. Admin Mutations & Webhook Operations
 
 export async function createAccount(payload: {
   account_name: string;
@@ -819,6 +859,21 @@ export async function bulkInsertPins(
       };
       mockPins.unshift(newPin);
     });
+
+    if (sessionMeta) {
+      mockImportSessions.unshift({
+        id: 'session-' + Date.now(),
+        account_id: sessionMeta.account_id,
+        source_type: sessionMeta.source_type,
+        source_label: sessionMeta.source_label || null,
+        total_rows: sessionMeta.total_rows,
+        valid_rows: sessionMeta.valid_rows,
+        invalid_rows: sessionMeta.invalid_rows,
+        imported_rows: pins.length,
+        created_at: new Date().toISOString(),
+      });
+    }
+
     return { count: pins.length, error: null };
   }
 
@@ -841,6 +896,7 @@ export async function bulkInsertPins(
 
     // Log import session if metadata provided
     if (sessionMeta) {
+      const { data: userRes } = await supabase.auth.getUser();
       await supabase.from('import_sessions').insert({
         account_id: sessionMeta.account_id,
         source_type: sessionMeta.source_type,
@@ -849,6 +905,7 @@ export async function bulkInsertPins(
         valid_rows: sessionMeta.valid_rows,
         invalid_rows: sessionMeta.invalid_rows,
         imported_rows: totalInserted,
+        created_by: userRes?.user ? userRes.user.id : null,
       });
     }
 

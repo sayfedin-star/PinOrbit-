@@ -10,37 +10,48 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
   />
 
   <!-- Filter & Search Control Bar -->
-  <div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-    <!-- Filter Tabs -->
-    <div id="filter-tabs-container" class="inline-flex rounded-lg border border-border bg-card p-1 text-xs font-medium">
-      <button
-        data-filter="all"
-        class="filter-btn rounded-md px-3.5 py-1.5 transition-colors bg-primary text-primary-foreground font-semibold"
+  <div class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+    <!-- Left Controls: Status Tabs + Account Filter Dropdown -->
+    <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+      <!-- Status Filter Tabs -->
+      <div id="filter-tabs-container" class="inline-flex rounded-lg border border-border bg-card p-1 text-xs font-medium">
+        <button
+          data-filter="all"
+          class="filter-btn rounded-md px-3.5 py-1.5 transition-colors bg-primary text-primary-foreground font-semibold"
+        >
+          All (...)
+        </button>
+        <button
+          data-filter="pending"
+          class="filter-btn rounded-md px-3.5 py-1.5 text-muted-foreground hover:text-foreground transition-colors"
+        >
+          Pending (...)
+        </button>
+        <button
+          data-filter="posted"
+          class="filter-btn rounded-md px-3.5 py-1.5 text-muted-foreground hover:text-foreground transition-colors"
+        >
+          Posted (...)
+        </button>
+        <button
+          data-filter="failed"
+          class="filter-btn rounded-md px-3.5 py-1.5 text-muted-foreground hover:text-foreground transition-colors"
+        >
+          Failed (...)
+        </button>
+      </div>
+
+      <!-- Account Filter Dropdown -->
+      <select
+        id="account-filter-select"
+        class="rounded-lg border border-border bg-card py-1.5 px-3 text-xs font-semibold text-foreground focus:border-primary focus:outline-none"
       >
-        All (...)
-      </button>
-      <button
-        data-filter="pending"
-        class="filter-btn rounded-md px-3.5 py-1.5 text-muted-foreground hover:text-foreground transition-colors"
-      >
-        Pending (...)
-      </button>
-      <button
-        data-filter="posted"
-        class="filter-btn rounded-md px-3.5 py-1.5 text-muted-foreground hover:text-foreground transition-colors"
-      >
-        Posted (...)
-      </button>
-      <button
-        data-filter="failed"
-        class="filter-btn rounded-md px-3.5 py-1.5 text-muted-foreground hover:text-foreground transition-colors"
-      >
-        Failed (...)
-      </button>
+        <option value="all">All Accounts</option>
+      </select>
     </div>
 
     <!-- Search Input -->
-    <div class="relative w-full sm:w-72">
+    <div class="relative w-full lg:w-72">
       <svg
         xmlns="http://www.w3.org/2000/svg"
         class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
@@ -72,18 +83,35 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
 
 <script>
   import { requireAuth } from '../lib/auth';
-  import { getPins } from '../lib/supabase';
+  import { getPins, getAccounts } from '../lib/supabase';
   import { renderStatusBadge, formatDate, renderEmptyStateHTML, escapeHtml } from '../lib/ui-helpers';
-  import type { Pin } from '../lib/types';
+  import type { Pin, Account } from '../lib/types';
 
   let allPins: Pin[] = [];
+  let accounts: Account[] = [];
   let currentFilter = 'all';
+  let currentAccountFilter = 'all';
   let currentSearch = '';
 
   async function init() {
     const isAuth = await requireAuth();
     if (!isAuth) return;
-    await loadPins();
+    await Promise.all([loadAccounts(), loadPins()]);
+  }
+
+  async function loadAccounts() {
+    const select = document.getElementById('account-filter-select') as HTMLSelectElement | null;
+    if (!select) return;
+
+    accounts = await getAccounts();
+    select.innerHTML =
+      '<option value="all">All Accounts</option>' +
+      accounts.map((a) => `<option value="${a.id}">${escapeHtml(a.account_name)}</option>`).join('');
+
+    select.addEventListener('change', (e) => {
+      currentAccountFilter = (e.target as HTMLSelectElement).value;
+      applyFilters();
+    });
   }
 
   async function loadPins() {
@@ -119,7 +147,7 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
               <thead class="border-b border-border bg-muted/50 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 <tr>
                   <th class="px-6 py-3.5">Pin Title & Details</th>
-                  <th class="px-6 py-3.5">Account</th>
+                  <th class="px-6 py-3.5">Account & Source</th>
                   <th class="px-6 py-3.5">Target Board</th>
                   <th class="px-6 py-3.5">Status</th>
                   <th class="px-6 py-3.5">Scheduled For</th>
@@ -154,11 +182,13 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
     const titleLower = (pin.title || '').toLowerCase();
     const accountLower = (pin.account_name || '').toLowerCase();
     const boardLower = (pin.board_name || '').toLowerCase();
+    const sourceLabel = pin.source === 'csv_import' ? 'CSV Import' : pin.source === 'google_sheets_import' ? 'Google Sheet' : 'Google Sheet Sync';
 
     return `
       <tr
         class="pin-row transition-colors hover:bg-muted/40"
         data-status="${pin.status}"
+        data-account-id="${pin.account_id}"
         data-title="${escapeHtml(titleLower)}"
         data-account="${escapeHtml(accountLower)}"
         data-board="${escapeHtml(boardLower)}"
@@ -191,8 +221,11 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
             </div>
           </div>
         </td>
-        <td class="px-6 py-4 font-medium text-foreground">
-          ${escapeHtml(pin.account_name || 'Unassigned')}
+        <td class="px-6 py-4">
+          <div class="space-y-1">
+            <p class="font-medium text-foreground">${escapeHtml(pin.account_name || 'Unassigned')}</p>
+            <span class="inline-block rounded-md bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">${sourceLabel}</span>
+          </div>
         </td>
         <td class="px-6 py-4 text-muted-foreground">
           <span class="rounded bg-muted/60 px-2 py-1 text-xs font-medium">
@@ -230,18 +263,20 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
     let matchCount = 0;
     rows.forEach((row) => {
       const status = row.getAttribute('data-status') || '';
+      const accountId = row.getAttribute('data-account-id') || '';
       const title = row.getAttribute('data-title') || '';
       const account = row.getAttribute('data-account') || '';
       const board = row.getAttribute('data-board') || '';
 
       const matchesStatus = currentFilter === 'all' || status === currentFilter;
+      const matchesAccount = currentAccountFilter === 'all' || accountId === currentAccountFilter;
       const matchesSearch =
         !currentSearch ||
         title.includes(currentSearch) ||
         account.includes(currentSearch) ||
         board.includes(currentSearch);
 
-      if (matchesStatus && matchesSearch) {
+      if (matchesStatus && matchesAccount && matchesSearch) {
         row.style.display = '';
         matchCount++;
       } else {

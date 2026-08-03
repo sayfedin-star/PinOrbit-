@@ -25,7 +25,7 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
 
     <div id="import-error-banner" class="hidden rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-xs text-rose-500 flex items-start gap-2.5">
       <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/>
       </svg>
       <span id="import-error-text">An error occurred during import processing.</span>
     </div>
@@ -54,14 +54,25 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
 
     <!-- Step 2: Choose Source & Input -->
     <div class="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-5">
-      <div class="flex items-center gap-3">
-        <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold text-xs">
-          2
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold text-xs">
+            2
+          </div>
+          <div>
+            <h3 class="text-sm font-bold text-foreground">Choose Input Source</h3>
+            <p class="text-xs text-muted-foreground">Upload a local .csv file or provide a public Google Sheet link.</p>
+          </div>
         </div>
-        <div>
-          <h3 class="text-sm font-bold text-foreground">Choose Input Source</h3>
-          <p class="text-xs text-muted-foreground">Upload a local .csv file or provide a public Google Sheet link.</p>
-        </div>
+
+        <button
+          id="btn-download-sample"
+          type="button"
+          class="inline-flex items-center gap-1.5 rounded-xl border border-border bg-background px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted transition-all"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span>Download Sample CSV</span>
+        </button>
       </div>
 
       <!-- Source Toggle Tabs -->
@@ -182,22 +193,29 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
         </div>
       </div>
 
-      <!-- Preview Table (First 20 Rows) -->
-      <div class="overflow-hidden rounded-xl border border-border bg-background shadow-sm">
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-sm">
-            <thead class="border-b border-border bg-muted/50 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              <tr>
-                <th class="px-4 py-3">Row #</th>
-                <th class="px-4 py-3">Title & Image</th>
-                <th class="px-4 py-3">Target Board</th>
-                <th class="px-4 py-3">Scheduled For</th>
-                <th class="px-4 py-3">Validation Status</th>
-              </tr>
-            </thead>
-            <tbody id="preview-table-body" class="divide-y divide-border text-xs">
-            </tbody>
-          </table>
+      <!-- Preview Table & Controls -->
+      <div class="space-y-3">
+        <div class="flex items-center justify-between text-xs text-muted-foreground">
+          <span id="preview-showing-label">Showing top 20 rows</span>
+          <button id="toggle-show-all-rows" class="font-semibold text-primary hover:underline hidden">Show All Rows</button>
+        </div>
+
+        <div class="overflow-hidden rounded-xl border border-border bg-background shadow-sm">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+              <thead class="border-b border-border bg-muted/50 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th class="px-4 py-3">Row #</th>
+                  <th class="px-4 py-3">Title & Image</th>
+                  <th class="px-4 py-3">Target Board</th>
+                  <th class="px-4 py-3">Scheduled For</th>
+                  <th class="px-4 py-3">Validation Status</th>
+                </tr>
+              </thead>
+              <tbody id="preview-table-body" class="divide-y divide-border text-xs">
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
@@ -207,7 +225,7 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
 
 <script>
   import { requireAuth } from '../lib/auth';
-  import { getAccounts, getBoardsForAccount, bulkInsertPins } from '../lib/supabase';
+  import { getAccounts, getBoardsForAccount, getPins, bulkInsertPins } from '../lib/supabase';
   import { formatDate, escapeHtml } from '../lib/ui-helpers';
   import type { Account, Board, Pin } from '../lib/types';
 
@@ -221,24 +239,28 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
     rawScheduled: string;
     isValid: boolean;
     errors: string[];
+    warnings: string[];
     normalizedPin?: Partial<Pin>;
   }
 
   let accounts: Account[] = [];
   let selectedAccount: Account | null = null;
   let accountBoards: Board[] = [];
+  let existingAccountPins: Pin[] = [];
 
   let activeSourceType: 'file' | 'url' = 'file';
   let loadedFile: File | null = null;
 
   let parsedRows: ParsedImportRow[] = [];
   let validPinsToCommit: Partial<Pin>[] = [];
+  let showAllRows = false;
 
   async function init() {
     const isAuth = await requireAuth();
     if (!isAuth) return;
     setupSourceTabs();
     setupFileInput();
+    setupSampleDownload();
     await loadAccounts();
   }
 
@@ -264,8 +286,30 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
       const id = (e.target as HTMLSelectElement).value;
       selectedAccount = accounts.find((a) => a.id === id) || null;
       if (selectedAccount) {
-        accountBoards = await getBoardsForAccount(selectedAccount.id);
+        const [boards, pins] = await Promise.all([
+          getBoardsForAccount(selectedAccount.id),
+          getPins('all', selectedAccount.id),
+        ]);
+        accountBoards = boards;
+        existingAccountPins = pins;
       }
+    });
+  }
+
+  function setupSampleDownload() {
+    document.getElementById('btn-download-sample')?.addEventListener('click', () => {
+      const boardName = accountBoards.length > 0 ? accountBoards[0].board_name : 'Quick Dinner Recipes';
+      const sampleCsv = `title,image_url,board_name,description,link,scheduled_for
+30-Minute Creamy Garlic Chicken,https://images.unsplash.com/photo-1604908176997-125f25cc6f3d,${boardName},Easy and delicious one-pan creamy garlic chicken recipe.,https://myrecipeblog.com/creamy-garlic-chicken,2026-08-10T18:00:00Z
+Keto Cauliflower Rice Bowl,https://images.unsplash.com/photo-1546069901-ba9599a7e63c,${boardName},Low carb cauliflower bowl with avocado.,https://myrecipeblog.com/cauliflower-bowl,2026-08-11T12:00:00Z`;
+
+      const blob = new Blob([sampleCsv], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.setAttribute('download', 'sample_pins_import.csv');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     });
   }
 
@@ -357,6 +401,11 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
     document.getElementById('btn-commit-import')?.addEventListener('click', async () => {
       await commitImportedPins();
     });
+
+    document.getElementById('toggle-show-all-rows')?.addEventListener('click', () => {
+      showAllRows = !showAllRows;
+      renderPreviewSection();
+    });
   }
 
   async function processAndValidateSource() {
@@ -440,11 +489,8 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
     }
   }
 
-  // Robust CSV parser supporting quotes & escaped characters
   function parseCSV(text: string): string[][] {
-    // Strip Windows Excel Byte Order Mark (BOM) if present
     const cleanText = text.replace(/^\uFEFF/, '');
-
     const lines: string[][] = [];
     let curLine: string[] = [];
     let curVal = '';
@@ -503,7 +549,6 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
 
     const rawHeaders = rows[0].map((h) => h.toLowerCase().replace(/[^a-z0-9_]/g, ''));
 
-    // Map header aliases
     const titleIdx = rawHeaders.findIndex((h) => ['title', 'name', 'pintitle'].includes(h));
     const imageIdx = rawHeaders.findIndex((h) => ['image_url', 'image', 'imageurl', 'img'].includes(h));
     const boardIdx = rawHeaders.findIndex((h) => ['board_name', 'board', 'boardname'].includes(h));
@@ -530,12 +575,12 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
       const sched = schedIdx !== -1 ? r[schedIdx] || '' : '';
 
       const errors: string[] = [];
+      const warnings: string[] = [];
 
       if (!title) errors.push('Title is required');
       if (!image) errors.push('Image URL is required');
       else if (!image.startsWith('http://') && !image.startsWith('https://')) errors.push('Image URL must be valid HTTP/HTTPS');
 
-      // Canonical board name matching
       const matchedBoardObj = accountBoards.find((b) => b.board_name.toLowerCase() === board.toLowerCase());
       const canonicalBoardName = matchedBoardObj ? matchedBoardObj.board_name : board;
 
@@ -560,6 +605,16 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
         errors.push('Duplicate row within import batch');
       } else if (errors.length === 0) {
         seenBatchKeys.add(batchKey);
+      }
+
+      // Warning check against existing DB pins for this account
+      if (title && matchedBoardObj) {
+        const existingPin = existingAccountPins.find(
+          (p) => p.title.toLowerCase() === title.toLowerCase() && p.board_name?.toLowerCase() === canonicalBoardName.toLowerCase()
+        );
+        if (existingPin) {
+          warnings.push(`A pin titled "${title}" already exists in queue/history for this account.`);
+        }
       }
 
       const isValid = errors.length === 0;
@@ -590,6 +645,7 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
         rawScheduled: sched,
         isValid,
         errors,
+        warnings,
         normalizedPin,
       });
     }
@@ -606,6 +662,8 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
     const readyElem = document.getElementById('kpi-ready-rows');
     const commitBtn = document.getElementById('btn-commit-import') as HTMLButtonElement | null;
     const commitText = document.getElementById('commit-btn-text');
+    const showingLabel = document.getElementById('preview-showing-label');
+    const toggleShowAllBtn = document.getElementById('toggle-show-all-rows');
 
     const totalCount = parsedRows.length;
     const validCount = validPinsToCommit.length;
@@ -616,16 +674,28 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
     if (invalidElem) invalidElem.textContent = String(invalidCount);
     if (readyElem) readyElem.textContent = String(validCount);
 
-    if (commitBtn) {
-      commitBtn.disabled = validCount === 0;
+    if (commitBtn) commitBtn.disabled = validCount === 0;
+    if (commitText) commitText.textContent = `Import ${validCount} Valid Rows`;
+
+    const visibleRows = showAllRows ? parsedRows : parsedRows.slice(0, 20);
+
+    if (showingLabel) {
+      showingLabel.textContent = showAllRows
+        ? `Showing all ${totalCount} rows`
+        : `Showing top ${Math.min(20, totalCount)} of ${totalCount} rows`;
     }
-    if (commitText) {
-      commitText.textContent = `Import ${validCount} Valid Rows`;
+
+    if (toggleShowAllBtn) {
+      if (totalCount > 20) {
+        toggleShowAllBtn.classList.remove('hidden');
+        toggleShowAllBtn.textContent = showAllRows ? 'Show Top 20 Rows' : `Show All ${totalCount} Rows`;
+      } else {
+        toggleShowAllBtn.classList.add('hidden');
+      }
     }
 
     if (tbody) {
-      const top20 = parsedRows.slice(0, 20);
-      tbody.innerHTML = top20
+      tbody.innerHTML = visibleRows
         .map((r) => `
           <tr class="transition-colors hover:bg-muted/40">
             <td class="px-4 py-3 font-mono font-semibold text-muted-foreground">#${r.rowNum}</td>
@@ -652,7 +722,14 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
             <td class="px-4 py-3">
               ${
                 r.isValid
-                  ? `<span class="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2.5 py-0.5 font-bold">Valid</span>`
+                  ? `<div class="space-y-1">
+                      <span class="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2.5 py-0.5 font-bold">Valid</span>
+                      ${
+                        r.warnings.length > 0
+                          ? `<p class="text-[10px] text-amber-500 max-w-xs">${escapeHtml(r.warnings.join(' '))}</p>`
+                          : ''
+                      }
+                    </div>`
                   : `<div class="space-y-0.5">
                       <span class="inline-flex items-center gap-1 rounded-full bg-rose-500/10 text-rose-500 px-2.5 py-0.5 font-bold">Invalid</span>
                       <p class="text-[11px] text-rose-500 max-w-xs">${escapeHtml(r.errors.join(', '))}</p>
