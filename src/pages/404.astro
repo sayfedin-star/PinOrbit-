@@ -10,7 +10,7 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
     </div>
     <h1 class="text-2xl font-bold text-foreground">Page Not Found</h1>
     <p class="text-xs text-muted-foreground max-w-sm">
-      The page or account details route you are trying to access does not exist or has been moved.
+      The requested page could not be found. Redirecting to your account workspace...
     </p>
 
     <div class="flex items-center gap-3 pt-2">
@@ -31,14 +31,14 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
 </Layout>
 
 <script>
-  // Client-side fallback check for dynamic route aliases
+  // Client-side smart fallback for dynamic account routes on static Cloudflare hosting
   function checkFallback() {
     const path = window.location.pathname;
-    if (path.startsWith('/accounts/') && path !== '/accounts/' && path !== '/accounts') {
-      // Re-route to account details page
+    if (path.startsWith('/accounts/') && path !== '/accounts/' && path !== '/accounts' && path !== '/accounts/details') {
       const accountId = path.split('/accounts/')[1]?.split('/')[0]?.split('?')[0];
-      if (accountId && accountId !== '[id]') {
-        window.location.href = `/accounts/${accountId}`;
+      if (accountId && accountId !== '[id]' && accountId !== 'details') {
+        window.location.href = `/accounts/details?id=${accountId}`;
+        return;
       }
     }
   }

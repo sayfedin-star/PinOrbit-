@@ -1,0 +1,651 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import SectionHeader from '../../components/ui/SectionHeader.astro';
+import KPIStatCard from '../../components/ui/KPIStatCard.astro';
+---
+
+<Layout title="Manage Account Details" description="Detailed operational, scheduling, and activity control center for Pinterest account.">
+  <!-- Back Link & Breadcrumb -->
+  <div class="mb-4 flex items-center justify-between">
+    <a href="/accounts" class="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      <span>&larr; Back to Accounts</span>
+    </a>
+    <span class="text-xs text-muted-foreground font-mono">Account ID: <span id="display-account-id">---</span></span>
+  </div>
+
+  <!-- Header Control Card -->
+  <div id="account-header-container" class="mb-6 rounded-2xl border border-border bg-card p-6 shadow-sm">
+    <div class="animate-pulse flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div class="h-8 w-48 rounded-lg bg-muted"></div>
+      <div class="h-9 w-64 rounded-lg bg-muted"></div>
+    </div>
+  </div>
+
+  <!-- Section 1: Overview KPI Cards (8 Grid Items) -->
+  <div class="mb-8 space-y-3">
+    <h3 class="text-sm font-bold text-foreground tracking-wide uppercase">Operational Overview & Metrics</h3>
+    <div id="kpis-grid-container" class="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
+      <div class="rounded-xl border border-border bg-card p-4 text-center animate-pulse"><div class="h-6 w-12 bg-muted mx-auto rounded"></div></div>
+      <div class="rounded-xl border border-border bg-card p-4 text-center animate-pulse"><div class="h-6 w-12 bg-muted mx-auto rounded"></div></div>
+      <div class="rounded-xl border border-border bg-card p-4 text-center animate-pulse"><div class="h-6 w-12 bg-muted mx-auto rounded"></div></div>
+      <div class="rounded-xl border border-border bg-card p-4 text-center animate-pulse"><div class="h-6 w-12 bg-muted mx-auto rounded"></div></div>
+      <div class="rounded-xl border border-border bg-card p-4 text-center animate-pulse"><div class="h-6 w-12 bg-muted mx-auto rounded"></div></div>
+      <div class="rounded-xl border border-border bg-card p-4 text-center animate-pulse"><div class="h-6 w-12 bg-muted mx-auto rounded"></div></div>
+      <div class="rounded-xl border border-border bg-card p-4 text-center animate-pulse"><div class="h-6 w-12 bg-muted mx-auto rounded"></div></div>
+      <div class="rounded-xl border border-border bg-card p-4 text-center animate-pulse"><div class="h-6 w-12 bg-muted mx-auto rounded"></div></div>
+    </div>
+  </div>
+
+  <!-- Grid: Scheduling Info & Webhook Summary -->
+  <div class="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
+    <!-- Section 2: Scheduling Information -->
+    <div class="rounded-2xl border border-border bg-card p-5 shadow-sm space-y-4">
+      <div class="flex items-center justify-between border-b border-border pb-3">
+        <div class="flex items-center gap-2">
+          <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/10 text-amber-500">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
+          <div>
+            <h3 class="text-sm font-bold text-foreground">Posting Schedule & Timezone</h3>
+            <p class="text-xs text-muted-foreground">Automated publishing window configuration</p>
+          </div>
+        </div>
+        <button
+          id="open-scheduling-modal-btn"
+          class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-muted transition-all"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          <span>Edit Schedule</span>
+        </button>
+      </div>
+
+      <div id="scheduling-info-container" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div class="p-3 rounded-xl border border-border bg-background space-y-1">
+          <span class="text-[11px] font-medium text-muted-foreground">Pinning Started At</span>
+          <p id="sched-started-at" class="text-xs font-bold text-foreground">Loading...</p>
+        </div>
+        <div class="p-3 rounded-xl border border-border bg-background space-y-1">
+          <span class="text-[11px] font-medium text-muted-foreground">Posting Window</span>
+          <p id="sched-posting-window" class="text-xs font-bold text-foreground">Loading...</p>
+        </div>
+        <div class="p-3 rounded-xl border border-border bg-background space-y-1">
+          <span class="text-[11px] font-medium text-muted-foreground">Timezone</span>
+          <p id="sched-timezone" class="text-xs font-bold text-foreground">Loading...</p>
+        </div>
+        <div class="p-3 rounded-xl border border-border bg-background space-y-1">
+          <span class="text-[11px] font-medium text-muted-foreground">Last Published At</span>
+          <p id="sched-last-published" class="text-xs font-bold text-emerald-500">Loading...</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 3: Webhook Summary -->
+    <div class="rounded-2xl border border-border bg-card p-5 shadow-sm space-y-4">
+      <div class="flex items-center justify-between border-b border-border pb-3">
+        <div class="flex items-center gap-2">
+          <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          </div>
+          <div>
+            <h3 class="text-sm font-bold text-foreground">Webhook Orchestration Summary</h3>
+            <p class="text-xs text-muted-foreground">Channel capacities & fallback priority routing</p>
+          </div>
+        </div>
+        <a
+          href="/accounts"
+          class="inline-flex items-center gap-1 rounded-lg border border-primary/30 bg-primary/10 px-2.5 py-1.5 text-xs font-semibold text-primary hover:bg-primary hover:text-primary-foreground transition-all"
+        >
+          <span>Manage Webhooks &rarr;</span>
+        </a>
+      </div>
+
+      <div id="webhook-summary-container" class="grid grid-cols-2 gap-3">
+        <div class="p-3 rounded-xl border border-border bg-background space-y-1">
+          <span class="text-[11px] font-medium text-muted-foreground">Channels Status</span>
+          <p id="wh-sum-channels" class="text-xs font-bold text-foreground">Loading...</p>
+        </div>
+        <div class="p-3 rounded-xl border border-border bg-background space-y-1">
+          <span class="text-[11px] font-medium text-muted-foreground">Primary Webhook</span>
+          <p id="wh-sum-primary" class="text-xs font-bold text-foreground">Loading...</p>
+        </div>
+        <div class="col-span-2 p-3 rounded-xl border border-border bg-background space-y-1">
+          <div class="flex items-center justify-between text-[11px] font-medium text-muted-foreground">
+            <span>Combined Active Remaining Capacity</span>
+            <span id="wh-sum-capacity-count" class="font-bold text-foreground">---</span>
+          </div>
+          <div class="h-2 w-full rounded-full bg-muted overflow-hidden">
+            <div id="wh-sum-capacity-bar" class="h-full bg-emerald-500 rounded-full transition-all duration-300" style="width: 0%"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 4: Recent Account Pins Queue -->
+  <div class="mb-8 space-y-3">
+    <div class="flex items-center justify-between">
+      <h3 class="text-sm font-bold text-foreground tracking-wide uppercase">Recent Account Pins Queue</h3>
+      <a href="/pins" class="text-xs font-semibold text-primary hover:underline">View all pins &rarr;</a>
+    </div>
+
+    <div id="account-pins-container">
+      <div class="overflow-hidden rounded-xl border border-border bg-card p-6 text-center text-xs text-muted-foreground animate-pulse">
+        Loading account pins history...
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 5: Recent Account Execution Logs -->
+  <div class="mb-8 space-y-3">
+    <div class="flex items-center justify-between">
+      <h3 class="text-sm font-bold text-foreground tracking-wide uppercase">Recent Execution Logs & Errors</h3>
+      <a href="/logs" class="text-xs font-semibold text-primary hover:underline">View all system logs &rarr;</a>
+    </div>
+
+    <div id="account-logs-container">
+      <div class="overflow-hidden rounded-xl border border-border bg-card p-6 text-center text-xs text-muted-foreground animate-pulse">
+        Loading account activity logs...
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Edit Scheduling Information -->
+  <div id="edit-scheduling-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" aria-modal="true" role="dialog">
+    <div id="edit-sched-backdrop" class="fixed inset-0"></div>
+    <div class="relative w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-4 z-10">
+      <div class="flex items-center justify-between border-b border-border pb-3">
+        <h3 class="text-base font-bold text-foreground">Edit Posting Schedule</h3>
+        <button id="close-sched-modal" class="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div id="sched-modal-error" class="hidden rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-500"></div>
+
+      <form id="sched-form" class="space-y-4">
+        <div>
+          <label class="block text-xs font-medium text-muted-foreground mb-1">Timezone</label>
+          <select id="sched-input-timezone" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none">
+            <option value="UTC">UTC (Coordinated Universal Time)</option>
+            <option value="America/New_York">America/New_York (EST/EDT)</option>
+            <option value="America/Los_Angeles">America/Los_Angeles (PST/PDT)</option>
+            <option value="Europe/London">Europe/London (GMT/BST)</option>
+            <option value="Europe/Paris">Europe/Paris (CET/CEST)</option>
+            <option value="Asia/Tokyo">Asia/Tokyo (JST)</option>
+          </select>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-medium text-muted-foreground mb-1">Window Start Time</label>
+            <input id="sched-input-start" type="time" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-muted-foreground mb-1">Window End Time</label>
+            <input id="sched-input-end" type="time" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none" />
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-muted-foreground mb-1">Pinning Started Date</label>
+          <input id="sched-input-started-at" type="date" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none" />
+        </div>
+
+        <div class="flex items-center justify-end gap-3 border-t border-border pt-4">
+          <button type="button" id="cancel-sched-modal" class="rounded-xl border border-border px-4 py-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground">
+            Cancel
+          </button>
+          <button type="submit" id="save-sched-btn" class="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow hover:bg-primary/90">
+            Save Schedule
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: Edit Daily Limit -->
+  <div id="edit-limit-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" aria-modal="true" role="dialog">
+    <div id="edit-limit-backdrop" class="fixed inset-0"></div>
+    <div class="relative w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-4 z-10">
+      <div class="flex items-center justify-between border-b border-border pb-3">
+        <h3 class="text-base font-bold text-foreground">Edit Account Daily Limit</h3>
+        <button id="close-limit-modal" class="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <form id="limit-form" class="space-y-4">
+        <div>
+          <label class="block text-xs font-medium text-muted-foreground mb-1">Max Pins Per Day</label>
+          <input id="limit-input-num" type="number" min="1" required class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none" />
+        </div>
+
+        <div class="flex items-center justify-end gap-3 border-t border-border pt-4">
+          <button type="button" id="cancel-limit-btn" class="rounded-xl border border-border px-4 py-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground">
+            Cancel
+          </button>
+          <button type="submit" class="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow hover:bg-primary/90">
+            Save Limit
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</Layout>
+
+<script>
+  import { requireAuth } from '../../lib/auth';
+  import {
+    getAccountDetails,
+    getAccountPinStats,
+    getAccountRecentPins,
+    getAccountRecentLogs,
+    getAccountWebhookSummary,
+    updateAccountScheduling,
+    updateAccountDailyLimit,
+    toggleAccountActive,
+  } from '../../lib/supabase';
+  import { renderStatusBadge, formatDate, formatTime, renderEmptyStateHTML, escapeHtml } from '../../lib/ui-helpers';
+  import type { Account, AccountPinStats, Pin, Log } from '../../lib/types';
+
+  let currentAccount: Account | null = null;
+  let currentStats: AccountPinStats | null = null;
+  let accountId: string = '';
+
+  async function init() {
+    const isAuth = await requireAuth();
+    if (!isAuth) return;
+
+    // Extract Account ID from URL query string or path
+    const urlParams = new URLSearchParams(window.location.search);
+    const queryId = urlParams.get('id');
+    const parts = window.location.pathname.split('/accounts/');
+    let pathId = '';
+    if (parts.length > 1) {
+      pathId = parts[1].split('/')[0].split('?')[0];
+    }
+
+    accountId = queryId || (pathId && pathId !== '[id]' && pathId !== 'details' ? pathId : '');
+
+    const displayElem = document.getElementById('display-account-id');
+    if (displayElem) displayElem.textContent = accountId || '---';
+
+    if (!accountId) return;
+
+    setupModalListeners();
+    await loadAllData();
+  }
+
+  async function loadAllData() {
+    try {
+      const [acc, stats, pins, logs, whSummary] = await Promise.all([
+        getAccountDetails(accountId),
+        getAccountPinStats(accountId),
+        getAccountRecentPins(accountId, 10),
+        getAccountRecentLogs(accountId, 10),
+        getAccountWebhookSummary(accountId),
+      ]);
+
+      if (!acc) {
+        document.getElementById('account-header-container')!.innerHTML = renderEmptyStateHTML(
+          'Account Not Found',
+          `Could not locate Pinterest account matching ID "${escapeHtml(accountId)}".`,
+          'alert-circle'
+        );
+        return;
+      }
+
+      currentAccount = acc;
+      currentStats = stats;
+
+      renderHeader(acc);
+      renderKPIs(stats, acc);
+      renderScheduling(acc);
+      renderWebhookSummary(whSummary);
+      renderRecentPins(pins);
+      renderRecentLogs(logs);
+    } catch (err) {
+      console.error('Error loading account details:', err);
+    }
+  }
+
+  function renderHeader(acc: Account) {
+    const headerContainer = document.getElementById('account-header-container');
+    if (!headerContainer) return;
+
+    const initials = (acc.account_name || 'AC').slice(0, 2).toUpperCase();
+
+    headerContainer.innerHTML = `
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div class="flex items-center gap-3.5">
+          <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary font-bold text-base shadow-sm">
+            ${escapeHtml(initials)}
+          </div>
+          <div>
+            <div class="flex items-center gap-2.5">
+              <h1 class="text-xl font-bold text-foreground">${escapeHtml(acc.account_name)}</h1>
+              ${renderStatusBadge(acc.is_active)}
+            </div>
+            <p class="text-xs text-muted-foreground mt-0.5">
+              Registered ${formatDate(acc.created_at)} • ${acc.boards_count || 0} linked boards
+            </p>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2.5">
+          <a
+            href="/imports?account=${acc.id}"
+            class="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-semibold text-white shadow hover:bg-emerald-700 transition-all"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>+ Import Posts</span>
+          </a>
+
+          <button
+            id="btn-edit-limit"
+            class="inline-flex items-center gap-1.5 rounded-xl border border-border bg-background px-3.5 py-2 text-xs font-semibold text-foreground hover:bg-muted transition-all"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+            <span>Limit: ${acc.max_pins_per_day}/day</span>
+          </button>
+
+          <button
+            id="btn-toggle-active"
+            class="inline-flex items-center gap-1.5 rounded-xl border ${acc.is_active ? 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400' : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'} px-3.5 py-2 text-xs font-semibold hover:opacity-80 transition-all"
+          >
+            <span>${acc.is_active ? 'Deactivate' : 'Activate'}</span>
+          </button>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('btn-edit-limit')?.addEventListener('click', openLimitModal);
+    document.getElementById('btn-toggle-active')?.addEventListener('click', handleToggleActive);
+  }
+
+  function renderKPIs(stats: AccountPinStats, acc: Account) {
+    const container = document.getElementById('kpis-grid-container');
+    if (!container) return;
+
+    container.innerHTML = `
+      <div class="rounded-xl border border-border bg-card p-3 text-center space-y-1">
+        <span class="text-[11px] font-semibold text-muted-foreground">Total Posts</span>
+        <p class="text-xl font-bold text-foreground">${stats.total}</p>
+      </div>
+      <div class="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-center space-y-1">
+        <span class="text-[11px] font-semibold text-amber-600 dark:text-amber-400">Pending</span>
+        <p class="text-xl font-bold text-amber-600 dark:text-amber-400">${stats.pending}</p>
+      </div>
+      <div class="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-center space-y-1">
+        <span class="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">Posted</span>
+        <p class="text-xl font-bold text-emerald-600 dark:text-emerald-400">${stats.posted}</p>
+      </div>
+      <div class="rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 text-center space-y-1">
+        <span class="text-[11px] font-semibold text-rose-500">Failed</span>
+        <p class="text-xl font-bold text-rose-500">${stats.failed}</p>
+      </div>
+      <div class="rounded-xl border border-primary/20 bg-primary/5 p-3 text-center space-y-1">
+        <span class="text-[11px] font-semibold text-primary">Remaining</span>
+        <p class="text-xl font-bold text-primary">${stats.remainingToday}</p>
+      </div>
+      <div class="rounded-xl border border-border bg-card p-3 text-center space-y-1">
+        <span class="text-[11px] font-semibold text-muted-foreground">Daily Limit</span>
+        <p class="text-xl font-bold text-foreground">${acc.max_pins_per_day}</p>
+      </div>
+      <div class="rounded-xl border border-border bg-card p-3 text-center space-y-1">
+        <span class="text-[11px] font-semibold text-muted-foreground">Boards</span>
+        <p class="text-xl font-bold text-foreground">${acc.boards_count || 0}</p>
+      </div>
+      <div class="rounded-xl border border-border bg-card p-3 text-center space-y-1">
+        <span class="text-[11px] font-semibold text-muted-foreground">Webhooks</span>
+        <p class="text-xl font-bold text-foreground">${acc.active_webhooks_count || 0}</p>
+      </div>
+    `;
+  }
+
+  function renderScheduling(acc: Account) {
+    const startedElem = document.getElementById('sched-started-at');
+    const windowElem = document.getElementById('sched-posting-window');
+    const tzElem = document.getElementById('sched-timezone');
+    const lastPubElem = document.getElementById('sched-last-published');
+
+    if (startedElem) {
+      startedElem.textContent = acc.pinning_started_at ? formatDate(acc.pinning_started_at) : 'Not configured';
+    }
+    if (windowElem) {
+      const start = acc.posting_window_start || '09:00';
+      const end = acc.posting_window_end || '21:00';
+      windowElem.textContent = `${start} — ${end}`;
+    }
+    if (tzElem) {
+      tzElem.textContent = acc.timezone || 'UTC';
+    }
+    if (lastPubElem) {
+      lastPubElem.textContent = acc.last_published_at ? formatDate(acc.last_published_at) : 'No published pins yet';
+    }
+  }
+
+  function renderWebhookSummary(sum: any) {
+    const channelsElem = document.getElementById('wh-sum-channels');
+    const primaryElem = document.getElementById('wh-sum-primary');
+    const countElem = document.getElementById('wh-sum-capacity-count');
+    const barElem = document.getElementById('wh-sum-capacity-bar');
+
+    if (channelsElem) {
+      channelsElem.textContent = `${sum.activeWebhooks} Active of ${sum.totalWebhooks} Total`;
+    }
+    if (primaryElem) {
+      primaryElem.textContent = sum.primaryWebhookLabel || 'None';
+    }
+    if (countElem) {
+      countElem.textContent = `${sum.totalRemainingCapacity} pins remaining`;
+    }
+    if (barElem) {
+      const pct = Math.min(100, Math.round((sum.totalRemainingCapacity / 1500) * 100));
+      barElem.style.width = `${pct}%`;
+    }
+  }
+
+  function renderRecentPins(pins: Pin[]) {
+    const container = document.getElementById('account-pins-container');
+    if (!container) return;
+
+    if (!pins || pins.length === 0) {
+      container.innerHTML = renderEmptyStateHTML(
+        'No Pins Found for Account',
+        'Import scheduled posts to populate this account queue.',
+        'inbox'
+      );
+      return;
+    }
+
+    const rowsHtml = pins
+      .map(
+        (pin) => `
+        <tr class="transition-colors hover:bg-muted/40 text-xs">
+          <td class="px-5 py-3 font-medium text-foreground">
+            <div class="flex items-center gap-3">
+              <img src="${escapeHtml(pin.image_url)}" alt="" class="h-9 w-9 rounded-lg object-cover border border-border bg-muted flex-shrink-0" onerror="this.src='https://images.unsplash.com/photo-1495521821757-a1efb6729352?auto=format&fit=crop&w=150&q=80'" />
+              <span class="max-w-xs truncate" title="${escapeHtml(pin.title)}">${escapeHtml(pin.title)}</span>
+            </div>
+          </td>
+          <td class="px-5 py-3 text-muted-foreground">${escapeHtml(pin.board_name || 'No board')}</td>
+          <td class="px-5 py-3">${renderStatusBadge(pin.status)}</td>
+          <td class="px-5 py-3 text-muted-foreground whitespace-nowrap">${pin.scheduled_for ? formatDate(pin.scheduled_for) : 'Immediate'}</td>
+          <td class="px-5 py-3 text-muted-foreground whitespace-nowrap">${pin.posted_at ? formatDate(pin.posted_at) : formatDate(pin.created_at)}</td>
+        </tr>
+      `
+      )
+      .join('');
+
+    container.innerHTML = `
+      <div class="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left">
+            <thead class="border-b border-border bg-muted/50 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <tr>
+                <th class="px-5 py-3">Pin Title</th>
+                <th class="px-5 py-3">Target Board</th>
+                <th class="px-5 py-3">Status</th>
+                <th class="px-5 py-3">Scheduled For</th>
+                <th class="px-5 py-3">Posted / Created</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-border">
+              ${rowsHtml}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderRecentLogs(logs: Log[]) {
+    const container = document.getElementById('account-logs-container');
+    if (!container) return;
+
+    if (!logs || logs.length === 0) {
+      container.innerHTML = renderEmptyStateHTML(
+        'No Logs Recorded',
+        'Automation execution attempts will record webhook logs here.',
+        'alert-circle'
+      );
+      return;
+    }
+
+    const rowsHtml = logs
+      .map(
+        (log) => `
+        <tr class="transition-colors hover:bg-muted/40 text-xs">
+          <td class="px-5 py-3">${renderStatusBadge(log.status)}</td>
+          <td class="px-5 py-3 font-medium text-foreground max-w-md truncate" title="${escapeHtml(log.message || '')}">${escapeHtml(log.message || 'Execution completed.')}</td>
+          <td class="px-5 py-3 text-muted-foreground font-mono text-[11px]">${log.webhook_label ? escapeHtml(log.webhook_label) : 'System Hook'}</td>
+          <td class="px-5 py-3 text-muted-foreground whitespace-nowrap">${formatDate(log.created_at)}</td>
+        </tr>
+      `
+      )
+      .join('');
+
+    container.innerHTML = `
+      <div class="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left">
+            <thead class="border-b border-border bg-muted/50 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <tr>
+                <th class="px-5 py-3">State</th>
+                <th class="px-5 py-3">Message</th>
+                <th class="px-5 py-3">Webhook Channel</th>
+                <th class="px-5 py-3">Timestamp</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-border">
+              ${rowsHtml}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }
+
+  async function handleToggleActive() {
+    if (!currentAccount) return;
+    try {
+      const newStatus = !currentAccount.is_active;
+      const res = await toggleAccountActive(currentAccount.id, newStatus);
+      if (res.success) {
+        await loadAllData();
+      }
+    } catch (err) {
+      console.error('Failed to toggle active status:', err);
+    }
+  }
+
+  function openLimitModal() {
+    if (!currentAccount) return;
+    const modal = document.getElementById('edit-limit-modal');
+    const input = document.getElementById('limit-input-num') as HTMLInputElement;
+    if (input) input.value = String(currentAccount.max_pins_per_day);
+    modal?.classList.remove('hidden');
+    modal?.classList.add('flex');
+  }
+
+  function openSchedulingModal() {
+    if (!currentAccount) return;
+    const modal = document.getElementById('edit-scheduling-modal');
+    const tz = document.getElementById('sched-input-timezone') as HTMLSelectElement;
+    const start = document.getElementById('sched-input-start') as HTMLInputElement;
+    const end = document.getElementById('sched-input-end') as HTMLInputElement;
+    const started = document.getElementById('sched-input-started-at') as HTMLInputElement;
+
+    if (tz) tz.value = currentAccount.timezone || 'UTC';
+    if (start) start.value = currentAccount.posting_window_start || '09:00';
+    if (end) end.value = currentAccount.posting_window_end || '21:00';
+    if (started) started.value = currentAccount.pinning_started_at ? currentAccount.pinning_started_at.slice(0, 10) : '';
+
+    modal?.classList.remove('hidden');
+    modal?.classList.add('flex');
+  }
+
+  function setupModalListeners() {
+    // Scheduling modal
+    document.getElementById('open-scheduling-modal-btn')?.addEventListener('click', openSchedulingModal);
+    document.getElementById('close-sched-modal')?.addEventListener('click', closeSchedModal);
+    document.getElementById('cancel-sched-modal')?.addEventListener('click', closeSchedModal);
+    document.getElementById('edit-sched-backdrop')?.addEventListener('click', closeSchedModal);
+
+    document.getElementById('sched-form')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!currentAccount) return;
+
+      const tz = (document.getElementById('sched-input-timezone') as HTMLSelectElement).value;
+      const start = (document.getElementById('sched-input-start') as HTMLInputElement).value;
+      const end = (document.getElementById('sched-input-end') as HTMLInputElement).value;
+      const startedAt = (document.getElementById('sched-input-started-at') as HTMLInputElement).value;
+
+      const res = await updateAccountScheduling(currentAccount.id, {
+        timezone: tz,
+        posting_window_start: start || null,
+        posting_window_end: end || null,
+        pinning_started_at: startedAt ? new Date(startedAt).toISOString() : null,
+      });
+
+      if (res.success) {
+        closeSchedModal();
+        await loadAllData();
+      }
+    });
+
+    // Limit modal
+    document.getElementById('close-limit-modal')?.addEventListener('click', closeLimitModal);
+    document.getElementById('cancel-limit-btn')?.addEventListener('click', closeLimitModal);
+    document.getElementById('edit-limit-backdrop')?.addEventListener('click', closeLimitModal);
+
+    document.getElementById('limit-form')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!currentAccount) return;
+      const val = parseInt((document.getElementById('limit-input-num') as HTMLInputElement).value, 10);
+      if (isNaN(val) || val < 1) return;
+
+      const res = await updateAccountDailyLimit(currentAccount.id, val);
+      if (res.success) {
+        closeLimitModal();
+        await loadAllData();
+      }
+    });
+  }
+
+  function closeSchedModal() {
+    const modal = document.getElementById('edit-scheduling-modal');
+    modal?.classList.add('hidden');
+    modal?.classList.remove('flex');
+  }
+
+  function closeLimitModal() {
+    const modal = document.getElementById('edit-limit-modal');
+    modal?.classList.add('hidden');
+    modal?.classList.remove('flex');
+  }
+
+  init();
+</script>
