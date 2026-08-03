@@ -276,11 +276,27 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
       return;
     }
 
+    const urlParams = new URLSearchParams(window.location.search);
+    const preselectedAccountId = urlParams.get('account');
+
     select.innerHTML =
-      '<option value="" disabled selected>Select an active Pinterest account...</option>' +
+      '<option value="" disabled' + (!preselectedAccountId ? ' selected' : '') + '>Select an active Pinterest account...</option>' +
       activeAccounts
-        .map((a) => `<option value="${a.id}">${escapeHtml(a.account_name)} (${a.boards_count ?? 0} boards)</option>`)
+        .map((a) => `<option value="${a.id}" ${a.id === preselectedAccountId ? 'selected' : ''}>${escapeHtml(a.account_name)} (${a.boards_count ?? 0} boards)</option>`)
         .join('');
+
+    if (preselectedAccountId) {
+      const match = accounts.find((a) => a.id === preselectedAccountId);
+      if (match) {
+        selectedAccount = match;
+        const [boards, pins] = await Promise.all([
+          getBoardsForAccount(selectedAccount.id),
+          getPins('all', selectedAccount.id),
+        ]);
+        accountBoards = boards;
+        existingAccountPins = pins;
+      }
+    }
 
     select.addEventListener('change', async (e) => {
       const id = (e.target as HTMLSelectElement).value;
