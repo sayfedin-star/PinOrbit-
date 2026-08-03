@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import type { Account, Board, Pin, Log, AuditLog, AccountWebhook, ImportSession, DashboardKPIs } from './types';
+import type { Account, Board, Pin, Log, AuditLog, AccountWebhook, ImportSession, DashboardKPIs, AccountPinStats, AccountWebhookSummary } from './types';
 
 const supabaseUrl = import.meta.env.PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY || '';
@@ -22,6 +22,10 @@ let mockAccounts: Account[] = [
     webhook_url: 'https://hook.make.com/abc123healthy1',
     max_pins_per_day: 20,
     is_active: true,
+    pinning_started_at: new Date(Date.now() - 86400000 * 15).toISOString(),
+    posting_window_start: '09:00',
+    posting_window_end: '21:00',
+    timezone: 'America/New_York',
     created_at: new Date(Date.now() - 86400000 * 10).toISOString(),
     boards_count: 3,
     webhooks_count: 2,
@@ -34,6 +38,10 @@ let mockAccounts: Account[] = [
     webhook_url: 'https://hook.make.com/def456dessert2',
     max_pins_per_day: 15,
     is_active: true,
+    pinning_started_at: new Date(Date.now() - 86400000 * 30).toISOString(),
+    posting_window_start: '10:00',
+    posting_window_end: '22:00',
+    timezone: 'Europe/London',
     created_at: new Date(Date.now() - 86400000 * 7).toISOString(),
     boards_count: 2,
     webhooks_count: 1,
@@ -46,6 +54,10 @@ let mockAccounts: Account[] = [
     webhook_url: 'https://hook.make.com/ghi789keto3',
     max_pins_per_day: 25,
     is_active: false,
+    pinning_started_at: null,
+    posting_window_start: '08:00',
+    posting_window_end: '20:00',
+    timezone: 'UTC',
     created_at: new Date(Date.now() - 86400000 * 4).toISOString(),
     boards_count: 4,
     webhooks_count: 1,
@@ -914,3 +926,235 @@ export async function bulkInsertPins(
     return { count: 0, error: err.message || 'Bulk insert failed' };
   }
 }
+
+// 17. Fetch Single Account Details
+export async function getAccountDetails(accountId: string): Promise<Account | null> {
+  if (!supabase) {
+    const acc = mockAccounts.find((a) => a.id === accountId);
+    if (!acc) return null;
+    const hooks = mockWebhooks.filter((w) => w.account_id === accountId);
+    const primaryHook = hooks.find((h) => h.is_primary);
+    const boards = mockBoards.filter((b) => b.account_id === accountId);
+    const postedPins = mockPins.filter((p) => p.account_id === accountId && p.status === 'posted' && p.posted_at);
+    const lastPublished = postedPins.length > 0
+      ? [...postedPins].sort((a, b) => new Date(b.posted_at!).getTime() - new Date(a.posted_at!).getTime())[0].posted_at
+      : null;
+
+    return {
+      ...acc,
+      boards_count: boards.length,
+      webhooks_count: hooks.length,
+      active_webhooks_count: hooks.filter((h) => h.is_active).length,
+      primary_webhook_label: primaryHook ? primaryHook.label : 'None',
+      last_published_at: lastPublished || null,
+    };
+  }
+
+  try {
+    const { data: accData, error: accError } = await supabase
+      .from('accounts')
+      .select('*, boards(id), account_webhooks(id, label, is_active, is_primary)')
+      .eq('id', accountId)
+      .maybeSingle();
+
+    if (accError || !accData) {
+      return null;
+    }
+
+    const raw = accData as RawAccount;
+    const hooks = raw.account_webhooks || [];
+    const primaryHook = hooks.find((h) => h.is_primary);
+
+    // Fetch last published pin timestamp for this account
+    const { data: lastPin } = await supabase
+      .from('pins')
+      .select('posted_at')
+      .eq('account_id', accountId)
+      .eq('status', 'posted')
+      .not('posted_at', 'is', null)
+      .order('posted_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    return {
+      ...raw,
+      boards_count: raw.boards ? raw.boards.length : 0,
+      webhooks_count: hooks.length,
+      active_webhooks_count: hooks.filter((h) => h.is_active).length,
+      primary_webhook_label: primaryHook ? primaryHook.label : 'None',
+      last_published_at: lastPin ? lastPin.posted_at : null,
+    };
+  } catch (err) {
+    console.warn(`Supabase getAccountDetails error for ${accountId}:`, err);
+    return mockAccounts.find((a) => a.id === accountId) || null;
+  }
+}
+
+// 18. Fetch Account Pin Stats (Derived metrics)
+export async function getAccountPinStats(accountId: string): Promise<AccountPinStats> {
+  if (!supabase) {
+    const accPins = mockPins.filter((p) => p.account_id === accountId);
+    const total = accPins.length;
+    const pending = accPins.filter((p) => p.status === 'pending').length;
+    const posted = accPins.filter((p) => p.status === 'posted').length;
+    const failed = accPins.filter((p) => p.status === 'failed').length;
+
+    const acc = mockAccounts.find((a) => a.id === accountId);
+    const maxDaily = acc ? acc.max_pins_per_day : 20;
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const postedToday = accPins.filter(
+      (p) => p.status === 'posted' && p.posted_at && p.posted_at.startsWith(todayStr)
+    ).length;
+
+    const remainingToday = Math.max(0, maxDaily - postedToday);
+
+    return { total, pending, posted, failed, remainingToday };
+  }
+
+  try {
+    const { data: pins, error } = await supabase
+      .from('pins')
+      .select('status, posted_at')
+      .eq('account_id', accountId);
+
+    if (error || !pins) {
+      return { total: 0, pending: 0, posted: 0, failed: 0, remainingToday: 0 };
+    }
+
+    const total = pins.length;
+    const pending = pins.filter((p) => p.status === 'pending').length;
+    const posted = pins.filter((p) => p.status === 'posted').length;
+    const failed = pins.filter((p) => p.status === 'failed').length;
+
+    const { data: acc } = await supabase
+      .from('accounts')
+      .select('max_pins_per_day')
+      .eq('id', accountId)
+      .single();
+
+    const maxDaily = acc ? acc.max_pins_per_day : 20;
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const postedToday = pins.filter(
+      (p) => p.status === 'posted' && p.posted_at && p.posted_at.startsWith(todayStr)
+    ).length;
+
+    const remainingToday = Math.max(0, maxDaily - postedToday);
+
+    return { total, pending, posted, failed, remainingToday };
+  } catch (err) {
+    console.warn(`Supabase getAccountPinStats error for ${accountId}:`, err);
+    return { total: 0, pending: 0, posted: 0, failed: 0, remainingToday: 0 };
+  }
+}
+
+// 19. Fetch Account Recent Pins
+export async function getAccountRecentPins(accountId: string, limit = 10): Promise<Pin[]> {
+  if (!supabase) {
+    return mockPins.filter((p) => p.account_id === accountId).slice(0, limit);
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('pins')
+      .select('*, accounts(account_name)')
+      .eq('account_id', accountId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error || !data) return [];
+    return (data as RawPin[]).map((p) => ({
+      ...p,
+      account_name: p.accounts ? p.accounts.account_name : undefined,
+    }));
+  } catch (err) {
+    console.warn(`Supabase getAccountRecentPins error for ${accountId}:`, err);
+    return mockPins.filter((p) => p.account_id === accountId).slice(0, limit);
+  }
+}
+
+// 20. Fetch Account Recent Logs
+export async function getAccountRecentLogs(accountId: string, limit = 10): Promise<Log[]> {
+  if (!supabase) {
+    return mockLogs.filter((l) => l.account_id === accountId).slice(0, limit);
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('logs')
+      .select('*, accounts(account_name), pins(title), account_webhooks(label)')
+      .eq('account_id', accountId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error || !data) return [];
+    return (data as RawLog[]).map((l) => ({
+      ...l,
+      account_name: l.accounts ? l.accounts.account_name : undefined,
+      pin_title: l.pins ? l.pins.title : undefined,
+      webhook_label: l.account_webhooks ? l.account_webhooks.label : undefined,
+    }));
+  } catch (err) {
+    console.warn(`Supabase getAccountRecentLogs error for ${accountId}:`, err);
+    return mockLogs.filter((l) => l.account_id === accountId).slice(0, limit);
+  }
+}
+
+// 21. Fetch Account Webhook Summary
+export async function getAccountWebhookSummary(accountId: string): Promise<AccountWebhookSummary> {
+  const webhooks = await getAccountWebhooks(accountId);
+  const totalWebhooks = webhooks.length;
+  const activeWebhooks = webhooks.filter((w) => w.is_active).length;
+  const primaryHook = webhooks.find((w) => w.is_primary);
+  const primaryWebhookLabel = primaryHook ? primaryHook.label : 'None';
+  const totalRemainingCapacity = webhooks
+    .filter((w) => w.is_active)
+    .reduce((sum, w) => sum + (w.remaining_capacity || 0), 0);
+
+  return {
+    totalWebhooks,
+    activeWebhooks,
+    primaryWebhookLabel,
+    totalRemainingCapacity,
+  };
+}
+
+// 22. Update Account Scheduling Information
+export async function updateAccountScheduling(
+  accountId: string,
+  data: {
+    posting_window_start?: string | null;
+    posting_window_end?: string | null;
+    timezone?: string;
+    pinning_started_at?: string | null;
+  }
+): Promise<{ success: boolean; error: string | null }> {
+  if (!supabase) {
+    const acc = mockAccounts.find((a) => a.id === accountId);
+    if (acc) {
+      if (data.posting_window_start !== undefined) acc.posting_window_start = data.posting_window_start;
+      if (data.posting_window_end !== undefined) acc.posting_window_end = data.posting_window_end;
+      if (data.timezone !== undefined) acc.timezone = data.timezone;
+      if (data.pinning_started_at !== undefined) acc.pinning_started_at = data.pinning_started_at;
+    }
+    return { success: true, error: null };
+  }
+
+  try {
+    const { error } = await supabase
+      .from('accounts')
+      .update({
+        ...(data.posting_window_start !== undefined && { posting_window_start: data.posting_window_start }),
+        ...(data.posting_window_end !== undefined && { posting_window_end: data.posting_window_end }),
+        ...(data.timezone !== undefined && { timezone: data.timezone }),
+        ...(data.pinning_started_at !== undefined && { pinning_started_at: data.pinning_started_at }),
+      })
+      .eq('id', accountId);
+
+    if (error) return { success: false, error: error.message };
+    return { success: true, error: null };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Failed to update account scheduling' };
+  }
+}
+

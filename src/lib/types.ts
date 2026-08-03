@@ -22,11 +22,31 @@ export interface Account {
   webhook_url?: string;
   max_pins_per_day: number;
   is_active: boolean;
+  pinning_started_at?: string | null;
+  posting_window_start?: string | null;
+  posting_window_end?: string | null;
+  timezone?: string;
   created_at: string;
   boards_count?: number;
   webhooks_count?: number;
   active_webhooks_count?: number;
   primary_webhook_label?: string;
+  last_published_at?: string | null;
+}
+
+export interface AccountPinStats {
+  total: number;
+  pending: number;
+  posted: number;
+  failed: number;
+  remainingToday: number;
+}
+
+export interface AccountWebhookSummary {
+  totalWebhooks: number;
+  activeWebhooks: number;
+  primaryWebhookLabel: string;
+  totalRemainingCapacity: number;
 }
 
 export interface Board {
