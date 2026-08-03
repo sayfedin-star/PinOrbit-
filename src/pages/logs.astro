@@ -1,81 +1,108 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import SectionHeader from '../components/ui/SectionHeader.astro';
-import StatusBadge from '../components/ui/StatusBadge.astro';
-import EmptyState from '../components/ui/EmptyState.astro';
-import { getLogs } from '../lib/supabase';
-
-const logs = await getLogs(50);
 ---
 
-<Layout title="System Logs">
+<Layout title="System Logs" description="Detailed audit log of all automation executions, webhook responses, and error traces.">
   <SectionHeader
     title="Execution Logs"
     description="Detailed audit log of all automation executions, webhook responses, and error traces."
   />
 
-  {logs.length === 0 ? (
-    <EmptyState
-      title="No Logs Available"
-      description="Logs will record every webhook execution attempt from the Supabase Edge Function."
-      iconName="alert-circle"
-    />
-  ) : (
-    <div class="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-      <div class="overflow-x-auto">
-        <table class="w-full text-left text-sm">
-          <thead class="border-b border-border bg-muted/50 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            <tr>
-              <th class="px-6 py-3.5">Status</th>
-              <th class="px-6 py-3.5">Target Pin</th>
-              <th class="px-6 py-3.5">Account</th>
-              <th class="px-6 py-3.5">Message / Details</th>
-              <th class="px-6 py-3.5">Webhook Endpoint</th>
-              <th class="px-6 py-3.5">Timestamp</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-border">
-            {logs.map((log) => (
-              <tr class="transition-colors hover:bg-muted/40">
-                <td class="px-6 py-4">
-                  <StatusBadge status={log.status} />
-                </td>
-                <td class="px-6 py-4 font-medium text-foreground">
-                  <span class="max-w-xs block truncate" title={log.pin_title || 'System Operation'}>
-                    {log.pin_title || 'System Operation'}
-                  </span>
-                </td>
-                <td class="px-6 py-4 text-xs font-semibold text-muted-foreground">
-                  {log.account_name}
-                </td>
-                <td class="px-6 py-4 text-xs text-foreground">
-                  <p class="max-w-md line-clamp-2 leading-relaxed" title={log.message || ''}>
-                    {log.message || 'No additional details provided.'}
-                  </p>
-                </td>
-                <td class="px-6 py-4 font-mono text-xs text-muted-foreground">
-                  {log.webhook_used ? (
-                    <div class="max-w-xs truncate rounded bg-muted/60 px-2 py-1" title={log.webhook_used}>
-                      {log.webhook_used}
-                    </div>
-                  ) : (
-                    <span class="text-muted-foreground/60 italic">N/A</span>
-                  )}
-                </td>
-                <td class="px-6 py-4 text-xs text-muted-foreground whitespace-nowrap">
-                  {new Date(log.created_at).toLocaleString(undefined, {
-                    month: 'short',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit',
-                  })}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+  <div id="logs-container">
+    <div class="overflow-hidden rounded-xl border border-border bg-card p-12 text-center text-xs text-muted-foreground animate-pulse">
+      Loading execution logs...
     </div>
-  )}
+  </div>
 </Layout>
+
+<script>
+  import { getLogs } from '../lib/supabase';
+  import { renderStatusBadge, formatDate, renderEmptyStateHTML, escapeHtml } from '../lib/ui-helpers';
+
+  async function loadLogs() {
+    const container = document.getElementById('logs-container');
+    if (!container) return;
+
+    try {
+      const logs = await getLogs(50);
+
+      if (!logs || logs.length === 0) {
+        container.innerHTML = renderEmptyStateHTML(
+          'No Logs Available',
+          'Logs will record every webhook execution attempt from the Supabase Edge Function.',
+          'alert-circle'
+        );
+        return;
+      }
+
+      const rowsHtml = logs
+        .map((log) => `
+          <tr class="transition-colors hover:bg-muted/40">
+            <td class="px-6 py-4">
+              ${renderStatusBadge(log.status)}
+            </td>
+            <td class="px-6 py-4 font-medium text-foreground">
+              <span class="max-w-xs block truncate" title="${escapeHtml(log.pin_title || 'System Operation')}">
+                ${escapeHtml(log.pin_title || 'System Operation')}
+              </span>
+            </td>
+            <td class="px-6 py-4 text-xs font-semibold text-muted-foreground">
+              ${escapeHtml(log.account_name || 'System')}
+            </td>
+            <td class="px-6 py-4 text-xs text-foreground">
+              <p class="max-w-md line-clamp-2 leading-relaxed" title="${escapeHtml(log.message || '')}">
+                ${escapeHtml(log.message || 'No additional details provided.')}
+              </p>
+            </td>
+            <td class="px-6 py-4 font-mono text-xs text-muted-foreground">
+              ${
+                log.webhook_used
+                  ? `
+                <div class="max-w-xs truncate rounded bg-muted/60 px-2 py-1" title="${escapeHtml(log.webhook_used)}">
+                  ${escapeHtml(log.webhook_used)}
+                </div>
+              `
+                  : `<span class="text-muted-foreground/60 italic">N/A</span>`
+              }
+            </td>
+            <td class="px-6 py-4 text-xs text-muted-foreground whitespace-nowrap">
+              ${formatDate(log.created_at)}
+            </td>
+          </tr>
+        `)
+        .join('');
+
+      container.innerHTML = `
+        <div class="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+              <thead class="border-b border-border bg-muted/50 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th class="px-6 py-3.5">Status</th>
+                  <th class="px-6 py-3.5">Target Pin</th>
+                  <th class="px-6 py-3.5">Account</th>
+                  <th class="px-6 py-3.5">Message / Details</th>
+                  <th class="px-6 py-3.5">Webhook Endpoint</th>
+                  <th class="px-6 py-3.5">Timestamp</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-border">
+                ${rowsHtml}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    } catch (err) {
+      console.error('Failed to load logs client-side:', err);
+      container.innerHTML = renderEmptyStateHTML(
+        'Error Loading Logs',
+        'Could not fetch audit logs. Please try refreshing.',
+        'alert-circle'
+      );
+    }
+  }
+
+  loadLogs();
+</script>

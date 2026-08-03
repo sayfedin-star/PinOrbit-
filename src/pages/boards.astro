@@ -1,106 +1,153 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import SectionHeader from '../components/ui/SectionHeader.astro';
-import EmptyState from '../components/ui/EmptyState.astro';
-import { getBoards, getAccounts } from '../lib/supabase';
-
-const boards = await getBoards();
-const accounts = await getAccounts();
-
-// Group boards by account_name
-const groupedBoards = accounts.map((acc) => {
-  return {
-    account: acc,
-    boards: boards.filter((b) => b.account_id === acc.id || b.account_name === acc.account_name),
-  };
-});
-
-// Ungrouped boards if any
-const orphanBoards = boards.filter(
-  (b) => !accounts.some((acc) => acc.id === b.account_id || acc.account_name === b.account_name)
-);
 ---
 
-<Layout title="Pinterest Boards">
+<Layout title="Pinterest Boards" description="Board mappings per account used by Edge Function for automatic target board matching.">
   <SectionHeader
     title="Pinterest Boards"
     description="Board mappings per account used by Edge Function for automatic target board matching."
   />
 
-  {boards.length === 0 ? (
-    <EmptyState
-      title="No Boards Mapping Configured"
-      description="Add board mappings to Supabase boards table to match Pin board_names automatically."
-      iconName="folder"
-    />
-  ) : (
-    <div class="space-y-8">
-      {groupedBoards.map(({ account, boards: accountBoards }) => (
-        <div class="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-          <!-- Account Header -->
-          <div class="flex items-center justify-between border-b border-border bg-muted/40 px-6 py-4">
-            <div class="flex items-center gap-3">
-              <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold text-xs">
-                {account.account_name.slice(0, 2).toUpperCase()}
-              </div>
-              <div>
-                <h3 class="text-sm font-bold text-foreground">{account.account_name}</h3>
-                <p class="text-xs text-muted-foreground">{accountBoards.length} boards configured</p>
-              </div>
-            </div>
-            <span class="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
-              Max {account.max_pins_per_day} pins/day
-            </span>
-          </div>
+  <div id="boards-container">
+    <div class="overflow-hidden rounded-xl border border-border bg-card p-12 text-center text-xs text-muted-foreground animate-pulse">
+      Loading Pinterest board mappings...
+    </div>
+  </div>
+</Layout>
 
-          <!-- Boards List -->
-          {accountBoards.length === 0 ? (
+<script>
+  import { getBoards, getAccounts } from '../lib/supabase';
+  import { formatDate, renderEmptyStateHTML, escapeHtml } from '../lib/ui-helpers';
+
+  async function loadBoards() {
+    const container = document.getElementById('boards-container');
+    if (!container) return;
+
+    try {
+      const [boards, accounts] = await Promise.all([getBoards(), getAccounts()]);
+
+      if (!boards || boards.length === 0) {
+        container.innerHTML = renderEmptyStateHTML(
+          'No Boards Mapping Configured',
+          'Add board mappings to Supabase boards table to match Pin board_names automatically.',
+          'folder'
+        );
+        return;
+      }
+
+      // Group boards by account
+      const groupedBoards = accounts.map((acc) => {
+        return {
+          account: acc,
+          boards: boards.filter((b) => b.account_id === acc.id || b.account_name === acc.account_name),
+        };
+      });
+
+      const orphanBoards = boards.filter(
+        (b) => !accounts.some((acc) => acc.id === b.account_id || acc.account_name === b.account_name)
+      );
+
+      let contentHtml = '<div class="space-y-8">';
+
+      // Render account groups
+      groupedBoards.forEach(({ account, boards: accountBoards }) => {
+        const initials = (account.account_name || 'AC').slice(0, 2).toUpperCase();
+
+        let boardsListHtml = '';
+        if (accountBoards.length === 0) {
+          boardsListHtml = `
             <div class="p-6 text-center text-xs text-muted-foreground">
               No boards registered for this account yet.
             </div>
-          ) : (
+          `;
+        } else {
+          boardsListHtml = `
             <div class="divide-y divide-border">
-              {accountBoards.map((board) => (
-                <div class="flex items-center justify-between px-6 py-4 transition-colors hover:bg-muted/30">
-                  <div class="flex items-center gap-3">
-                    <div class="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground">
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L8.6 3.3A2 2 0 0 0 6.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+              ${accountBoards
+                .map(
+                  (board) => `
+                  <div class="flex items-center justify-between px-6 py-4 transition-colors hover:bg-muted/30">
+                    <div class="flex items-center gap-3">
+                      <div class="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L8.6 3.3A2 2 0 0 0 6.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+                      </div>
+                      <div>
+                        <p class="text-sm font-semibold text-foreground">${escapeHtml(board.board_name)}</p>
+                        <p class="text-xs font-mono text-muted-foreground">ID: ${escapeHtml(board.board_id)}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p class="text-sm font-semibold text-foreground">{board.board_name}</p>
-                      <p class="text-xs font-mono text-muted-foreground">ID: {board.board_id}</p>
+                    <div class="text-xs text-muted-foreground">
+                      Added ${formatDate(board.created_at)}
                     </div>
                   </div>
-                  <div class="text-xs text-muted-foreground">
-                    Added {new Date(board.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-                  </div>
-                </div>
-              ))}
+                `
+                )
+                .join('')}
             </div>
-          )}
-        </div>
-      ))}
+          `;
+        }
 
-      {orphanBoards.length > 0 && (
-        <div class="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-          <div class="border-b border-border bg-muted/40 px-6 py-4">
-            <h3 class="text-sm font-bold text-foreground">Other / Unlinked Boards</h3>
-          </div>
-          <div class="divide-y divide-border">
-            {orphanBoards.map((board) => (
-              <div class="flex items-center justify-between px-6 py-4">
-                <div>
-                  <p class="text-sm font-semibold text-foreground">{board.board_name}</p>
-                  <p class="text-xs font-mono text-muted-foreground">ID: {board.board_id}</p>
+        contentHtml += `
+          <div class="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+            <div class="flex items-center justify-between border-b border-border bg-muted/40 px-6 py-4">
+              <div class="flex items-center gap-3">
+                <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold text-xs">
+                  ${escapeHtml(initials)}
                 </div>
-                <div class="text-xs text-muted-foreground">
-                  {board.account_name}
+                <div>
+                  <h3 class="text-sm font-bold text-foreground">${escapeHtml(account.account_name)}</h3>
+                  <p class="text-xs text-muted-foreground">${accountBoards.length} boards configured</p>
                 </div>
               </div>
-            ))}
+              <span class="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+                Max ${account.max_pins_per_day} pins/day
+              </span>
+            </div>
+            ${boardsListHtml}
           </div>
-        </div>
-      )}
-    </div>
-  )}
-</Layout>
+        `;
+      });
+
+      // Render orphan boards if any
+      if (orphanBoards.length > 0) {
+        contentHtml += `
+          <div class="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+            <div class="border-b border-border bg-muted/40 px-6 py-4">
+              <h3 class="text-sm font-bold text-foreground">Other / Unlinked Boards</h3>
+            </div>
+            <div class="divide-y divide-border">
+              ${orphanBoards
+                .map(
+                  (board) => `
+                  <div class="flex items-center justify-between px-6 py-4">
+                    <div>
+                      <p class="text-sm font-semibold text-foreground">${escapeHtml(board.board_name)}</p>
+                      <p class="text-xs font-mono text-muted-foreground">ID: ${escapeHtml(board.board_id)}</p>
+                    </div>
+                    <div class="text-xs text-muted-foreground">
+                      ${escapeHtml(board.account_name || 'Unassigned')}
+                    </div>
+                  </div>
+                `
+                )
+                .join('')}
+            </div>
+          </div>
+        `;
+      }
+
+      contentHtml += '</div>';
+      container.innerHTML = contentHtml;
+    } catch (err) {
+      console.error('Failed to load boards client-side:', err);
+      container.innerHTML = renderEmptyStateHTML(
+        'Error Loading Boards',
+        'Could not fetch board mappings. Please try refreshing.',
+        'alert-circle'
+      );
+    }
+  }
+
+  loadBoards();
+</script>

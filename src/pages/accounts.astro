@@ -1,74 +1,108 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import SectionHeader from '../components/ui/SectionHeader.astro';
-import StatusBadge from '../components/ui/StatusBadge.astro';
-import EmptyState from '../components/ui/EmptyState.astro';
-import { getAccounts } from '../lib/supabase';
-
-const accounts = await getAccounts();
 ---
 
-<Layout title="Pinterest Accounts">
+<Layout title="Pinterest Accounts" description="Manage connected Pinterest accounts, webhooks, and daily posting limits.">
   <SectionHeader
     title="Pinterest Accounts"
     description="Manage connected Pinterest accounts, webhooks, and daily posting limits."
   />
 
-  {accounts.length === 0 ? (
-    <EmptyState
-      title="No Accounts Registered"
-      description="Accounts will appear here once added to your Supabase accounts table."
-      iconName="folder"
-    />
-  ) : (
-    <div class="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-      <div class="overflow-x-auto">
-        <table class="w-full text-left text-sm">
-          <thead class="border-b border-border bg-muted/50 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            <tr>
-              <th class="px-6 py-3.5">Account Name</th>
-              <th class="px-6 py-3.5">Status</th>
-              <th class="px-6 py-3.5">Daily Limit</th>
-              <th class="px-6 py-3.5">Linked Boards</th>
-              <th class="px-6 py-3.5">Make.com Webhook URL</th>
-              <th class="px-6 py-3.5">Added Date</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-border">
-            {accounts.map((account) => (
-              <tr class="transition-colors hover:bg-muted/40">
-                <td class="px-6 py-4 font-semibold text-foreground">
-                  <div class="flex items-center gap-2.5">
-                    <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold text-xs">
-                      {account.account_name.slice(0, 2).toUpperCase()}
-                    </div>
-                    <span>{account.account_name}</span>
-                  </div>
-                </td>
-                <td class="px-6 py-4">
-                  <StatusBadge status={account.is_active ? 'active' : 'inactive'} />
-                </td>
-                <td class="px-6 py-4 font-medium text-foreground">
-                  <span class="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-1 text-xs font-semibold">
-                    {account.max_pins_per_day} pins / day
-                  </span>
-                </td>
-                <td class="px-6 py-4 text-muted-foreground">
-                  <span class="font-medium text-foreground">{account.boards_count ?? 0}</span> boards
-                </td>
-                <td class="px-6 py-4 font-mono text-xs text-muted-foreground">
-                  <div class="max-w-xs truncate rounded bg-muted/60 px-2 py-1" title={account.webhook_url}>
-                    {account.webhook_url}
-                  </div>
-                </td>
-                <td class="px-6 py-4 text-xs text-muted-foreground">
-                  {new Date(account.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+  <div id="accounts-container">
+    <div class="overflow-hidden rounded-xl border border-border bg-card p-12 text-center text-xs text-muted-foreground animate-pulse">
+      Loading Pinterest accounts...
     </div>
-  )}
+  </div>
 </Layout>
+
+<script>
+  import { getAccounts } from '../lib/supabase';
+  import { renderStatusBadge, formatDate, renderEmptyStateHTML, escapeHtml } from '../lib/ui-helpers';
+
+  async function loadAccounts() {
+    const container = document.getElementById('accounts-container');
+    if (!container) return;
+
+    try {
+      const accounts = await getAccounts();
+
+      if (!accounts || accounts.length === 0) {
+        container.innerHTML = renderEmptyStateHTML(
+          'No Accounts Registered',
+          'Accounts will appear here once added to your Supabase accounts table.',
+          'folder'
+        );
+        return;
+      }
+
+      const rowsHtml = accounts
+        .map((account) => {
+          const initials = (account.account_name || 'AC').slice(0, 2).toUpperCase();
+          return `
+            <tr class="transition-colors hover:bg-muted/40">
+              <td class="px-6 py-4 font-semibold text-foreground">
+                <div class="flex items-center gap-2.5">
+                  <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold text-xs">
+                    ${escapeHtml(initials)}
+                  </div>
+                  <span>${escapeHtml(account.account_name)}</span>
+                </div>
+              </td>
+              <td class="px-6 py-4">
+                ${renderStatusBadge(account.is_active)}
+              </td>
+              <td class="px-6 py-4 font-medium text-foreground">
+                <span class="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-1 text-xs font-semibold">
+                  ${account.max_pins_per_day} pins / day
+                </span>
+              </td>
+              <td class="px-6 py-4 text-muted-foreground">
+                <span class="font-medium text-foreground">${account.boards_count ?? 0}</span> boards
+              </td>
+              <td class="px-6 py-4 font-mono text-xs text-muted-foreground">
+                <div class="max-w-xs truncate rounded bg-muted/60 px-2 py-1" title="${escapeHtml(account.webhook_url)}">
+                  ${escapeHtml(account.webhook_url)}
+                </div>
+              </td>
+              <td class="px-6 py-4 text-xs text-muted-foreground">
+                ${formatDate(account.created_at)}
+              </td>
+            </tr>
+          `;
+        })
+        .join('');
+
+      container.innerHTML = `
+        <div class="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+              <thead class="border-b border-border bg-muted/50 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th class="px-6 py-3.5">Account Name</th>
+                  <th class="px-6 py-3.5">Status</th>
+                  <th class="px-6 py-3.5">Daily Limit</th>
+                  <th class="px-6 py-3.5">Linked Boards</th>
+                  <th class="px-6 py-3.5">Make.com Webhook URL</th>
+                  <th class="px-6 py-3.5">Added Date</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-border">
+                ${rowsHtml}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    } catch (err) {
+      console.error('Failed to load accounts client-side:', err);
+      container.innerHTML = renderEmptyStateHTML(
+        'Error Loading Accounts',
+        'Could not fetch accounts data. Please try refreshing.',
+        'alert-circle'
+      );
+    }
+  }
+
+  loadAccounts();
+</script>

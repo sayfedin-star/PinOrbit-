@@ -1,14 +1,9 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import SectionHeader from '../components/ui/SectionHeader.astro';
-import StatusBadge from '../components/ui/StatusBadge.astro';
-import EmptyState from '../components/ui/EmptyState.astro';
-import { getPins } from '../lib/supabase';
-
-const pins = await getPins('all');
 ---
 
-<Layout title="Pins Management">
+<Layout title="Pins Management" description="All recipe pins synced from Google Sheets pending execution or already published.">
   <SectionHeader
     title="Pins Queue & History"
     description="All recipe pins synced from Google Sheets pending execution or already published."
@@ -17,30 +12,30 @@ const pins = await getPins('all');
   <!-- Filter & Search Control Bar -->
   <div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
     <!-- Filter Tabs -->
-    <div class="inline-flex rounded-lg border border-border bg-card p-1 text-xs font-medium">
+    <div id="filter-tabs-container" class="inline-flex rounded-lg border border-border bg-card p-1 text-xs font-medium">
       <button
         data-filter="all"
         class="filter-btn rounded-md px-3.5 py-1.5 transition-colors bg-primary text-primary-foreground font-semibold"
       >
-        All ({pins.length})
+        All (...)
       </button>
       <button
         data-filter="pending"
         class="filter-btn rounded-md px-3.5 py-1.5 text-muted-foreground hover:text-foreground transition-colors"
       >
-        Pending ({pins.filter(p => p.status === 'pending').length})
+        Pending (...)
       </button>
       <button
         data-filter="posted"
         class="filter-btn rounded-md px-3.5 py-1.5 text-muted-foreground hover:text-foreground transition-colors"
       >
-        Posted ({pins.filter(p => p.status === 'posted').length})
+        Posted (...)
       </button>
       <button
         data-filter="failed"
         class="filter-btn rounded-md px-3.5 py-1.5 text-muted-foreground hover:text-foreground transition-colors"
       >
-        Failed ({pins.filter(p => p.status === 'failed').length})
+        Failed (...)
       </button>
     </div>
 
@@ -62,107 +57,169 @@ const pins = await getPins('all');
         id="pin-search"
         type="text"
         placeholder="Search titles, boards or accounts..."
+        aria-label="Search pins by title, board, or account"
         class="w-full rounded-lg border border-border bg-card py-2 pl-9 pr-4 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
       />
     </div>
   </div>
 
-  {pins.length === 0 ? (
-    <EmptyState
-      title="No Pins Found"
-      description="New rows uploaded to Google Sheets will sync into Supabase pins table."
-    />
-  ) : (
-    <div class="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-      <div class="overflow-x-auto">
-        <table class="w-full text-left text-sm">
-          <thead class="border-b border-border bg-muted/50 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            <tr>
-              <th class="px-6 py-3.5">Pin Title & Details</th>
-              <th class="px-6 py-3.5">Account</th>
-              <th class="px-6 py-3.5">Target Board</th>
-              <th class="px-6 py-3.5">Status</th>
-              <th class="px-6 py-3.5">Created Date</th>
-              <th class="px-6 py-3.5">Posted Date</th>
-            </tr>
-          </thead>
-          <tbody id="pins-table-body" class="divide-y divide-border">
-            {pins.map((pin) => (
-              <tr
-                class="pin-row transition-colors hover:bg-muted/40"
-                data-status={pin.status}
-                data-title={(pin.title || '').toLowerCase()}
-                data-account={(pin.account_name || '').toLowerCase()}
-                data-board={(pin.board_name || '').toLowerCase()}
-              >
-                <td class="px-6 py-4">
-                  <div class="flex items-center gap-3.5">
-                    <img
-                      src={pin.image_url}
-                      alt={pin.title}
-                      class="h-12 w-12 rounded-lg object-cover border border-border bg-muted flex-shrink-0"
-                      onerror="this.src='https://images.unsplash.com/photo-1495521821757-a1efb6729352?auto=format&fit=crop&w=150&q=80'"
-                    />
-                    <div class="max-w-xs sm:max-w-md">
-                      <p class="font-semibold text-foreground truncate" title={pin.title}>{pin.title}</p>
-                      {pin.link && (
-                        <a
-                          href={pin.link}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          class="text-xs text-primary hover:underline flex items-center gap-1 mt-0.5"
-                        >
-                          <span class="truncate">{pin.link}</span>
-                          <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                </td>
-                <td class="px-6 py-4 font-medium text-foreground">
-                  {pin.account_name}
-                </td>
-                <td class="px-6 py-4 text-muted-foreground">
-                  <span class="rounded bg-muted/60 px-2 py-1 text-xs font-medium">
-                    {pin.board_name || 'Unassigned'}
-                  </span>
-                </td>
-                <td class="px-6 py-4">
-                  <StatusBadge status={pin.status} />
-                </td>
-                <td class="px-6 py-4 text-xs text-muted-foreground whitespace-nowrap">
-                  {new Date(pin.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                </td>
-                <td class="px-6 py-4 text-xs text-muted-foreground whitespace-nowrap">
-                  {pin.posted_at
-                    ? new Date(pin.posted_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-                    : '-'}
-                </td>
-              </tr>
-            ))}
-            <tr id="no-matching-pins" class="hidden">
-              <td colspan="6" class="p-8 text-center text-xs text-muted-foreground">
-                No pins match your current search query or status filter.
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+  <div id="pins-container">
+    <div class="overflow-hidden rounded-xl border border-border bg-card p-12 text-center text-xs text-muted-foreground animate-pulse">
+      Loading pins queue...
     </div>
-  )}
+  </div>
 </Layout>
 
 <script>
-  // Client side filtering & search script
-  const filterBtns = document.querySelectorAll<HTMLButtonElement>('.filter-btn');
-  const searchInput = document.getElementById('pin-search') as HTMLInputElement | null;
-  const rows = document.querySelectorAll<HTMLTableRowElement>('.pin-row');
-  const noMatchRow = document.getElementById('no-matching-pins');
+  import { getPins } from '../lib/supabase';
+  import { renderStatusBadge, formatDate, renderEmptyStateHTML, escapeHtml } from '../lib/ui-helpers';
+  import type { Pin } from '../lib/types';
 
+  let allPins: Pin[] = [];
   let currentFilter = 'all';
   let currentSearch = '';
 
+  async function loadPins() {
+    const container = document.getElementById('pins-container');
+    if (!container) return;
+
+    try {
+      allPins = await getPins('all');
+
+      if (!allPins || allPins.length === 0) {
+        container.innerHTML = renderEmptyStateHTML(
+          'No Pins Found',
+          'New rows uploaded to Google Sheets will sync into Supabase pins table.',
+          'inbox'
+        );
+        updateFilterCounts(0, 0, 0, 0);
+        return;
+      }
+
+      // Update Filter button count labels
+      const totalCount = allPins.length;
+      const pendingCount = allPins.filter((p) => p.status === 'pending').length;
+      const postedCount = allPins.filter((p) => p.status === 'posted').length;
+      const failedCount = allPins.filter((p) => p.status === 'failed').length;
+
+      updateFilterCounts(totalCount, pendingCount, postedCount, failedCount);
+
+      // Render base table structure
+      container.innerHTML = `
+        <div class="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+              <thead class="border-b border-border bg-muted/50 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th class="px-6 py-3.5">Pin Title & Details</th>
+                  <th class="px-6 py-3.5">Account</th>
+                  <th class="px-6 py-3.5">Target Board</th>
+                  <th class="px-6 py-3.5">Status</th>
+                  <th class="px-6 py-3.5">Created Date</th>
+                  <th class="px-6 py-3.5">Posted Date</th>
+                </tr>
+              </thead>
+              <tbody id="pins-table-body" class="divide-y divide-border">
+                ${allPins.map((pin) => renderPinRow(pin)).join('')}
+                <tr id="no-matching-pins" class="hidden">
+                  <td colspan="6" class="p-8 text-center text-xs text-muted-foreground">
+                    No pins match your current search query or status filter.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+
+      setupEventListeners();
+    } catch (err) {
+      console.error('Failed to load pins client-side:', err);
+      container.innerHTML = renderEmptyStateHTML(
+        'Error Loading Pins',
+        'Could not fetch pins queue. Please try refreshing.',
+        'alert-circle'
+      );
+    }
+  }
+
+  function renderPinRow(pin: Pin): string {
+    const titleLower = (pin.title || '').toLowerCase();
+    const accountLower = (pin.account_name || '').toLowerCase();
+    const boardLower = (pin.board_name || '').toLowerCase();
+
+    return `
+      <tr
+        class="pin-row transition-colors hover:bg-muted/40"
+        data-status="${pin.status}"
+        data-title="${escapeHtml(titleLower)}"
+        data-account="${escapeHtml(accountLower)}"
+        data-board="${escapeHtml(boardLower)}"
+      >
+        <td class="px-6 py-4">
+          <div class="flex items-center gap-3.5">
+            <img
+              src="${escapeHtml(pin.image_url)}"
+              alt="${escapeHtml(pin.title)}"
+              class="h-12 w-12 rounded-lg object-cover border border-border bg-muted flex-shrink-0"
+              onerror="this.src='https://images.unsplash.com/photo-1495521821757-a1efb6729352?auto=format&fit=crop&w=150&q=80'"
+            />
+            <div class="max-w-xs sm:max-w-md">
+              <p class="font-semibold text-foreground truncate" title="${escapeHtml(pin.title)}">${escapeHtml(pin.title)}</p>
+              ${
+                pin.link
+                  ? `
+                <a
+                  href="${escapeHtml(pin.link)}"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="text-xs text-primary hover:underline flex items-center gap-1 mt-0.5"
+                >
+                  <span class="truncate">${escapeHtml(pin.link)}</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                </a>
+              `
+                  : ''
+              }
+            </div>
+          </div>
+        </td>
+        <td class="px-6 py-4 font-medium text-foreground">
+          ${escapeHtml(pin.account_name || 'Unassigned')}
+        </td>
+        <td class="px-6 py-4 text-muted-foreground">
+          <span class="rounded bg-muted/60 px-2 py-1 text-xs font-medium">
+            ${escapeHtml(pin.board_name || 'Unassigned')}
+          </span>
+        </td>
+        <td class="px-6 py-4">
+          ${renderStatusBadge(pin.status)}
+        </td>
+        <td class="px-6 py-4 text-xs text-muted-foreground whitespace-nowrap">
+          ${formatDate(pin.created_at)}
+        </td>
+        <td class="px-6 py-4 text-xs text-muted-foreground whitespace-nowrap">
+          ${pin.posted_at ? formatDate(pin.posted_at) : '-'}
+        </td>
+      </tr>
+    `;
+  }
+
+  function updateFilterCounts(total: number, pending: number, posted: number, failed: number) {
+    const filterBtns = document.querySelectorAll<HTMLButtonElement>('.filter-btn');
+    filterBtns.forEach((btn) => {
+      const type = btn.getAttribute('data-filter');
+      if (type === 'all') btn.innerText = `All (${total})`;
+      if (type === 'pending') btn.innerText = `Pending (${pending})`;
+      if (type === 'posted') btn.innerText = `Posted (${posted})`;
+      if (type === 'failed') btn.innerText = `Failed (${failed})`;
+    });
+  }
+
   function applyFilters() {
+    const rows = document.querySelectorAll<HTMLTableRowElement>('.pin-row');
+    const noMatchRow = document.getElementById('no-matching-pins');
+
     let matchCount = 0;
     rows.forEach((row) => {
       const status = row.getAttribute('data-status') || '';
@@ -194,22 +251,29 @@ const pins = await getPins('all');
     }
   }
 
-  filterBtns.forEach((btn) => {
-    btn.addEventListener('click', () => {
-      filterBtns.forEach((b) => {
-        b.classList.remove('bg-primary', 'text-primary-foreground', 'font-semibold');
-        b.classList.add('text-muted-foreground');
-      });
-      btn.classList.add('bg-primary', 'text-primary-foreground', 'font-semibold');
-      btn.classList.remove('text-muted-foreground');
+  function setupEventListeners() {
+    const filterBtns = document.querySelectorAll<HTMLButtonElement>('.filter-btn');
+    const searchInput = document.getElementById('pin-search') as HTMLInputElement | null;
 
-      currentFilter = btn.getAttribute('data-filter') || 'all';
+    filterBtns.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        filterBtns.forEach((b) => {
+          b.classList.remove('bg-primary', 'text-primary-foreground', 'font-semibold');
+          b.classList.add('text-muted-foreground');
+        });
+        btn.classList.add('bg-primary', 'text-primary-foreground', 'font-semibold');
+        btn.classList.remove('text-muted-foreground');
+
+        currentFilter = btn.getAttribute('data-filter') || 'all';
+        applyFilters();
+      });
+    });
+
+    searchInput?.addEventListener('input', (e) => {
+      currentSearch = (e.target as HTMLInputElement).value.toLowerCase().trim();
       applyFilters();
     });
-  });
+  }
 
-  searchInput?.addEventListener('input', (e) => {
-    currentSearch = (e.target as HTMLInputElement).value.toLowerCase().trim();
-    applyFilters();
-  });
+  loadPins();
 </script>
