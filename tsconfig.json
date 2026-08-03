@@ -6,5 +6,6 @@
       "@/*": ["src/*"]
     },
     "jsx": "preserve"
-  }
+  },
+  "include": ["src/**/*", "public/**/*"]
 }
