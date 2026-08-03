@@ -1,4 +1,6 @@
 ---
+import { isSupabaseConfigured } from '../../lib/supabase';
+
 interface Props {
   title?: string;
 }
@@ -25,11 +27,18 @@ const { title = 'Dashboard' } = Astro.props;
   </div>
 
   <div class="flex items-center gap-3">
-    <!-- Read-Only Badge -->
-    <div class="hidden sm:flex items-center gap-2 rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-600 dark:text-amber-400">
-      <span class="h-2 w-2 rounded-full bg-amber-500 animate-pulse"></span>
-      Read-Only Mode
-    </div>
+    <!-- Read-Only Status Badge -->
+    {isSupabaseConfigured ? (
+      <div class="hidden sm:flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400" title="Connected to Supabase in Read-Only Mode">
+        <span class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+        Supabase Live (Read-Only)
+      </div>
+    ) : (
+      <div class="hidden sm:flex items-center gap-2 rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-600 dark:text-amber-400" title="Using Fallback Mock Data">
+        <span class="h-2 w-2 rounded-full bg-amber-500 animate-pulse"></span>
+        Preview Mode (Mock Data)
+      </div>
+    )}
 
     <!-- Dark Mode Toggle Button -->
     <button

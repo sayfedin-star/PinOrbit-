@@ -4,13 +4,17 @@ import type { Account, Board, Pin, Log, DashboardKPIs } from './types';
 const supabaseUrl = import.meta.env.PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY || '';
 
-export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+export const isSupabaseConfigured = Boolean(
+  supabaseUrl &&
+  supabaseAnonKey &&
+  supabaseUrl !== 'https://your-project-id.supabase.co'
+);
 
 export const supabase = isSupabaseConfigured
   ? createClient(supabaseUrl, supabaseAnonKey)
   : null;
 
-// Mock Data for initial design preview when Supabase env is not yet connected
+// Mock Data used only as preview fallback when Supabase env is not configured
 const mockAccounts: Account[] = [
   {
     id: 'acc-1',
@@ -169,7 +173,7 @@ interface RawLog extends Log {
   pins?: { title: string } | null;
 }
 
-// Helper Data Fetchers (Read-only)
+// 1. Fetch Accounts (Read-only)
 export async function getAccounts(): Promise<Account[]> {
   if (!supabase) return mockAccounts;
   try {
@@ -178,17 +182,32 @@ export async function getAccounts(): Promise<Account[]> {
       .select('*, boards(id)')
       .order('created_at', { ascending: false });
 
-    if (error || !data) throw error;
+    if (error) {
+      // If join fails due to schema, fallback to basic select
+      const { data: basicData, error: basicErr } = await supabase
+        .from('accounts')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (basicErr || !basicData) throw basicErr || new Error('No data');
+      return (basicData as Account[]).map((acc) => ({
+        ...acc,
+        boards_count: 0,
+      }));
+    }
+
+    if (!data) return [];
     return (data as RawAccount[]).map((acc) => ({
       ...acc,
       boards_count: acc.boards ? acc.boards.length : 0,
     }));
   } catch (err) {
-    console.warn('Supabase fetch accounts failed, using fallback:', err);
+    console.warn('Supabase fetch accounts error, using fallback:', err);
     return mockAccounts;
   }
 }
 
+// 2. Fetch Boards (Read-only)
 export async function getBoards(): Promise<Board[]> {
   if (!supabase) return mockBoards;
   try {
@@ -197,43 +216,68 @@ export async function getBoards(): Promise<Board[]> {
       .select('*, accounts(account_name)')
       .order('created_at', { ascending: false });
 
-    if (error || !data) throw error;
+    if (error) {
+      const { data: basicData, error: basicErr } = await supabase
+        .from('boards')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (basicErr || !basicData) throw basicErr || new Error('No data');
+      return basicData as Board[];
+    }
+
+    if (!data) return [];
     return (data as RawBoard[]).map((b) => ({
       ...b,
-      account_name: b.accounts?.account_name || 'Unknown',
+      account_name: b.accounts?.account_name || 'Account #' + b.account_id.slice(0, 6),
     }));
   } catch (err) {
-    console.warn('Supabase fetch boards failed, using fallback:', err);
+    console.warn('Supabase fetch boards error, using fallback:', err);
     return mockBoards;
   }
 }
 
+// 3. Fetch Pins (Read-only)
 export async function getPins(statusFilter?: string): Promise<Pin[]> {
   if (!supabase) {
     if (!statusFilter || statusFilter === 'all') return mockPins;
     return mockPins.filter((p) => p.status === statusFilter);
   }
   try {
-    let query = supabase.from('pins').select('*, accounts(account_name)').order('created_at', { ascending: false });
+    let query = supabase
+      .from('pins')
+      .select('*, accounts(account_name)')
+      .order('created_at', { ascending: false });
 
     if (statusFilter && statusFilter !== 'all') {
       query = query.eq('status', statusFilter);
     }
 
     const { data, error } = await query;
-    if (error || !data) throw error;
+    if (error) {
+      let basicQuery = supabase.from('pins').select('*').order('created_at', { ascending: false });
+      if (statusFilter && statusFilter !== 'all') {
+        basicQuery = basicQuery.eq('status', statusFilter);
+      }
+      const { data: basicData, error: basicErr } = await basicQuery;
+      if (basicErr || !basicData) throw basicErr || new Error('No data');
+      return basicData as Pin[];
+    }
+
+    if (!data) return [];
     return (data as RawPin[]).map((p) => ({
       ...p,
-      account_name: p.accounts?.account_name || 'Unknown',
+      account_name: p.accounts?.account_name || (p.account_id ? 'Account #' + p.account_id.slice(0, 6) : 'Unassigned'),
     }));
   } catch (err) {
-    console.warn('Supabase fetch pins failed, using fallback:', err);
+    console.warn('Supabase fetch pins error, using fallback:', err);
     if (!statusFilter || statusFilter === 'all') return mockPins;
     return mockPins.filter((p) => p.status === statusFilter);
   }
 }
 
-export async function getLogs(limit = 20): Promise<Log[]> {
+// 4. Fetch Logs (Read-only)
+export async function getLogs(limit = 50): Promise<Log[]> {
   if (!supabase) return mockLogs.slice(0, limit);
   try {
     const { data, error } = await supabase
@@ -242,18 +286,30 @@ export async function getLogs(limit = 20): Promise<Log[]> {
       .order('created_at', { ascending: false })
       .limit(limit);
 
-    if (error || !data) throw error;
+    if (error) {
+      const { data: basicData, error: basicErr } = await supabase
+        .from('logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+      if (basicErr || !basicData) throw basicErr || new Error('No data');
+      return basicData as Log[];
+    }
+
+    if (!data) return [];
     return (data as RawLog[]).map((l) => ({
       ...l,
-      account_name: l.accounts?.account_name || 'Unknown',
-      pin_title: l.pins?.title || 'Unknown Pin',
+      account_name: l.accounts?.account_name || (l.account_id ? 'Account #' + l.account_id.slice(0, 6) : 'System'),
+      pin_title: l.pins?.title || 'System Operation',
     }));
   } catch (err) {
-    console.warn('Supabase fetch logs failed, using fallback:', err);
+    console.warn('Supabase fetch logs error, using fallback:', err);
     return mockLogs.slice(0, limit);
   }
 }
 
+// 5. Fetch Dashboard KPIs (Read-only)
 export async function getDashboardKPIs(): Promise<DashboardKPIs> {
   const [accounts, pins, logs] = await Promise.all([
     getAccounts(),
