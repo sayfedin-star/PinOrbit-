@@ -4,41 +4,259 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
 ---
 
 <Layout title="Pinterest Accounts" description="Manage connected Pinterest accounts, webhooks, and daily posting limits.">
-  <SectionHeader
-    title="Pinterest Accounts"
-    description="Manage connected Pinterest accounts, webhooks, and daily posting limits."
-  />
+  <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-2">
+    <SectionHeader
+      title="Pinterest Accounts"
+      description="Manage connected Pinterest accounts, webhooks, and daily posting limits."
+    />
 
+    <button
+      id="open-add-account-modal"
+      class="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground shadow-md hover:bg-primary/90 transition-all self-start sm:self-auto"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+      </svg>
+      <span>Add Account</span>
+    </button>
+  </div>
+
+  <!-- Global Success Notification Banner -->
+  <div id="accounts-success-banner" class="hidden mb-6 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-xs text-emerald-600 dark:text-emerald-400 flex items-center justify-between">
+    <div class="flex items-center gap-2.5">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+      </svg>
+      <span id="accounts-success-text">Operation completed successfully.</span>
+    </div>
+    <button id="dismiss-success-banner" class="text-emerald-500 hover:text-emerald-400">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+
+  <!-- Accounts Table Container -->
   <div id="accounts-container">
     <div class="overflow-hidden rounded-xl border border-border bg-card p-12 text-center text-xs text-muted-foreground animate-pulse">
       Loading Pinterest accounts...
     </div>
   </div>
+
+  <!-- MODAL 1: Add Account Modal -->
+  <div id="add-account-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" aria-modal="true" role="dialog">
+    <div id="add-account-backdrop" class="fixed inset-0"></div>
+    <div class="relative w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-5 z-10">
+      <div class="flex items-center justify-between border-b border-border pb-4">
+        <h3 class="text-base font-bold text-foreground">Add New Pinterest Account</h3>
+        <button id="close-add-modal" class="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div id="add-account-error" class="hidden rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-500"></div>
+
+      <form id="add-account-form" class="space-y-4">
+        <div class="space-y-1.5">
+          <label for="acc-name" class="block text-xs font-semibold text-foreground">Account Name *</label>
+          <input
+            id="acc-name"
+            type="text"
+            required
+            placeholder="e.g. HealthyBites_US"
+            class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+        </div>
+
+        <div class="space-y-1.5">
+          <label for="acc-webhook" class="block text-xs font-semibold text-foreground">Make.com Webhook URL *</label>
+          <input
+            id="acc-webhook"
+            type="url"
+            required
+            placeholder="https://hook.make.com/abc123healthy1"
+            class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+          <p class="text-[11px] text-muted-foreground">URL will be masked in public interface tables.</p>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div class="space-y-1.5">
+            <label for="acc-limit" class="block text-xs font-semibold text-foreground">Daily Limit (Pins/Day) *</label>
+            <input
+              id="acc-limit"
+              type="number"
+              min="1"
+              value="20"
+              required
+              class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+          </div>
+
+          <div class="space-y-1.5">
+            <label class="block text-xs font-semibold text-foreground">Initial Status</label>
+            <label class="flex items-center gap-2.5 pt-2 cursor-pointer text-xs font-medium text-foreground">
+              <input id="acc-active" type="checkbox" checked class="h-4 w-4 rounded border-border text-primary focus:ring-primary" />
+              <span>Active</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-3 border-t border-border pt-4">
+          <button
+            type="button"
+            id="cancel-add-modal"
+            class="rounded-xl border border-border px-4 py-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            Cancel
+          </button>
+          <button
+            id="submit-add-modal"
+            type="submit"
+            class="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow hover:bg-primary/90 disabled:opacity-50"
+          >
+            <span id="add-btn-text">Create Account</span>
+            <svg id="add-btn-spinner" class="hidden h-3.5 w-3.5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL 2: Edit Daily Limit Modal -->
+  <div id="edit-limit-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" aria-modal="true" role="dialog">
+    <div id="edit-limit-backdrop" class="fixed inset-0"></div>
+    <div class="relative w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-5 z-10">
+      <div class="flex items-center justify-between border-b border-border pb-4">
+        <h3 class="text-base font-bold text-foreground">Update Daily Limit</h3>
+        <button id="close-limit-modal" class="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div id="edit-limit-error" class="hidden rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-500"></div>
+
+      <form id="edit-limit-form" class="space-y-4">
+        <input type="hidden" id="edit-account-id" />
+
+        <div>
+          <span class="text-xs text-muted-foreground">Account:</span>
+          <p id="edit-account-name-label" class="text-sm font-semibold text-foreground mt-0.5"></p>
+        </div>
+
+        <div class="space-y-1.5">
+          <label for="edit-limit-input" class="block text-xs font-semibold text-foreground">Max Pins Per Day (Minimum 1) *</label>
+          <input
+            id="edit-limit-input"
+            type="number"
+            min="1"
+            required
+            class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+        </div>
+
+        <div class="flex items-center justify-end gap-3 border-t border-border pt-4">
+          <button
+            type="button"
+            id="cancel-limit-modal"
+            class="rounded-xl border border-border px-4 py-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            Cancel
+          </button>
+          <button
+            id="submit-limit-modal"
+            type="submit"
+            class="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow hover:bg-primary/90 disabled:opacity-50"
+          >
+            <span id="limit-btn-text">Save Limit</span>
+            <svg id="limit-btn-spinner" class="hidden h-3.5 w-3.5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL 3: Confirm Deactivation Dialog -->
+  <div id="deactivate-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" aria-modal="true" role="dialog">
+    <div id="deactivate-backdrop" class="fixed inset-0"></div>
+    <div class="relative w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-5 z-10">
+      <div class="flex items-center gap-3 text-rose-500">
+        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-500/10 border border-rose-500/20">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 1 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+        </div>
+        <div>
+          <h3 class="text-base font-bold text-foreground">Deactivate Account?</h3>
+          <p id="deactivate-account-name" class="text-xs text-muted-foreground"></p>
+        </div>
+      </div>
+
+      <p class="text-xs leading-relaxed text-muted-foreground bg-muted/50 p-3 rounded-xl border border-border">
+        Deactivate this account? Pending pins will not be processed until it is reactivated.
+      </p>
+
+      <div class="flex items-center justify-end gap-3 border-t border-border pt-4">
+        <button
+          type="button"
+          id="cancel-deactivate"
+          class="rounded-xl border border-border px-4 py-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          id="confirm-deactivate-btn"
+          class="inline-flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2 text-xs font-semibold text-white shadow hover:bg-rose-700 disabled:opacity-50 transition-all"
+        >
+          <span>Deactivate Account</span>
+        </button>
+      </div>
+    </div>
+  </div>
 </Layout>
 
 <script>
-  import { getAccounts } from '../lib/supabase';
-  import { renderStatusBadge, formatDate, renderEmptyStateHTML, escapeHtml } from '../lib/ui-helpers';
+  import { requireAuth } from '../lib/auth';
+  import { getAccounts, createAccount, updateAccountDailyLimit, toggleAccountActive } from '../lib/supabase';
+  import { renderStatusBadge, formatDate, renderEmptyStateHTML, escapeHtml, maskWebhookUrl } from '../lib/ui-helpers';
+  import type { Account } from '../lib/types';
+
+  let currentAccounts: Account[] = [];
+  let pendingDeactivateAccount: Account | null = null;
+
+  async function init() {
+    const isAuth = await requireAuth();
+    if (!isAuth) return;
+    setupModalListeners();
+    await loadAccounts();
+  }
 
   async function loadAccounts() {
     const container = document.getElementById('accounts-container');
     if (!container) return;
 
     try {
-      const accounts = await getAccounts();
+      currentAccounts = await getAccounts();
 
-      if (!accounts || accounts.length === 0) {
+      if (!currentAccounts || currentAccounts.length === 0) {
         container.innerHTML = renderEmptyStateHTML(
           'No Accounts Registered',
-          'Accounts will appear here once added to your Supabase accounts table.',
+          'Click "Add Account" to connect your first Pinterest publishing account.',
           'folder'
         );
         return;
       }
 
-      const rowsHtml = accounts
+      const rowsHtml = currentAccounts
         .map((account) => {
           const initials = (account.account_name || 'AC').slice(0, 2).toUpperCase();
+          const maskedWebhook = maskWebhookUrl(account.webhook_url);
+
           return `
             <tr class="transition-colors hover:bg-muted/40">
               <td class="px-6 py-4 font-semibold text-foreground">
@@ -50,22 +268,44 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
                 </div>
               </td>
               <td class="px-6 py-4">
-                ${renderStatusBadge(account.is_active)}
+                <div class="flex items-center gap-2">
+                  ${renderStatusBadge(account.is_active)}
+                  <button
+                    data-action="toggle-status"
+                    data-id="${account.id}"
+                    data-active="${account.is_active}"
+                    class="text-[11px] font-medium text-muted-foreground hover:text-foreground hover:underline ml-1"
+                  >
+                    ${account.is_active ? 'Deactivate' : 'Activate'}
+                  </button>
+                </div>
               </td>
               <td class="px-6 py-4 font-medium text-foreground">
-                <span class="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-1 text-xs font-semibold">
-                  ${account.max_pins_per_day} pins / day
-                </span>
+                <div class="flex items-center gap-2">
+                  <span class="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-1 text-xs font-semibold">
+                    ${account.max_pins_per_day} pins / day
+                  </span>
+                  <button
+                    data-action="edit-limit"
+                    data-id="${account.id}"
+                    data-limit="${account.max_pins_per_day}"
+                    data-name="${escapeHtml(account.account_name)}"
+                    class="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    title="Edit daily limit"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                  </button>
+                </div>
               </td>
               <td class="px-6 py-4 text-muted-foreground">
                 <span class="font-medium text-foreground">${account.boards_count ?? 0}</span> boards
               </td>
               <td class="px-6 py-4 font-mono text-xs text-muted-foreground">
-                <div class="max-w-xs truncate rounded bg-muted/60 px-2 py-1" title="${escapeHtml(account.webhook_url)}">
-                  ${escapeHtml(account.webhook_url)}
+                <div class="max-w-xs truncate rounded bg-muted/60 px-2 py-1" title="Webhook endpoint configured">
+                  ${escapeHtml(maskedWebhook)}
                 </div>
               </td>
-              <td class="px-6 py-4 text-xs text-muted-foreground">
+              <td class="px-6 py-4 text-xs text-muted-foreground whitespace-nowrap">
                 ${formatDate(account.created_at)}
               </td>
             </tr>
@@ -80,10 +320,10 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
               <thead class="border-b border-border bg-muted/50 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 <tr>
                   <th class="px-6 py-3.5">Account Name</th>
-                  <th class="px-6 py-3.5">Status</th>
+                  <th class="px-6 py-3.5">Status & Actions</th>
                   <th class="px-6 py-3.5">Daily Limit</th>
                   <th class="px-6 py-3.5">Linked Boards</th>
-                  <th class="px-6 py-3.5">Make.com Webhook URL</th>
+                  <th class="px-6 py-3.5">Webhook URL</th>
                   <th class="px-6 py-3.5">Added Date</th>
                 </tr>
               </thead>
@@ -94,6 +334,8 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
           </div>
         </div>
       `;
+
+      bindTableActionEvents();
     } catch (err) {
       console.error('Failed to load accounts client-side:', err);
       container.innerHTML = renderEmptyStateHTML(
@@ -104,5 +346,272 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
     }
   }
 
-  loadAccounts();
+  function showSuccessBanner(message: string) {
+    const banner = document.getElementById('accounts-success-banner');
+    const text = document.getElementById('accounts-success-text');
+    if (banner && text) {
+      text.textContent = message;
+      banner.classList.remove('hidden');
+      setTimeout(() => {
+        banner.classList.add('hidden');
+      }, 5000);
+    }
+  }
+
+  function bindTableActionEvents() {
+    document.querySelectorAll('[data-action="edit-limit"]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        const id = (e.currentTarget as HTMLElement).getAttribute('data-id') || '';
+        const limit = (e.currentTarget as HTMLElement).getAttribute('data-limit') || '20';
+        const name = (e.currentTarget as HTMLElement).getAttribute('data-name') || '';
+        openEditLimitModal(id, name, parseInt(limit, 10));
+      });
+    });
+
+    document.querySelectorAll('[data-action="toggle-status"]').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        const id = (e.currentTarget as HTMLElement).getAttribute('data-id') || '';
+        const isActive = (e.currentTarget as HTMLElement).getAttribute('data-active') === 'true';
+        const account = currentAccounts.find((a) => a.id === id);
+
+        if (!account) return;
+
+        if (isActive) {
+          // Confirm before deactivating
+          openDeactivateModal(account);
+        } else {
+          // Reactivate directly
+          const { error } = await toggleAccountActive(id, true);
+          if (error) {
+            alert('Failed to activate account: ' + error);
+          } else {
+            showSuccessBanner(`Account "${account.account_name}" has been activated.`);
+            await loadAccounts();
+          }
+        }
+      });
+    });
+  }
+
+  function setupModalListeners() {
+    // Add Account Modal controls
+    const openAddBtn = document.getElementById('open-add-account-modal');
+    const addModal = document.getElementById('add-account-modal');
+    const closeAddBtn = document.getElementById('close-add-modal');
+    const cancelAddBtn = document.getElementById('cancel-add-modal');
+    const addBackdrop = document.getElementById('add-account-backdrop');
+    const addForm = document.getElementById('add-account-form') as HTMLFormElement | null;
+    const addError = document.getElementById('add-account-error');
+
+    function closeAddModal() {
+      addModal?.classList.add('hidden');
+      addModal?.classList.remove('flex');
+      addError?.classList.add('hidden');
+      addForm?.reset();
+    }
+
+    openAddBtn?.addEventListener('click', () => {
+      addModal?.classList.remove('hidden');
+      addModal?.classList.add('flex');
+    });
+
+    closeAddBtn?.addEventListener('click', closeAddModal);
+    cancelAddBtn?.addEventListener('click', closeAddModal);
+    addBackdrop?.addEventListener('click', closeAddModal);
+
+    addForm?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      addError?.classList.add('hidden');
+
+      const name = (document.getElementById('acc-name') as HTMLInputElement).value.trim();
+      const webhook = (document.getElementById('acc-webhook') as HTMLInputElement).value.trim();
+      const limit = parseInt((document.getElementById('acc-limit') as HTMLInputElement).value, 10);
+      const active = (document.getElementById('acc-active') as HTMLInputElement).checked;
+
+      // Validation
+      if (!name) {
+        showAddError('Account name is required.');
+        return;
+      }
+      if (!webhook || !webhook.startsWith('http')) {
+        showAddError('Please enter a valid HTTP/HTTPS webhook URL.');
+        return;
+      }
+      if (isNaN(limit) || limit < 1) {
+        showAddError('Daily limit must be a positive whole number (minimum 1).');
+        return;
+      }
+
+      setAddLoading(true);
+
+      const { data, error } = await createAccount({
+        account_name: name,
+        webhook_url: webhook,
+        max_pins_per_day: limit,
+        is_active: active,
+      });
+
+      setAddLoading(false);
+
+      if (error) {
+        showAddError('Failed to create account: ' + error);
+      } else {
+        closeAddModal();
+        showSuccessBanner(`Account "${name}" created successfully!`);
+        await loadAccounts();
+      }
+    });
+
+    function showAddError(msg: string) {
+      if (addError) {
+        addError.textContent = msg;
+        addError.classList.remove('hidden');
+      }
+    }
+
+    function setAddLoading(loading: boolean) {
+      const submitBtn = document.getElementById('submit-add-modal') as HTMLButtonElement | null;
+      const text = document.getElementById('add-btn-text');
+      const spinner = document.getElementById('add-btn-spinner');
+      if (submitBtn) submitBtn.disabled = loading;
+      if (loading) {
+        text?.classList.add('hidden');
+        spinner?.classList.remove('hidden');
+      } else {
+        text?.classList.remove('hidden');
+        spinner?.classList.add('hidden');
+      }
+    }
+
+    // Edit Limit Modal controls
+    const limitModal = document.getElementById('edit-limit-modal');
+    const closeLimitBtn = document.getElementById('close-limit-modal');
+    const cancelLimitBtn = document.getElementById('cancel-limit-modal');
+    const limitBackdrop = document.getElementById('edit-limit-backdrop');
+    const limitForm = document.getElementById('edit-limit-form') as HTMLFormElement | null;
+    const limitError = document.getElementById('edit-limit-error');
+
+    function closeLimitModal() {
+      limitModal?.classList.add('hidden');
+      limitModal?.classList.remove('flex');
+      limitError?.classList.add('hidden');
+    }
+
+    closeLimitBtn?.addEventListener('click', closeLimitModal);
+    cancelLimitBtn?.addEventListener('click', closeLimitModal);
+    limitBackdrop?.addEventListener('click', closeLimitModal);
+
+    limitForm?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      limitError?.classList.add('hidden');
+
+      const id = (document.getElementById('edit-account-id') as HTMLInputElement).value;
+      const newLimit = parseInt((document.getElementById('edit-limit-input') as HTMLInputElement).value, 10);
+
+      if (isNaN(newLimit) || newLimit < 1) {
+        if (limitError) {
+          limitError.textContent = 'Daily limit must be a positive whole number (minimum 1).';
+          limitError.classList.remove('hidden');
+        }
+        return;
+      }
+
+      const submitBtn = document.getElementById('submit-limit-modal') as HTMLButtonElement | null;
+      const text = document.getElementById('limit-btn-text');
+      const spinner = document.getElementById('limit-btn-spinner');
+
+      if (submitBtn) submitBtn.disabled = true;
+      text?.classList.add('hidden');
+      spinner?.classList.remove('hidden');
+
+      const { error } = await updateAccountDailyLimit(id, newLimit);
+
+      if (submitBtn) submitBtn.disabled = false;
+      text?.classList.remove('hidden');
+      spinner?.classList.add('hidden');
+
+      if (error) {
+        if (limitError) {
+          limitError.textContent = 'Failed to update daily limit: ' + error;
+          limitError.classList.remove('hidden');
+        }
+      } else {
+        closeLimitModal();
+        showSuccessBanner(`Daily limit updated to ${newLimit} pins/day.`);
+        await loadAccounts();
+      }
+    });
+
+    // Deactivate Modal controls
+    const deactModal = document.getElementById('deactivate-modal');
+    const cancelDeactBtn = document.getElementById('cancel-deactivate');
+    const confirmDeactBtn = document.getElementById('confirm-deactivate-btn');
+    const deactBackdrop = document.getElementById('deactivate-backdrop');
+
+    function closeDeactModal() {
+      deactModal?.classList.add('hidden');
+      deactModal?.classList.remove('flex');
+      pendingDeactivateAccount = null;
+    }
+
+    cancelDeactBtn?.addEventListener('click', closeDeactModal);
+    deactBackdrop?.addEventListener('click', closeDeactModal);
+
+    confirmDeactBtn?.addEventListener('click', async () => {
+      if (!pendingDeactivateAccount) return;
+      const id = pendingDeactivateAccount.id;
+      const name = pendingDeactivateAccount.account_name;
+
+      closeDeactModal();
+      const { error } = await toggleAccountActive(id, false);
+
+      if (error) {
+        alert('Failed to deactivate account: ' + error);
+      } else {
+        showSuccessBanner(`Account "${name}" has been deactivated.`);
+        await loadAccounts();
+      }
+    });
+
+    // Keyboard navigation (Escape key to close any open modal)
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        if (addModal && !addModal.classList.contains('hidden')) closeAddModal();
+        if (limitModal && !limitModal.classList.contains('hidden')) closeLimitModal();
+        if (deactModal && !deactModal.classList.contains('hidden')) closeDeactModal();
+      }
+    });
+
+    // Dismiss banner listener
+    document.getElementById('dismiss-success-banner')?.addEventListener('click', () => {
+      document.getElementById('accounts-success-banner')?.classList.add('hidden');
+    });
+  }
+
+  function openEditLimitModal(id: string, name: string, currentLimit: number) {
+    const modal = document.getElementById('edit-limit-modal');
+    const idInput = document.getElementById('edit-account-id') as HTMLInputElement | null;
+    const nameLabel = document.getElementById('edit-account-name-label');
+    const limitInput = document.getElementById('edit-limit-input') as HTMLInputElement | null;
+
+    if (idInput) idInput.value = id;
+    if (nameLabel) nameLabel.textContent = name;
+    if (limitInput) limitInput.value = String(currentLimit);
+
+    modal?.classList.remove('hidden');
+    modal?.classList.add('flex');
+  }
+
+  function openDeactivateModal(account: Account) {
+    pendingDeactivateAccount = account;
+    const modal = document.getElementById('deactivate-modal');
+    const nameLabel = document.getElementById('deactivate-account-name');
+
+    if (nameLabel) nameLabel.textContent = `Target Account: ${account.account_name}`;
+
+    modal?.classList.remove('hidden');
+    modal?.classList.add('flex');
+  }
+
+  init();
 </script>

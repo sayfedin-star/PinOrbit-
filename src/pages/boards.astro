@@ -4,48 +4,159 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
 ---
 
 <Layout title="Pinterest Boards" description="Board mappings per account used by Edge Function for automatic target board matching.">
-  <SectionHeader
-    title="Pinterest Boards"
-    description="Board mappings per account used by Edge Function for automatic target board matching."
-  />
+  <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-2">
+    <SectionHeader
+      title="Pinterest Boards"
+      description="Board mappings per account used by Edge Function for automatic target board matching."
+    />
 
+    <button
+      id="open-add-board-modal"
+      class="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground shadow-md hover:bg-primary/90 transition-all self-start sm:self-auto"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+      </svg>
+      <span>Add Board</span>
+    </button>
+  </div>
+
+  <!-- Global Success Notification Banner -->
+  <div id="boards-success-banner" class="hidden mb-6 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-xs text-emerald-600 dark:text-emerald-400 flex items-center justify-between">
+    <div class="flex items-center gap-2.5">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+      </svg>
+      <span id="boards-success-text">Board created successfully.</span>
+    </div>
+    <button id="dismiss-boards-banner" class="text-emerald-500 hover:text-emerald-400">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+
+  <!-- Boards Container -->
   <div id="boards-container">
     <div class="overflow-hidden rounded-xl border border-border bg-card p-12 text-center text-xs text-muted-foreground animate-pulse">
       Loading Pinterest board mappings...
     </div>
   </div>
+
+  <!-- MODAL: Add Board Modal -->
+  <div id="add-board-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" aria-modal="true" role="dialog">
+    <div id="add-board-backdrop" class="fixed inset-0"></div>
+    <div class="relative w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-5 z-10">
+      <div class="flex items-center justify-between border-b border-border pb-4">
+        <h3 class="text-base font-bold text-foreground">Add Pinterest Board Mapping</h3>
+        <button id="close-add-board-modal" class="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div id="add-board-error" class="hidden rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-500"></div>
+
+      <form id="add-board-form" class="space-y-4">
+        <div class="space-y-1.5">
+          <label for="board-account-select" class="block text-xs font-semibold text-foreground">Target Account *</label>
+          <select
+            id="board-account-select"
+            required
+            class="w-full rounded-xl border border-border bg-background py-2.5 px-3 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          >
+            <option value="" disabled selected>Select an active Pinterest account...</option>
+          </select>
+        </div>
+
+        <div class="space-y-1.5">
+          <label for="board-name-input" class="block text-xs font-semibold text-foreground">Board Name *</label>
+          <input
+            id="board-name-input"
+            type="text"
+            required
+            placeholder="e.g. Quick Dinner Recipes"
+            class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+        </div>
+
+        <div class="space-y-1.5">
+          <label for="board-id-input" class="block text-xs font-semibold text-foreground">Pinterest Board ID *</label>
+          <input
+            id="board-id-input"
+            type="text"
+            required
+            placeholder="e.g. 1092837465"
+            class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+        </div>
+
+        <div class="flex items-center justify-end gap-3 border-t border-border pt-4">
+          <button
+            type="button"
+            id="cancel-add-board-modal"
+            class="rounded-xl border border-border px-4 py-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            Cancel
+          </button>
+          <button
+            id="submit-add-board-modal"
+            type="submit"
+            class="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow hover:bg-primary/90 disabled:opacity-50"
+          >
+            <span id="board-btn-text">Create Board</span>
+            <svg id="board-btn-spinner" class="hidden h-3.5 w-3.5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
 </Layout>
 
 <script>
-  import { getBoards, getAccounts } from '../lib/supabase';
+  import { requireAuth } from '../lib/auth';
+  import { getBoards, getAccounts, createBoard } from '../lib/supabase';
   import { formatDate, renderEmptyStateHTML, escapeHtml } from '../lib/ui-helpers';
+  import type { Board, Account } from '../lib/types';
+
+  let currentBoards: Board[] = [];
+  let currentAccounts: Account[] = [];
+
+  async function init() {
+    const isAuth = await requireAuth();
+    if (!isAuth) return;
+    setupModalListeners();
+    await loadBoards();
+  }
 
   async function loadBoards() {
     const container = document.getElementById('boards-container');
     if (!container) return;
 
     try {
-      const [boards, accounts] = await Promise.all([getBoards(), getAccounts()]);
+      [currentBoards, currentAccounts] = await Promise.all([getBoards(), getAccounts()]);
 
-      if (!boards || boards.length === 0) {
+      populateAccountDropdown();
+
+      if (!currentBoards || currentBoards.length === 0) {
         container.innerHTML = renderEmptyStateHTML(
           'No Boards Mapping Configured',
-          'Add board mappings to Supabase boards table to match Pin board_names automatically.',
+          'Click "Add Board" to connect target Pinterest boards for your accounts.',
           'folder'
         );
         return;
       }
 
       // Group boards by account
-      const groupedBoards = accounts.map((acc) => {
+      const groupedBoards = currentAccounts.map((acc) => {
         return {
           account: acc,
-          boards: boards.filter((b) => b.account_id === acc.id || b.account_name === acc.account_name),
+          boards: currentBoards.filter((b) => b.account_id === acc.id || b.account_name === acc.account_name),
         };
       });
 
-      const orphanBoards = boards.filter(
-        (b) => !accounts.some((acc) => acc.id === b.account_id || acc.account_name === b.account_name)
+      const orphanBoards = currentBoards.filter(
+        (b) => !currentAccounts.some((acc) => acc.id === b.account_id || acc.account_name === b.account_name)
       );
 
       let contentHtml = '<div class="space-y-8">';
@@ -149,5 +260,145 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
     }
   }
 
-  loadBoards();
+  function populateAccountDropdown() {
+    const select = document.getElementById('board-account-select') as HTMLSelectElement | null;
+    if (!select) return;
+
+    const activeAccounts = currentAccounts.filter((a) => a.is_active);
+
+    if (activeAccounts.length === 0) {
+      select.innerHTML = '<option value="" disabled selected>No active accounts found. Please activate an account first.</option>';
+      return;
+    }
+
+    select.innerHTML =
+      '<option value="" disabled selected>Select an active Pinterest account...</option>' +
+      activeAccounts
+        .map((acc) => `<option value="${acc.id}">${escapeHtml(acc.account_name)}</option>`)
+        .join('');
+  }
+
+  function showSuccessBanner(message: string) {
+    const banner = document.getElementById('boards-success-banner');
+    const text = document.getElementById('boards-success-text');
+    if (banner && text) {
+      text.textContent = message;
+      banner.classList.remove('hidden');
+      setTimeout(() => {
+        banner.classList.add('hidden');
+      }, 5000);
+    }
+  }
+
+  function setupModalListeners() {
+    const openBtn = document.getElementById('open-add-board-modal');
+    const modal = document.getElementById('add-board-modal');
+    const closeBtn = document.getElementById('close-add-board-modal');
+    const cancelBtn = document.getElementById('cancel-add-board-modal');
+    const backdrop = document.getElementById('add-board-backdrop');
+    const form = document.getElementById('add-board-form') as HTMLFormElement | null;
+    const errorElem = document.getElementById('add-board-error');
+
+    function closeModal() {
+      modal?.classList.add('hidden');
+      modal?.classList.remove('flex');
+      errorElem?.classList.add('hidden');
+      form?.reset();
+    }
+
+    openBtn?.addEventListener('click', () => {
+      populateAccountDropdown();
+      modal?.classList.remove('hidden');
+      modal?.classList.add('flex');
+    });
+
+    closeBtn?.addEventListener('click', closeModal);
+    cancelBtn?.addEventListener('click', closeModal);
+    backdrop?.addEventListener('click', closeModal);
+
+    form?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorElem?.classList.add('hidden');
+
+      const accountId = (document.getElementById('board-account-select') as HTMLSelectElement).value;
+      const boardName = (document.getElementById('board-name-input') as HTMLInputElement).value.trim();
+      const boardId = (document.getElementById('board-id-input') as HTMLInputElement).value.trim();
+
+      if (!accountId) {
+        showError('Please select a target account.');
+        return;
+      }
+      if (!boardName) {
+        showError('Board name is required.');
+        return;
+      }
+      if (!boardId) {
+        showError('Pinterest Board ID is required.');
+        return;
+      }
+
+      // Check for duplicate board_name on the same account
+      const isDuplicate = currentBoards.some(
+        (b) => b.account_id === accountId && b.board_name.toLowerCase() === boardName.toLowerCase()
+      );
+
+      if (isDuplicate) {
+        showError(`A board named "${boardName}" is already registered for this account.`);
+        return;
+      }
+
+      setSubmitLoading(true);
+
+      const { data, error } = await createBoard({
+        account_id: accountId,
+        board_name: boardName,
+        board_id: boardId,
+      });
+
+      setSubmitLoading(false);
+
+      if (error) {
+        showError('Failed to create board mapping: ' + error);
+      } else {
+        closeModal();
+        showSuccessBanner(`Board "${boardName}" added successfully!`);
+        await loadBoards();
+      }
+    });
+
+    function showError(msg: string) {
+      if (errorElem) {
+        errorElem.textContent = msg;
+        errorElem.classList.remove('hidden');
+      }
+    }
+
+    function setSubmitLoading(loading: boolean) {
+      const submitBtn = document.getElementById('submit-add-board-modal') as HTMLButtonElement | null;
+      const text = document.getElementById('board-btn-text');
+      const spinner = document.getElementById('board-btn-spinner');
+
+      if (submitBtn) submitBtn.disabled = loading;
+      if (loading) {
+        text?.classList.add('hidden');
+        spinner?.classList.remove('hidden');
+      } else {
+        text?.classList.remove('hidden');
+        spinner?.classList.add('hidden');
+      }
+    }
+
+    // Keyboard navigation (Escape to close)
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && modal && !modal.classList.contains('hidden')) {
+        closeModal();
+      }
+    });
+
+    document.getElementById('dismiss-boards-banner')?.addEventListener('click', () => {
+      document.getElementById('boards-success-banner')?.classList.add('hidden');
+    });
+  }
+
+  init();
 </script>

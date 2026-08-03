@@ -89,8 +89,15 @@ import KPIStatCard from '../components/ui/KPIStatCard.astro';
 </Layout>
 
 <script>
+  import { requireAuth } from '../lib/auth';
   import { getDashboardKPIs, getPins, getLogs } from '../lib/supabase';
   import { renderStatusBadge, formatDate, formatTime, renderEmptyStateHTML, escapeHtml } from '../lib/ui-helpers';
+
+  async function init() {
+    const isAuth = await requireAuth();
+    if (!isAuth) return;
+    await loadDashboardData();
+  }
 
   async function loadDashboardData() {
     try {
@@ -268,5 +275,5 @@ import KPIStatCard from '../components/ui/KPIStatCard.astro';
     }
   }
 
-  loadDashboardData();
+  init();
 </script>

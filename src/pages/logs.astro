@@ -17,8 +17,15 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
 </Layout>
 
 <script>
+  import { requireAuth } from '../lib/auth';
   import { getLogs } from '../lib/supabase';
   import { renderStatusBadge, formatDate, renderEmptyStateHTML, escapeHtml } from '../lib/ui-helpers';
+
+  async function init() {
+    const isAuth = await requireAuth();
+    if (!isAuth) return;
+    await loadLogs();
+  }
 
   async function loadLogs() {
     const container = document.getElementById('logs-container');
@@ -104,5 +111,5 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
     }
   }
 
-  loadLogs();
+  init();
 </script>

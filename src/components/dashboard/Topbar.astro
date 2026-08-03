@@ -27,11 +27,11 @@ const { title = 'Dashboard' } = Astro.props;
   </div>
 
   <div class="flex items-center gap-3">
-    <!-- Read-Only Status Badge -->
+    <!-- System / Connection Status Badge -->
     {isSupabaseConfigured ? (
-      <div class="hidden sm:flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400" title="Connected to Supabase in Read-Only Mode">
+      <div class="hidden sm:flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400" title="Connected to Supabase with Auth & RLS Protection">
         <span class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-        Supabase Live (Read-Only)
+        Supabase Live (Authenticated Admin)
       </div>
     ) : (
       <div class="hidden sm:flex items-center gap-2 rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-600 dark:text-amber-400" title="Using Fallback Mock Data">
@@ -56,10 +56,27 @@ const { title = 'Dashboard' } = Astro.props;
         <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>
       </svg>
     </button>
+
+    <!-- Logout Action Button -->
+    <button
+      id="logout-btn"
+      class="flex h-9 items-center gap-2 rounded-lg border border-border bg-background px-3 text-xs font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-all"
+      aria-label="Sign out"
+      title="Sign out of Admin Session"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+        <polyline points="16 17 21 12 16 7"/>
+        <line x1="21" y1="12" x2="9" y2="12"/>
+      </svg>
+      <span class="hidden md:inline">Sign Out</span>
+    </button>
   </div>
 </header>
 
 <script>
+  import { signOut } from '../../lib/auth';
+
   // Dark mode toggle script
   const themeToggle = document.getElementById('theme-toggle');
   const lightIcon = document.getElementById('theme-toggle-light-icon');
@@ -108,5 +125,11 @@ const { title = 'Dashboard' } = Astro.props;
     if (e.key === 'Escape' && sidebar && !sidebar.classList.contains('-translate-x-full')) {
       closeDrawer();
     }
+  });
+
+  // Logout listener
+  const logoutBtn = document.getElementById('logout-btn');
+  logoutBtn?.addEventListener('click', async () => {
+    await signOut();
   });
 </script>

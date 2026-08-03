@@ -1,0 +1,155 @@
+---
+import '../styles/global.css';
+---
+
+<!DOCTYPE html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sign In | PinOrbit Admin</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <script is:inline>
+      const theme = (() => {
+        if (typeof localStorage !== 'undefined' && localStorage.getItem('theme')) {
+          return localStorage.getItem('theme');
+        }
+        return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      })();
+      if (theme === 'dark') {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    </script>
+  </head>
+  <body class="min-h-screen bg-background text-foreground flex items-center justify-center p-4">
+    <div class="w-full max-w-md space-y-8">
+      <!-- Logo & Heading -->
+      <div class="text-center space-y-3">
+        <div class="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary border border-primary/20 shadow-inner">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2a10 10 0 0 0-3.16 19.49c-.09-.82-.17-2.08.03-2.98l1.22-5.18s-.31-.63-.31-1.56c0-1.46.85-2.55 1.9-2.55.9 0 1.33.67 1.33 1.48 0 .9-.57 2.26-.87 3.51-.25 1.05.53 1.91 1.56 1.91 1.88 0 3.32-1.98 3.32-4.84 0-2.53-1.82-4.3-4.41-4.3-3.01 0-4.78 2.26-4.78 4.59 0 .91.35 1.88.79 2.41a.33.33 0 0 1 .08.31l-.29 1.22c-.05.21-.17.26-.39.16-1.45-.67-2.36-2.79-2.36-4.49 0-3.66 2.66-7.02 7.67-7.02 4.03 0 7.16 2.87 7.16 6.71 0 4.01-2.53 7.23-6.04 7.23-1.18 0-2.29-.61-2.67-1.33l-.73 2.77c-.26 1.02-.97 2.3-1.45 3.07A10 10 0 1 0 12 2Z"/>
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">PinOrbit Admin</h1>
+          <p class="mt-1.5 text-xs text-muted-foreground">Sign in to access your Pinterest automation command center</p>
+        </div>
+      </div>
+
+      <!-- Login Card -->
+      <div class="rounded-2xl border border-border bg-card p-6 shadow-xl sm:p-8 space-y-6">
+        <!-- Error Banner -->
+        <div id="error-banner" class="hidden rounded-xl border border-rose-500/30 bg-rose-500/10 p-3.5 text-xs text-rose-500 dark:text-rose-400 flex items-start gap-2.5">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          <span id="error-message">Invalid email or password.</span>
+        </div>
+
+        <form id="login-form" class="space-y-4">
+          <div class="space-y-1.5">
+            <label for="email" class="block text-xs font-semibold text-foreground">Email address</label>
+            <div class="relative">
+              <input
+                id="email"
+                type="email"
+                required
+                autocomplete="email"
+                placeholder="admin@pinorbit.internal"
+                class="w-full rounded-xl border border-border bg-background py-2.5 px-3.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all"
+              />
+            </div>
+          </div>
+
+          <div class="space-y-1.5">
+            <label for="password" class="block text-xs font-semibold text-foreground">Password</label>
+            <div class="relative">
+              <input
+                id="password"
+                type="password"
+                required
+                autocomplete="current-password"
+                placeholder="••••••••••••"
+                class="w-full rounded-xl border border-border bg-background py-2.5 px-3.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all"
+              />
+            </div>
+          </div>
+
+          <button
+            id="login-submit"
+            type="submit"
+            class="w-full flex items-center justify-center rounded-xl bg-primary py-2.5 text-xs font-semibold text-primary-foreground shadow-md hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+          >
+            <span id="submit-text">Sign In</span>
+            <svg id="submit-spinner" class="hidden h-4 w-4 animate-spin text-primary-foreground" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          </button>
+        </form>
+      </div>
+
+      <div class="text-center text-[11px] text-muted-foreground">
+        PinOrbit internal admin portal • Secure Auth + Supabase RLS
+      </div>
+    </div>
+
+    <script>
+      import { signIn, getCurrentSession } from '../lib/auth';
+
+      const form = document.getElementById('login-form') as HTMLFormElement | null;
+      const emailInput = document.getElementById('email') as HTMLInputElement | null;
+      const passwordInput = document.getElementById('password') as HTMLInputElement | null;
+      const submitBtn = document.getElementById('login-submit') as HTMLButtonElement | null;
+      const submitText = document.getElementById('submit-text');
+      const submitSpinner = document.getElementById('submit-spinner');
+      const errorBanner = document.getElementById('error-banner');
+      const errorMessage = document.getElementById('error-message');
+
+      // Check if user is already logged in
+      async function checkExistingAuth() {
+        const session = await getCurrentSession();
+        if (session) {
+          const params = new URLSearchParams(window.location.search);
+          const redirect = params.get('redirect') || '/dashboard';
+          window.location.href = decodeURIComponent(redirect);
+        }
+      }
+
+      checkExistingAuth();
+
+      form?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        errorBanner?.classList.add('hidden');
+
+        const email = emailInput?.value.trim() || '';
+        const password = passwordInput?.value || '';
+
+        if (!email || !password) return;
+
+        // Set loading state
+        if (submitBtn) submitBtn.disabled = true;
+        submitText?.classList.add('hidden');
+        submitSpinner?.classList.remove('hidden');
+
+        try {
+          await signIn(email, password);
+          const params = new URLSearchParams(window.location.search);
+          const redirect = params.get('redirect') || '/dashboard';
+          window.location.href = decodeURIComponent(redirect);
+        } catch (err: any) {
+          if (errorBanner && errorMessage) {
+            errorMessage.textContent = err.message || 'Authentication failed. Please verify your credentials.';
+            errorBanner.classList.remove('hidden');
+          }
+        } finally {
+          if (submitBtn) submitBtn.disabled = false;
+          submitText?.classList.remove('hidden');
+          submitSpinner?.classList.add('hidden');
+        }
+      });
+    </script>
+  </body>
+</html>

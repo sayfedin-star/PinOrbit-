@@ -71,6 +71,7 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
 </Layout>
 
 <script>
+  import { requireAuth } from '../lib/auth';
   import { getPins } from '../lib/supabase';
   import { renderStatusBadge, formatDate, renderEmptyStateHTML, escapeHtml } from '../lib/ui-helpers';
   import type { Pin } from '../lib/types';
@@ -78,6 +79,12 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
   let allPins: Pin[] = [];
   let currentFilter = 'all';
   let currentSearch = '';
+
+  async function init() {
+    const isAuth = await requireAuth();
+    if (!isAuth) return;
+    await loadPins();
+  }
 
   async function loadPins() {
     const container = document.getElementById('pins-container');
@@ -275,5 +282,5 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
     });
   }
 
-  loadPins();
+  init();
 </script>

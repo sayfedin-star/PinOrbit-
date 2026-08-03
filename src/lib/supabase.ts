@@ -15,7 +15,7 @@ export const supabase = isSupabaseConfigured
   : null;
 
 // Mock Data used only as preview fallback when Supabase env is not configured
-const mockAccounts: Account[] = [
+let mockAccounts: Account[] = [
   {
     id: 'acc-1',
     account_name: 'HealthyBites_US',
@@ -45,7 +45,7 @@ const mockAccounts: Account[] = [
   },
 ];
 
-const mockBoards: Board[] = [
+let mockBoards: Board[] = [
   {
     id: 'board-1',
     account_id: 'acc-1',
@@ -72,7 +72,7 @@ const mockBoards: Board[] = [
   },
 ];
 
-const mockPins: Pin[] = [
+let mockPins: Pin[] = [
   {
     id: 'pin-1',
     account_id: 'acc-1',
@@ -131,7 +131,7 @@ const mockPins: Pin[] = [
   },
 ];
 
-const mockLogs: Log[] = [
+let mockLogs: Log[] = [
   {
     id: 'log-1',
     pin_id: 'pin-1',
@@ -173,7 +173,7 @@ interface RawLog extends Log {
   pins?: { title: string } | null;
 }
 
-// 1. Fetch Accounts (Read-only)
+// 1. Fetch Accounts
 export async function getAccounts(): Promise<Account[]> {
   if (!supabase) return mockAccounts;
   try {
@@ -183,7 +183,6 @@ export async function getAccounts(): Promise<Account[]> {
       .order('created_at', { ascending: false });
 
     if (error) {
-      // If join fails due to schema, fallback to basic select
       const { data: basicData, error: basicErr } = await supabase
         .from('accounts')
         .select('*')
@@ -207,7 +206,7 @@ export async function getAccounts(): Promise<Account[]> {
   }
 }
 
-// 2. Fetch Boards (Read-only)
+// 2. Fetch Boards
 export async function getBoards(): Promise<Board[]> {
   if (!supabase) return mockBoards;
   try {
@@ -237,7 +236,7 @@ export async function getBoards(): Promise<Board[]> {
   }
 }
 
-// 3. Fetch Pins (Read-only)
+// 3. Fetch Pins
 export async function getPins(statusFilter?: string): Promise<Pin[]> {
   if (!supabase) {
     if (!statusFilter || statusFilter === 'all') return mockPins;
@@ -276,7 +275,7 @@ export async function getPins(statusFilter?: string): Promise<Pin[]> {
   }
 }
 
-// 4. Fetch Logs (Read-only)
+// 4. Fetch Logs
 export async function getLogs(limit = 50): Promise<Log[]> {
   if (!supabase) return mockLogs.slice(0, limit);
   try {
@@ -309,7 +308,7 @@ export async function getLogs(limit = 50): Promise<Log[]> {
   }
 }
 
-// 5. Fetch Dashboard KPIs (Read-only)
+// 5. Fetch Dashboard KPIs
 export async function getDashboardKPIs(): Promise<DashboardKPIs> {
   const [accounts, pins, logs] = await Promise.all([
     getAccounts(),
@@ -325,4 +324,133 @@ export async function getDashboardKPIs(): Promise<DashboardKPIs> {
     failedPins: pins.filter((p) => p.status === 'failed').length,
     totalLogs: logs.length,
   };
+}
+
+// 6. Admin Mutations
+
+export async function createAccount(payload: {
+  account_name: string;
+  webhook_url: string;
+  max_pins_per_day: number;
+  is_active?: boolean;
+}): Promise<{ data: Account | null; error: string | null }> {
+  if (!supabase) {
+    const newAcc: Account = {
+      id: 'acc-' + Date.now(),
+      account_name: payload.account_name,
+      webhook_url: payload.webhook_url,
+      max_pins_per_day: payload.max_pins_per_day,
+      is_active: payload.is_active ?? true,
+      created_at: new Date().toISOString(),
+      boards_count: 0,
+    };
+    mockAccounts.unshift(newAcc);
+    return { data: newAcc, error: null };
+  }
+
+  const { data, error } = await supabase
+    .from('accounts')
+    .insert({
+      account_name: payload.account_name,
+      webhook_url: payload.webhook_url,
+      max_pins_per_day: payload.max_pins_per_day,
+      is_active: payload.is_active ?? true,
+    })
+    .select('*')
+    .single();
+
+  if (error) {
+    return { data: null, error: error.message };
+  }
+  return { data: data as Account, error: null };
+}
+
+export async function updateAccountDailyLimit(
+  id: string,
+  max_pins_per_day: number
+): Promise<{ data: Account | null; error: string | null }> {
+  if (!supabase) {
+    const target = mockAccounts.find((a) => a.id === id);
+    if (target) {
+      target.max_pins_per_day = max_pins_per_day;
+      return { data: target, error: null };
+    }
+    return { data: null, error: 'Account not found' };
+  }
+
+  const { data, error } = await supabase
+    .from('accounts')
+    .update({ max_pins_per_day })
+    .eq('id', id)
+    .select('*')
+    .single();
+
+  if (error) {
+    return { data: null, error: error.message };
+  }
+  return { data: data as Account, error: null };
+}
+
+export async function toggleAccountActive(
+  id: string,
+  is_active: boolean
+): Promise<{ data: Account | null; error: string | null }> {
+  if (!supabase) {
+    const target = mockAccounts.find((a) => a.id === id);
+    if (target) {
+      target.is_active = is_active;
+      return { data: target, error: null };
+    }
+    return { data: null, error: 'Account not found' };
+  }
+
+  const { data, error } = await supabase
+    .from('accounts')
+    .update({ is_active })
+    .eq('id', id)
+    .select('*')
+    .single();
+
+  if (error) {
+    return { data: null, error: error.message };
+  }
+  return { data: data as Account, error: null };
+}
+
+export async function createBoard(payload: {
+  account_id: string;
+  board_name: string;
+  board_id: string;
+}): Promise<{ data: Board | null; error: string | null }> {
+  if (!supabase) {
+    const acc = mockAccounts.find((a) => a.id === payload.account_id);
+    const newBoard: Board = {
+      id: 'board-' + Date.now(),
+      account_id: payload.account_id,
+      board_name: payload.board_name,
+      board_id: payload.board_id,
+      created_at: new Date().toISOString(),
+      account_name: acc?.account_name || 'Account',
+    };
+    mockBoards.unshift(newBoard);
+    if (acc) {
+      acc.boards_count = (acc.boards_count || 0) + 1;
+    }
+    return { data: newBoard, error: null };
+  }
+
+  const { data, error } = await supabase
+    .from('boards')
+    .insert({
+      account_id: payload.account_id,
+      board_name: payload.board_name,
+      board_id: payload.board_id,
+    })
+    .select('*')
+    .single();
+
+  if (error) {
+    return { data: null, error: error.message };
+  }
+  return { data: data as Board, error: null };
 }
