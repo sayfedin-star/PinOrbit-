@@ -991,6 +991,8 @@ export async function getAccountDetails(accountId: string): Promise<Account | nu
 }
 
 // 18. Fetch Account Pin Stats (Derived metrics)
+// ⚡ Bolt Optimization: Parallelize pins count query and account max_pins_per_day query using Promise.all()
+// Impact: Reduces sequential network latency by ~50% (from 2 Sequential DB Roundtrips -> 1 Parallel Batch)
 export async function getAccountPinStats(accountId: string): Promise<AccountPinStats> {
   if (!supabase) {
     const accPins = mockPins.filter((p) => p.account_id === accountId);
@@ -1013,25 +1015,19 @@ export async function getAccountPinStats(accountId: string): Promise<AccountPinS
   }
 
   try {
-    const { data: pins, error } = await supabase
-      .from('pins')
-      .select('status, posted_at')
-      .eq('account_id', accountId);
+    // ⚡ Execute both queries in parallel to eliminate sequential network waterfall
+    const [pinsResult, accResult] = await Promise.all([
+      supabase.from('pins').select('status, posted_at').eq('account_id', accountId),
+      supabase.from('accounts').select('max_pins_per_day').eq('id', accountId).maybeSingle(),
+    ]);
 
-    if (error || !pins) {
-      return { total: 0, pending: 0, posted: 0, failed: 0, remainingToday: 0 };
-    }
+    const pins = pinsResult.data || [];
+    const acc = accResult.data;
 
     const total = pins.length;
     const pending = pins.filter((p) => p.status === 'pending').length;
     const posted = pins.filter((p) => p.status === 'posted').length;
     const failed = pins.filter((p) => p.status === 'failed').length;
-
-    const { data: acc } = await supabase
-      .from('accounts')
-      .select('max_pins_per_day')
-      .eq('id', accountId)
-      .single();
 
     const maxDaily = acc ? acc.max_pins_per_day : 20;
     const todayStr = new Date().toISOString().slice(0, 10);
