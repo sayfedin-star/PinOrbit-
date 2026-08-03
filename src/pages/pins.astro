@@ -140,6 +140,11 @@ const pins = await getPins('all');
                 </td>
               </tr>
             ))}
+            <tr id="no-matching-pins" class="hidden">
+              <td colspan="6" class="p-8 text-center text-xs text-muted-foreground">
+                No pins match your current search query or status filter.
+              </td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -152,11 +157,13 @@ const pins = await getPins('all');
   const filterBtns = document.querySelectorAll<HTMLButtonElement>('.filter-btn');
   const searchInput = document.getElementById('pin-search') as HTMLInputElement | null;
   const rows = document.querySelectorAll<HTMLTableRowElement>('.pin-row');
+  const noMatchRow = document.getElementById('no-matching-pins');
 
   let currentFilter = 'all';
   let currentSearch = '';
 
   function applyFilters() {
+    let matchCount = 0;
     rows.forEach((row) => {
       const status = row.getAttribute('data-status') || '';
       const title = row.getAttribute('data-title') || '';
@@ -172,10 +179,19 @@ const pins = await getPins('all');
 
       if (matchesStatus && matchesSearch) {
         row.style.display = '';
+        matchCount++;
       } else {
         row.style.display = 'none';
       }
     });
+
+    if (noMatchRow) {
+      if (matchCount === 0 && rows.length > 0) {
+        noMatchRow.classList.remove('hidden');
+      } else {
+        noMatchRow.classList.add('hidden');
+      }
+    }
   }
 
   filterBtns.forEach((btn) => {

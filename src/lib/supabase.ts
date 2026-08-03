@@ -152,6 +152,23 @@ const mockLogs: Log[] = [
   },
 ];
 
+interface RawAccount extends Account {
+  boards?: { id: string }[];
+}
+
+interface RawBoard extends Board {
+  accounts?: { account_name: string } | null;
+}
+
+interface RawPin extends Pin {
+  accounts?: { account_name: string } | null;
+}
+
+interface RawLog extends Log {
+  accounts?: { account_name: string } | null;
+  pins?: { title: string } | null;
+}
+
 // Helper Data Fetchers (Read-only)
 export async function getAccounts(): Promise<Account[]> {
   if (!supabase) return mockAccounts;
@@ -162,7 +179,7 @@ export async function getAccounts(): Promise<Account[]> {
       .order('created_at', { ascending: false });
 
     if (error || !data) throw error;
-    return data.map((acc: any) => ({
+    return (data as RawAccount[]).map((acc) => ({
       ...acc,
       boards_count: acc.boards ? acc.boards.length : 0,
     }));
@@ -181,7 +198,7 @@ export async function getBoards(): Promise<Board[]> {
       .order('created_at', { ascending: false });
 
     if (error || !data) throw error;
-    return data.map((b: any) => ({
+    return (data as RawBoard[]).map((b) => ({
       ...b,
       account_name: b.accounts?.account_name || 'Unknown',
     }));
@@ -205,7 +222,7 @@ export async function getPins(statusFilter?: string): Promise<Pin[]> {
 
     const { data, error } = await query;
     if (error || !data) throw error;
-    return data.map((p: any) => ({
+    return (data as RawPin[]).map((p) => ({
       ...p,
       account_name: p.accounts?.account_name || 'Unknown',
     }));
@@ -226,7 +243,7 @@ export async function getLogs(limit = 20): Promise<Log[]> {
       .limit(limit);
 
     if (error || !data) throw error;
-    return data.map((l: any) => ({
+    return (data as RawLog[]).map((l) => ({
       ...l,
       account_name: l.accounts?.account_name || 'Unknown',
       pin_title: l.pins?.title || 'Unknown Pin',

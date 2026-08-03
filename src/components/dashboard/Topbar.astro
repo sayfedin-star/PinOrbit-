@@ -94,4 +94,10 @@ const { title = 'Dashboard' } = Astro.props;
   openBtn?.addEventListener('click', openDrawer);
   closeBtn?.addEventListener('click', closeDrawer);
   backdrop?.addEventListener('click', closeDrawer);
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && sidebar && !sidebar.classList.contains('-translate-x-full')) {
+      closeDrawer();
+    }
+  });
 </script>
