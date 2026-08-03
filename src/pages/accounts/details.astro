@@ -14,6 +14,17 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
     <span class="text-xs text-muted-foreground font-mono">Account ID: <span id="display-account-id">---</span></span>
   </div>
 
+  <!-- Global Feedback Banner -->
+  <div id="account-feedback-banner" class="hidden mb-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3.5 text-xs text-emerald-600 dark:text-emerald-400 flex items-center justify-between shadow-sm">
+    <div class="flex items-center gap-2.5">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+      </svg>
+      <span id="account-feedback-text">Account updated successfully.</span>
+    </div>
+    <button id="close-account-feedback" class="font-bold opacity-70 hover:opacity-100">&times;</button>
+  </div>
+
   <!-- Header Control Card -->
   <div id="account-header-container" class="mb-6 rounded-2xl border border-border bg-card p-6 shadow-sm">
     <div class="animate-pulse flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -548,16 +559,59 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
     `;
   }
 
+  function showFeedbackBanner(message: string, type: 'success' | 'error' = 'success') {
+    const banner = document.getElementById('account-feedback-banner');
+    const text = document.getElementById('account-feedback-text');
+    if (!banner || !text) return;
+
+    text.textContent = message;
+    if (type === 'error') {
+      banner.className = 'mb-4 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3.5 text-xs text-rose-500 flex items-center justify-between shadow-sm';
+    } else {
+      banner.className = 'mb-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3.5 text-xs text-emerald-600 dark:text-emerald-400 flex items-center justify-between shadow-sm';
+    }
+    banner.classList.remove('hidden');
+
+    setTimeout(() => {
+      banner.classList.add('hidden');
+    }, 5000);
+  }
+
+  document.getElementById('close-account-feedback')?.addEventListener('click', () => {
+    document.getElementById('account-feedback-banner')?.classList.add('hidden');
+  });
+
+  // Unified Single Source of Truth UI State Sync
+  function refreshAccountUI(updatedPayload?: Partial<Account>) {
+    if (updatedPayload && currentAccount) {
+      Object.assign(currentAccount, updatedPayload);
+    }
+
+    if (currentAccount) {
+      renderHeader(currentAccount);
+      if (currentStats) {
+        renderKPIs(currentStats, currentAccount);
+      }
+      renderScheduling(currentAccount);
+    }
+  }
+
   async function handleToggleActive() {
     if (!currentAccount) return;
     try {
       const newStatus = !currentAccount.is_active;
       const res = await toggleAccountActive(currentAccount.id, newStatus);
-      if (res.success) {
-        await loadAllData();
+      if (res.data || res.success) {
+        const updated = res.data || { ...currentAccount, is_active: newStatus };
+        refreshAccountUI(updated);
+        showFeedbackBanner(`Account status updated to ${newStatus ? 'Active' : 'Inactive'}.`, 'success');
+        // Authoritative background sync
+        loadAllData();
+      } else if (res.error) {
+        showFeedbackBanner(res.error, 'error');
       }
-    } catch (err) {
-      console.error('Failed to toggle active status:', err);
+    } catch (err: any) {
+      showFeedbackBanner(err.message || 'Failed to toggle account status', 'error');
     }
   }
 
@@ -603,6 +657,9 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
       const end = (document.getElementById('sched-input-end') as HTMLInputElement).value;
       const startedAt = (document.getElementById('sched-input-started-at') as HTMLInputElement).value;
 
+      const errorBox = document.getElementById('sched-modal-error');
+      if (errorBox) errorBox.classList.add('hidden');
+
       const res = await updateAccountScheduling(currentAccount.id, {
         timezone: tz,
         posting_window_start: start || null,
@@ -610,9 +667,24 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
         pinning_started_at: startedAt ? new Date(startedAt).toISOString() : null,
       });
 
-      if (res.success) {
+      if (res.data || res.success) {
+        const updated = res.data ? { ...currentAccount, ...res.data } : {
+          ...currentAccount,
+          timezone: tz,
+          posting_window_start: start || null,
+          posting_window_end: end || null,
+          pinning_started_at: startedAt ? new Date(startedAt).toISOString() : null,
+        };
+        refreshAccountUI(updated);
         closeSchedModal();
-        await loadAllData();
+        showFeedbackBanner('Posting schedule updated successfully.', 'success');
+        // Authoritative background sync
+        loadAllData();
+      } else if (res.error) {
+        if (errorBox) {
+          errorBox.textContent = res.error;
+          errorBox.classList.remove('hidden');
+        }
       }
     });
 
@@ -628,9 +700,15 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
       if (isNaN(val) || val < 1) return;
 
       const res = await updateAccountDailyLimit(currentAccount.id, val);
-      if (res.success) {
+      if (res.data || res.success) {
+        const updated = res.data || { ...currentAccount, max_pins_per_day: val };
+        refreshAccountUI(updated);
         closeLimitModal();
-        await loadAllData();
+        showFeedbackBanner(`Account daily limit updated to ${val} pins/day.`, 'success');
+        // Authoritative background sync
+        loadAllData();
+      } else if (res.error) {
+        alert('Failed to update daily limit: ' + res.error);
       }
     });
   }

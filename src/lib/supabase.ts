@@ -540,14 +540,14 @@ export async function createAccount(payload: {
 export async function updateAccountDailyLimit(
   id: string,
   max_pins_per_day: number
-): Promise<{ data: Account | null; error: string | null }> {
+): Promise<{ data: Account | null; error: string | null; success: boolean }> {
   if (!supabase) {
     const target = mockAccounts.find((a) => a.id === id);
     if (target) {
       target.max_pins_per_day = max_pins_per_day;
-      return { data: target, error: null };
+      return { data: target, error: null, success: true };
     }
-    return { data: null, error: 'Account not found' };
+    return { data: null, error: 'Account not found', success: false };
   }
 
   const { data, error } = await supabase
@@ -558,22 +558,22 @@ export async function updateAccountDailyLimit(
     .single();
 
   if (error) {
-    return { data: null, error: error.message };
+    return { data: null, error: error.message, success: false };
   }
-  return { data: data as Account, error: null };
+  return { data: data as Account, error: null, success: true };
 }
 
 export async function toggleAccountActive(
   id: string,
   is_active: boolean
-): Promise<{ data: Account | null; error: string | null }> {
+): Promise<{ data: Account | null; error: string | null; success: boolean }> {
   if (!supabase) {
     const target = mockAccounts.find((a) => a.id === id);
     if (target) {
       target.is_active = is_active;
-      return { data: target, error: null };
+      return { data: target, error: null, success: true };
     }
-    return { data: null, error: 'Account not found' };
+    return { data: null, error: 'Account not found', success: false };
   }
 
   const { data, error } = await supabase
@@ -584,9 +584,9 @@ export async function toggleAccountActive(
     .single();
 
   if (error) {
-    return { data: null, error: error.message };
+    return { data: null, error: error.message, success: false };
   }
-  return { data: data as Account, error: null };
+  return { data: data as Account, error: null, success: true };
 }
 
 export async function createBoard(payload: {
@@ -1124,7 +1124,7 @@ export async function updateAccountScheduling(
     timezone?: string;
     pinning_started_at?: string | null;
   }
-): Promise<{ success: boolean; error: string | null }> {
+): Promise<{ data: Partial<Account> | null; error: string | null; success: boolean }> {
   if (!supabase) {
     const acc = mockAccounts.find((a) => a.id === accountId);
     if (acc) {
@@ -1133,11 +1133,11 @@ export async function updateAccountScheduling(
       if (data.timezone !== undefined) acc.timezone = data.timezone;
       if (data.pinning_started_at !== undefined) acc.pinning_started_at = data.pinning_started_at;
     }
-    return { success: true, error: null };
+    return { data: acc || data, error: null, success: true };
   }
 
   try {
-    const { error } = await supabase
+    const { data: updated, error } = await supabase
       .from('accounts')
       .update({
         ...(data.posting_window_start !== undefined && { posting_window_start: data.posting_window_start }),
@@ -1145,12 +1145,14 @@ export async function updateAccountScheduling(
         ...(data.timezone !== undefined && { timezone: data.timezone }),
         ...(data.pinning_started_at !== undefined && { pinning_started_at: data.pinning_started_at }),
       })
-      .eq('id', accountId);
+      .eq('id', accountId)
+      .select('*')
+      .single();
 
-    if (error) return { success: false, error: error.message };
-    return { success: true, error: null };
+    if (error) return { data: null, error: error.message, success: false };
+    return { data: updated as Account, error: null, success: true };
   } catch (err: any) {
-    return { success: false, error: err.message || 'Failed to update account scheduling' };
+    return { data: null, error: err.message || 'Failed to update account scheduling', success: false };
   }
 }
 
