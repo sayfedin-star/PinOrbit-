@@ -1,0 +1,756 @@
+---
+import Layout from '../layouts/Layout.astro';
+import SectionHeader from '../components/ui/SectionHeader.astro';
+---
+
+<Layout title="Import Scheduled Pins" description="Per-account scheduled recipe pins importer from CSV files or Google Sheets.">
+  <SectionHeader
+    title="Scheduled Posts Importer"
+    description="Batch import recipe pins from CSV uploads or Google Sheets for staged validation before publishing."
+  />
+
+  <!-- Main Importer Workflow Container -->
+  <div class="space-y-6">
+
+    <!-- Global Feedback Banners -->
+    <div id="import-success-banner" class="hidden rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-xs text-emerald-600 dark:text-emerald-400 flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+        </svg>
+        <span id="import-success-text">Import completed successfully!</span>
+      </div>
+      <a href="/pins" class="font-bold underline hover:no-underline ml-2">View Pins Queue &rarr;</a>
+    </div>
+
+    <div id="import-error-banner" class="hidden rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-xs text-rose-500 flex items-start gap-2.5">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <span id="import-error-text">An error occurred during import processing.</span>
+    </div>
+
+    <!-- Step 1: Target Account Selection -->
+    <div class="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-4">
+      <div class="flex items-center gap-3">
+        <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold text-xs">
+          1
+        </div>
+        <div>
+          <h3 class="text-sm font-bold text-foreground">Select Target Pinterest Account</h3>
+          <p class="text-xs text-muted-foreground">All imported pins will belong to this account and validate against its boards.</p>
+        </div>
+      </div>
+
+      <div class="max-w-xl">
+        <select
+          id="target-account-select"
+          class="w-full rounded-xl border border-border bg-background py-2.5 px-3.5 text-xs font-semibold text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+        >
+          <option value="" disabled selected>Loading Pinterest accounts...</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Step 2: Choose Source & Input -->
+    <div class="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-5">
+      <div class="flex items-center gap-3">
+        <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold text-xs">
+          2
+        </div>
+        <div>
+          <h3 class="text-sm font-bold text-foreground">Choose Input Source</h3>
+          <p class="text-xs text-muted-foreground">Upload a local .csv file or provide a public Google Sheet link.</p>
+        </div>
+      </div>
+
+      <!-- Source Toggle Tabs -->
+      <div class="inline-flex rounded-xl border border-border bg-muted p-1 text-xs font-medium">
+        <button
+          id="tab-csv"
+          type="button"
+          class="rounded-lg px-4 py-2 transition-all bg-background text-foreground font-semibold shadow-sm"
+        >
+          CSV File Upload
+        </button>
+        <button
+          id="tab-gsheet"
+          type="button"
+          class="rounded-lg px-4 py-2 transition-all text-muted-foreground hover:text-foreground"
+        >
+          Google Sheet Link
+        </button>
+      </div>
+
+      <!-- Tab Content 1: CSV Upload -->
+      <div id="content-csv" class="space-y-3">
+        <div
+          id="drop-zone"
+          class="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-border bg-background/50 p-8 text-center transition-all hover:border-primary/50 cursor-pointer"
+        >
+          <div class="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary mb-3">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+          </div>
+          <p class="text-xs font-semibold text-foreground mb-1">Click to browse or drag and drop a CSV file</p>
+          <p class="text-[11px] text-muted-foreground">Expected headers: title, image_url, board_name, description (opt), link (opt), scheduled_for (opt)</p>
+          <input id="csv-file-input" type="file" accept=".csv,text/csv" class="hidden" />
+        </div>
+        <div id="selected-file-badge" class="hidden items-center justify-between rounded-xl border border-border bg-muted/40 px-4 py-2.5 text-xs">
+          <span id="selected-file-name" class="font-medium text-foreground truncate max-w-md"></span>
+          <button id="clear-selected-file" class="text-muted-foreground hover:text-rose-500 font-semibold">Remove</button>
+        </div>
+      </div>
+
+      <!-- Tab Content 2: Google Sheet Link -->
+      <div id="content-gsheet" class="hidden space-y-3">
+        <div class="space-y-1.5">
+          <label for="gsheet-url-input" class="block text-xs font-semibold text-foreground">Google Sheet Share or Published CSV URL *</label>
+          <input
+            id="gsheet-url-input"
+            type="url"
+            placeholder="https://docs.google.com/spreadsheets/d/1ABC.../edit?gid=0"
+            class="w-full rounded-xl border border-border bg-background py-2.5 px-3.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+          <p class="text-[11px] text-muted-foreground">
+            Must be publicly accessible. Set share permissions to "Anyone with the link can view" or Publish to Web as CSV.
+          </p>
+        </div>
+      </div>
+
+      <!-- Process & Parse Button -->
+      <div class="pt-2">
+        <button
+          id="btn-parse-source"
+          type="button"
+          class="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-xs font-semibold text-primary-foreground shadow hover:bg-primary/90 disabled:opacity-50"
+        >
+          <span id="parse-btn-text">Parse & Validate Input</span>
+          <svg id="parse-btn-spinner" class="hidden h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Step 3: Staged Validation & Preview Section -->
+    <div id="preview-section" class="hidden rounded-2xl border border-border bg-card p-6 shadow-sm space-y-6">
+      <div class="flex items-center justify-between border-b border-border pb-4">
+        <div class="flex items-center gap-3">
+          <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold text-xs">
+            3
+          </div>
+          <div>
+            <h3 class="text-sm font-bold text-foreground">Staged Row Validation & Preview</h3>
+            <p class="text-xs text-muted-foreground">Review normalized rows before committing to the pending pins queue.</p>
+          </div>
+        </div>
+
+        <button
+          id="btn-commit-import"
+          type="button"
+          disabled
+          class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-semibold text-white shadow hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+        >
+          <span id="commit-btn-text">Import 0 Valid Rows</span>
+          <svg id="commit-btn-spinner" class="hidden h-4 w-4 animate-spin text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Summary KPI Metrics Cards -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div class="rounded-xl border border-border bg-background p-3.5">
+          <span class="text-xs text-muted-foreground font-medium">Total Parsed</span>
+          <p id="kpi-total-rows" class="text-xl font-bold text-foreground mt-0.5">0</p>
+        </div>
+        <div class="rounded-xl border border-border bg-background p-3.5">
+          <span class="text-xs text-muted-foreground font-medium">Valid Rows</span>
+          <p id="kpi-valid-rows" class="text-xl font-bold text-emerald-500 mt-0.5">0</p>
+        </div>
+        <div class="rounded-xl border border-border bg-background p-3.5">
+          <span class="text-xs text-muted-foreground font-medium">Invalid Rows</span>
+          <p id="kpi-invalid-rows" class="text-xl font-bold text-rose-500 mt-0.5">0</p>
+        </div>
+        <div class="rounded-xl border border-border bg-background p-3.5">
+          <span class="text-xs text-muted-foreground font-medium">Ready to Commit</span>
+          <p id="kpi-ready-rows" class="text-xl font-bold text-primary mt-0.5">0</p>
+        </div>
+      </div>
+
+      <!-- Preview Table (First 20 Rows) -->
+      <div class="overflow-hidden rounded-xl border border-border bg-background shadow-sm">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm">
+            <thead class="border-b border-border bg-muted/50 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <tr>
+                <th class="px-4 py-3">Row #</th>
+                <th class="px-4 py-3">Title & Image</th>
+                <th class="px-4 py-3">Target Board</th>
+                <th class="px-4 py-3">Scheduled For</th>
+                <th class="px-4 py-3">Validation Status</th>
+              </tr>
+            </thead>
+            <tbody id="preview-table-body" class="divide-y divide-border text-xs">
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</Layout>
+
+<script>
+  import { requireAuth } from '../lib/auth';
+  import { getAccounts, getBoardsForAccount, bulkInsertPins } from '../lib/supabase';
+  import { formatDate, escapeHtml } from '../lib/ui-helpers';
+  import type { Account, Board, Pin } from '../lib/types';
+
+  interface ParsedImportRow {
+    rowNum: number;
+    rawTitle: string;
+    rawImage: string;
+    rawBoard: string;
+    rawDesc: string;
+    rawLink: string;
+    rawScheduled: string;
+    isValid: boolean;
+    errors: string[];
+    normalizedPin?: Partial<Pin>;
+  }
+
+  let accounts: Account[] = [];
+  let selectedAccount: Account | null = null;
+  let accountBoards: Board[] = [];
+
+  let activeSourceType: 'file' | 'url' = 'file';
+  let loadedFile: File | null = null;
+
+  let parsedRows: ParsedImportRow[] = [];
+  let validPinsToCommit: Partial<Pin>[] = [];
+
+  async function init() {
+    const isAuth = await requireAuth();
+    if (!isAuth) return;
+    setupSourceTabs();
+    setupFileInput();
+    await loadAccounts();
+  }
+
+  async function loadAccounts() {
+    const select = document.getElementById('target-account-select') as HTMLSelectElement | null;
+    if (!select) return;
+
+    accounts = await getAccounts();
+    const activeAccounts = accounts.filter((a) => a.is_active);
+
+    if (activeAccounts.length === 0) {
+      select.innerHTML = '<option value="" disabled selected>No active accounts found. Please activate an account first.</option>';
+      return;
+    }
+
+    select.innerHTML =
+      '<option value="" disabled selected>Select an active Pinterest account...</option>' +
+      activeAccounts
+        .map((a) => `<option value="${a.id}">${escapeHtml(a.account_name)} (${a.boards_count ?? 0} boards)</option>`)
+        .join('');
+
+    select.addEventListener('change', async (e) => {
+      const id = (e.target as HTMLSelectElement).value;
+      selectedAccount = accounts.find((a) => a.id === id) || null;
+      if (selectedAccount) {
+        accountBoards = await getBoardsForAccount(selectedAccount.id);
+      }
+    });
+  }
+
+  function setupSourceTabs() {
+    const tabCsv = document.getElementById('tab-csv');
+    const tabGsheet = document.getElementById('tab-gsheet');
+    const contentCsv = document.getElementById('content-csv');
+    const contentGsheet = document.getElementById('content-gsheet');
+
+    tabCsv?.addEventListener('click', () => {
+      activeSourceType = 'file';
+      tabCsv.classList.add('bg-background', 'text-foreground', 'font-semibold', 'shadow-sm');
+      tabCsv.classList.remove('text-muted-foreground');
+      tabGsheet?.classList.remove('bg-background', 'text-foreground', 'font-semibold', 'shadow-sm');
+      tabGsheet?.classList.add('text-muted-foreground');
+
+      contentCsv?.classList.remove('hidden');
+      contentGsheet?.classList.add('hidden');
+    });
+
+    tabGsheet?.addEventListener('click', () => {
+      activeSourceType = 'url';
+      tabGsheet.classList.add('bg-background', 'text-foreground', 'font-semibold', 'shadow-sm');
+      tabGsheet.classList.remove('text-muted-foreground');
+      tabCsv?.classList.remove('bg-background', 'text-foreground', 'font-semibold', 'shadow-sm');
+      tabCsv?.classList.add('text-muted-foreground');
+
+      contentGsheet?.classList.remove('hidden');
+      contentCsv?.classList.add('hidden');
+    });
+  }
+
+  function setupFileInput() {
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('csv-file-input') as HTMLInputElement | null;
+    const fileBadge = document.getElementById('selected-file-badge');
+    const fileNameSpan = document.getElementById('selected-file-name');
+    const clearFileBtn = document.getElementById('clear-selected-file');
+    const parseBtn = document.getElementById('btn-parse-source');
+
+    dropZone?.addEventListener('click', () => fileInput?.click());
+
+    dropZone?.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('border-primary');
+    });
+
+    dropZone?.addEventListener('dragleave', () => {
+      dropZone.classList.remove('border-primary');
+    });
+
+    dropZone?.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('border-primary');
+      if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+        handleFileSelected(e.dataTransfer.files[0]);
+      }
+    });
+
+    fileInput?.addEventListener('change', () => {
+      if (fileInput.files && fileInput.files.length > 0) {
+        handleFileSelected(fileInput.files[0]);
+      }
+    });
+
+    clearFileBtn?.addEventListener('click', () => {
+      loadedFile = null;
+      if (fileInput) fileInput.value = '';
+      fileBadge?.classList.add('hidden');
+      fileBadge?.classList.remove('flex');
+    });
+
+    function handleFileSelected(file: File) {
+      if (!file.name.toLowerCase().endsWith('.csv') && file.type !== 'text/csv') {
+        showError('Please select a valid CSV file.');
+        return;
+      }
+      loadedFile = file;
+      if (fileNameSpan) fileNameSpan.textContent = `${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+      fileBadge?.classList.remove('hidden');
+      fileBadge?.classList.add('flex');
+      hideError();
+    }
+
+    parseBtn?.addEventListener('click', async () => {
+      await processAndValidateSource();
+    });
+
+    document.getElementById('btn-commit-import')?.addEventListener('click', async () => {
+      await commitImportedPins();
+    });
+  }
+
+  async function processAndValidateSource() {
+    hideError();
+    hideSuccess();
+
+    if (!selectedAccount) {
+      showError('Please select a target Pinterest account first.');
+      return;
+    }
+
+    let csvRawText = '';
+
+    setParseLoading(true);
+
+    try {
+      if (activeSourceType === 'file') {
+        if (!loadedFile) {
+          showError('Please select a CSV file to upload.');
+          setParseLoading(false);
+          return;
+        }
+        csvRawText = await loadedFile.text();
+      } else {
+        const urlInput = (document.getElementById('gsheet-url-input') as HTMLInputElement).value.trim();
+        if (!urlInput) {
+          showError('Please enter a Google Sheet or CSV URL.');
+          setParseLoading(false);
+          return;
+        }
+
+        const normalizedUrl = normalizeGoogleSheetUrl(urlInput);
+
+        try {
+          const res = await fetch(normalizedUrl);
+          if (!res.ok) {
+            throw new Error(`HTTP ${res.status}: Sheet URL returned error response`);
+          }
+          const contentType = res.headers.get('content-type') || '';
+          csvRawText = await res.text();
+
+          if (contentType.includes('text/html') || csvRawText.trim().toLowerCase().startsWith('<!doctype html')) {
+            throw new Error('This Google Sheet is not publicly accessible as CSV. Please ensure share settings are set to "Anyone with the link" or published to web.');
+          }
+        } catch (err: any) {
+          const msg = (err.message && err.message !== 'Failed to fetch')
+            ? err.message
+            : 'Failed to fetch Google Sheet CSV. Please ensure the link is a valid public Google Sheet with share settings set to "Anyone with the link can view" or published to web.';
+          showError(msg);
+          setParseLoading(false);
+          return;
+        }
+      }
+
+      parseAndValidateCSV(csvRawText);
+    } catch (err: any) {
+      showError('Import parsing error: ' + (err.message || String(err)));
+    } finally {
+      setParseLoading(false);
+    }
+  }
+
+  function normalizeGoogleSheetUrl(rawUrl: string): string {
+    try {
+      if (!rawUrl.includes('docs.google.com/spreadsheets')) return rawUrl;
+      const url = new URL(rawUrl);
+      const pathname = url.pathname;
+      const gid = url.searchParams.get('gid') || '0';
+
+      if (pathname.includes('/edit')) {
+        const basePath = pathname.split('/edit')[0];
+        return `https://docs.google.com${basePath}/export?format=csv&gid=${gid}`;
+      }
+      if (pathname.includes('/pubhtml') || pathname.endsWith('/pub')) {
+        const basePath = pathname.replace('/pubhtml', '/pub');
+        return `https://docs.google.com${basePath}?output=csv&gid=${gid}`;
+      }
+      return rawUrl;
+    } catch {
+      return rawUrl;
+    }
+  }
+
+  // Robust CSV parser supporting quotes & escaped characters
+  function parseCSV(text: string): string[][] {
+    // Strip Windows Excel Byte Order Mark (BOM) if present
+    const cleanText = text.replace(/^\uFEFF/, '');
+
+    const lines: string[][] = [];
+    let curLine: string[] = [];
+    let curVal = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < cleanText.length; i++) {
+      const char = cleanText[i];
+      const nextChar = cleanText[i + 1];
+
+      if (inQuotes) {
+        if (char === '"' && nextChar === '"') {
+          curVal += '"';
+          i++;
+        } else if (char === '"') {
+          inQuotes = false;
+        } else {
+          curVal += char;
+        }
+      } else {
+        if (char === '"') {
+          inQuotes = true;
+        } else if (char === ',') {
+          curLine.push(curVal.trim());
+          curVal = '';
+        } else if (char === '\r' && nextChar === '\n') {
+          curLine.push(curVal.trim());
+          lines.push(curLine);
+          curLine = [];
+          curVal = '';
+          i++;
+        } else if (char === '\n' || char === '\r') {
+          curLine.push(curVal.trim());
+          lines.push(curLine);
+          curLine = [];
+          curVal = '';
+        } else {
+          curVal += char;
+        }
+      }
+    }
+
+    if (curVal || curLine.length > 0) {
+      curLine.push(curVal.trim());
+      lines.push(curLine);
+    }
+
+    return lines.filter((l) => l.some((cell) => cell.length > 0));
+  }
+
+  function parseAndValidateCSV(csvText: string) {
+    const rows = parseCSV(csvText);
+    if (rows.length < 2) {
+      showError('CSV file is empty or missing header row.');
+      return;
+    }
+
+    const rawHeaders = rows[0].map((h) => h.toLowerCase().replace(/[^a-z0-9_]/g, ''));
+
+    // Map header aliases
+    const titleIdx = rawHeaders.findIndex((h) => ['title', 'name', 'pintitle'].includes(h));
+    const imageIdx = rawHeaders.findIndex((h) => ['image_url', 'image', 'imageurl', 'img'].includes(h));
+    const boardIdx = rawHeaders.findIndex((h) => ['board_name', 'board', 'boardname'].includes(h));
+    const descIdx = rawHeaders.findIndex((h) => ['description', 'desc'].includes(h));
+    const linkIdx = rawHeaders.findIndex((h) => ['link', 'url', 'targetlink', 'linkurl'].includes(h));
+    const schedIdx = rawHeaders.findIndex((h) => ['scheduled_for', 'publish_at', 'scheduledat', 'scheduled_at', 'date'].includes(h));
+
+    if (titleIdx === -1 || imageIdx === -1 || boardIdx === -1) {
+      showError('CSV is missing required headers. Mandatory headers: title, image_url, board_name');
+      return;
+    }
+
+    parsedRows = [];
+    validPinsToCommit = [];
+    const seenBatchKeys = new Set<string>();
+
+    for (let i = 1; i < rows.length; i++) {
+      const r = rows[i];
+      const title = r[titleIdx] || '';
+      const image = r[imageIdx] || '';
+      const board = r[boardIdx] || '';
+      const desc = descIdx !== -1 ? r[descIdx] || '' : '';
+      const link = linkIdx !== -1 ? r[linkIdx] || '' : '';
+      const sched = schedIdx !== -1 ? r[schedIdx] || '' : '';
+
+      const errors: string[] = [];
+
+      if (!title) errors.push('Title is required');
+      if (!image) errors.push('Image URL is required');
+      else if (!image.startsWith('http://') && !image.startsWith('https://')) errors.push('Image URL must be valid HTTP/HTTPS');
+
+      // Canonical board name matching
+      const matchedBoardObj = accountBoards.find((b) => b.board_name.toLowerCase() === board.toLowerCase());
+      const canonicalBoardName = matchedBoardObj ? matchedBoardObj.board_name : board;
+
+      if (!board) errors.push('Board name is required');
+      else if (!matchedBoardObj) {
+        errors.push(`Board "${board}" is not configured for account ${selectedAccount?.account_name}`);
+      }
+
+      let parsedSched: string | null = null;
+      if (sched) {
+        const d = new Date(sched);
+        if (isNaN(d.getTime())) {
+          errors.push('Invalid scheduled date format');
+        } else {
+          parsedSched = d.toISOString();
+        }
+      }
+
+      // Check duplicate within import batch
+      const batchKey = `${title.toLowerCase()}|${image.toLowerCase()}|${canonicalBoardName.toLowerCase()}`;
+      if (seenBatchKeys.has(batchKey)) {
+        errors.push('Duplicate row within import batch');
+      } else if (errors.length === 0) {
+        seenBatchKeys.add(batchKey);
+      }
+
+      const isValid = errors.length === 0;
+
+      const normalizedPin: Partial<Pin> = {
+        account_id: selectedAccount!.id,
+        title,
+        description: desc || null,
+        image_url: image,
+        board_name: canonicalBoardName,
+        link: link || null,
+        status: 'pending',
+        source: activeSourceType === 'file' ? 'csv_import' : 'google_sheets_import',
+        scheduled_for: parsedSched,
+      };
+
+      if (isValid) {
+        validPinsToCommit.push(normalizedPin);
+      }
+
+      parsedRows.push({
+        rowNum: i,
+        rawTitle: title,
+        rawImage: image,
+        rawBoard: board,
+        rawDesc: desc,
+        rawLink: link,
+        rawScheduled: sched,
+        isValid,
+        errors,
+        normalizedPin,
+      });
+    }
+
+    renderPreviewSection();
+  }
+
+  function renderPreviewSection() {
+    const previewSec = document.getElementById('preview-section');
+    const tbody = document.getElementById('preview-table-body');
+    const totalElem = document.getElementById('kpi-total-rows');
+    const validElem = document.getElementById('kpi-valid-rows');
+    const invalidElem = document.getElementById('kpi-invalid-rows');
+    const readyElem = document.getElementById('kpi-ready-rows');
+    const commitBtn = document.getElementById('btn-commit-import') as HTMLButtonElement | null;
+    const commitText = document.getElementById('commit-btn-text');
+
+    const totalCount = parsedRows.length;
+    const validCount = validPinsToCommit.length;
+    const invalidCount = totalCount - validCount;
+
+    if (totalElem) totalElem.textContent = String(totalCount);
+    if (validElem) validElem.textContent = String(validCount);
+    if (invalidElem) invalidElem.textContent = String(invalidCount);
+    if (readyElem) readyElem.textContent = String(validCount);
+
+    if (commitBtn) {
+      commitBtn.disabled = validCount === 0;
+    }
+    if (commitText) {
+      commitText.textContent = `Import ${validCount} Valid Rows`;
+    }
+
+    if (tbody) {
+      const top20 = parsedRows.slice(0, 20);
+      tbody.innerHTML = top20
+        .map((r) => `
+          <tr class="transition-colors hover:bg-muted/40">
+            <td class="px-4 py-3 font-mono font-semibold text-muted-foreground">#${r.rowNum}</td>
+            <td class="px-4 py-3">
+              <div class="flex items-center gap-3">
+                <img
+                  src="${escapeHtml(r.rawImage)}"
+                  alt="${escapeHtml(r.rawTitle)}"
+                  class="h-9 w-9 rounded-lg object-cover border border-border bg-muted flex-shrink-0"
+                  onerror="this.src='https://images.unsplash.com/photo-1495521821757-a1efb6729352?auto=format&fit=crop&w=100&q=80'"
+                />
+                <div class="max-w-xs">
+                  <p class="font-semibold text-foreground truncate" title="${escapeHtml(r.rawTitle)}">${escapeHtml(r.rawTitle || '(No Title)')}</p>
+                  ${r.rawLink ? `<p class="text-[11px] text-primary truncate">${escapeHtml(r.rawLink)}</p>` : ''}
+                </div>
+              </div>
+            </td>
+            <td class="px-4 py-3">
+              <span class="rounded bg-muted px-2 py-0.5 text-xs font-semibold">${escapeHtml(r.rawBoard || 'Unassigned')}</span>
+            </td>
+            <td class="px-4 py-3 text-muted-foreground whitespace-nowrap">
+              ${r.rawScheduled ? formatDate(r.rawScheduled) : 'Immediate'}
+            </td>
+            <td class="px-4 py-3">
+              ${
+                r.isValid
+                  ? `<span class="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2.5 py-0.5 font-bold">Valid</span>`
+                  : `<div class="space-y-0.5">
+                      <span class="inline-flex items-center gap-1 rounded-full bg-rose-500/10 text-rose-500 px-2.5 py-0.5 font-bold">Invalid</span>
+                      <p class="text-[11px] text-rose-500 max-w-xs">${escapeHtml(r.errors.join(', '))}</p>
+                    </div>`
+              }
+            </td>
+          </tr>
+        `)
+        .join('');
+    }
+
+    previewSec?.classList.remove('hidden');
+    previewSec?.scrollIntoView({ behavior: 'smooth' });
+  }
+
+  async function commitImportedPins() {
+    if (!selectedAccount || validPinsToCommit.length === 0) return;
+
+    setCommitLoading(true);
+
+    const sessionMeta = {
+      account_id: selectedAccount.id,
+      source_type: activeSourceType === 'file' ? 'csv_upload' : 'google_sheets',
+      source_label: loadedFile ? loadedFile.name : 'Google Sheet URL',
+      total_rows: parsedRows.length,
+      valid_rows: validPinsToCommit.length,
+      invalid_rows: parsedRows.length - validPinsToCommit.length,
+    };
+
+    const { count, error } = await bulkInsertPins(validPinsToCommit, sessionMeta);
+
+    setCommitLoading(false);
+
+    if (error) {
+      showError('Failed to import pins: ' + error);
+    } else {
+      showSuccess(`Successfully imported ${count} scheduled pins for ${selectedAccount.account_name}! All pins are set to 'pending' queue.`);
+      document.getElementById('preview-section')?.classList.add('hidden');
+      parsedRows = [];
+      validPinsToCommit = [];
+    }
+  }
+
+  function showError(msg: string) {
+    const banner = document.getElementById('import-error-banner');
+    const text = document.getElementById('import-error-text');
+    if (banner && text) {
+      text.textContent = msg;
+      banner.classList.remove('hidden');
+    }
+  }
+
+  function hideError() {
+    document.getElementById('import-error-banner')?.classList.add('hidden');
+  }
+
+  function showSuccess(msg: string) {
+    const banner = document.getElementById('import-success-banner');
+    const text = document.getElementById('import-success-text');
+    if (banner && text) {
+      text.textContent = msg;
+      banner.classList.remove('hidden');
+    }
+  }
+
+  function hideSuccess() {
+    document.getElementById('import-success-banner')?.classList.add('hidden');
+  }
+
+  function setParseLoading(loading: boolean) {
+    const btn = document.getElementById('btn-parse-source') as HTMLButtonElement | null;
+    const text = document.getElementById('parse-btn-text');
+    const spinner = document.getElementById('parse-btn-spinner');
+
+    if (btn) btn.disabled = loading;
+    if (loading) {
+      text?.classList.add('hidden');
+      spinner?.classList.remove('hidden');
+    } else {
+      text?.classList.remove('hidden');
+      spinner?.classList.add('hidden');
+    }
+  }
+
+  function setCommitLoading(loading: boolean) {
+    const btn = document.getElementById('btn-commit-import') as HTMLButtonElement | null;
+    const text = document.getElementById('commit-btn-text');
+    const spinner = document.getElementById('commit-btn-spinner');
+
+    if (btn) btn.disabled = loading;
+    if (loading) {
+      text?.classList.add('hidden');
+      spinner?.classList.remove('hidden');
+    } else {
+      text?.classList.remove('hidden');
+      spinner?.classList.add('hidden');
+    }
+  }
+
+  init();
+</script>

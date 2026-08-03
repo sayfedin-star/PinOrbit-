@@ -6,7 +6,7 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
 <Layout title="Pins Management" description="All recipe pins synced from Google Sheets pending execution or already published.">
   <SectionHeader
     title="Pins Queue & History"
-    description="All recipe pins synced from Google Sheets pending execution or already published."
+    description="All recipe pins synced from Google Sheets or imported via CSV pending execution or already published."
   />
 
   <!-- Filter & Search Control Bar -->
@@ -96,7 +96,7 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
       if (!allPins || allPins.length === 0) {
         container.innerHTML = renderEmptyStateHTML(
           'No Pins Found',
-          'New rows uploaded to Google Sheets will sync into Supabase pins table.',
+          'Import scheduled pins via CSV / Google Sheets to populate your publishing queue.',
           'inbox'
         );
         updateFilterCounts(0, 0, 0, 0);
@@ -122,7 +122,7 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
                   <th class="px-6 py-3.5">Account</th>
                   <th class="px-6 py-3.5">Target Board</th>
                   <th class="px-6 py-3.5">Status</th>
-                  <th class="px-6 py-3.5">Created Date</th>
+                  <th class="px-6 py-3.5">Scheduled For</th>
                   <th class="px-6 py-3.5">Posted Date</th>
                 </tr>
               </thead>
@@ -203,7 +203,7 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
           ${renderStatusBadge(pin.status)}
         </td>
         <td class="px-6 py-4 text-xs text-muted-foreground whitespace-nowrap">
-          ${formatDate(pin.created_at)}
+          ${pin.scheduled_for ? formatDate(pin.scheduled_for) : 'Immediate'}
         </td>
         <td class="px-6 py-4 text-xs text-muted-foreground whitespace-nowrap">
           ${pin.posted_at ? formatDate(pin.posted_at) : '-'}

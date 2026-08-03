@@ -49,6 +49,7 @@ export interface Pin {
   status: 'pending' | 'posted' | 'failed';
   source: string;
   posted_at: string | null;
+  scheduled_for?: string | null;
   created_at: string;
   account_name?: string;
 }
@@ -76,6 +77,19 @@ export interface AuditLog {
   new_data: Record<string, any> | null;
   changed_by: string | null;
   changed_at: string;
+}
+
+export interface ImportSession {
+  id: string;
+  account_id: string;
+  source_type: 'csv_upload' | 'google_sheets' | string;
+  source_label?: string | null;
+  total_rows: number;
+  valid_rows: number;
+  invalid_rows: number;
+  imported_rows: number;
+  created_by?: string | null;
+  created_at: string;
 }
 
 export interface DashboardKPIs {

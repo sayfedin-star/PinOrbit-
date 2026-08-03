@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import type { Account, Board, Pin, Log, AuditLog, AccountWebhook, DashboardKPIs } from './types';
+import type { Account, Board, Pin, Log, AuditLog, AccountWebhook, ImportSession, DashboardKPIs } from './types';
 
 const supabaseUrl = import.meta.env.PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY || '';
@@ -106,23 +106,6 @@ let mockWebhooks: AccountWebhook[] = [
     created_at: new Date(Date.now() - 86400000 * 7).toISOString(),
     updated_at: new Date(Date.now() - 86400000 * 7).toISOString(),
   },
-  {
-    id: 'hook-4',
-    account_id: 'acc-3',
-    label: 'Backup Hook',
-    webhook_url: 'https://hook.make.com/ghi789keto3',
-    monthly_capacity: 300,
-    monthly_usage: 300,
-    remaining_capacity: 0,
-    priority: 1,
-    is_active: false,
-    is_primary: true,
-    last_used_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-    last_failed_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-    last_failure_reason: 'HTTP 429 Too Many Requests',
-    created_at: new Date(Date.now() - 86400000 * 4).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-  },
 ];
 
 let mockBoards: Board[] = [
@@ -164,6 +147,7 @@ let mockPins: Pin[] = [
     status: 'posted',
     source: 'google_sheets',
     posted_at: new Date(Date.now() - 3600000 * 2).toISOString(),
+    scheduled_for: null,
     created_at: new Date(Date.now() - 3600000 * 5).toISOString(),
     account_name: 'HealthyBites_US',
   },
@@ -178,68 +162,13 @@ let mockPins: Pin[] = [
     status: 'pending',
     source: 'google_sheets',
     posted_at: null,
+    scheduled_for: null,
     created_at: new Date(Date.now() - 3600000 * 3).toISOString(),
     account_name: 'HealthyBites_US',
   },
-  {
-    id: 'pin-3',
-    account_id: 'acc-2',
-    title: 'Rich Molten Chocolate Lava Cake',
-    description: 'Decadent chocolate lava cake with warm gooey fudge center in under 20 mins.',
-    image_url: 'https://images.unsplash.com/photo-1606313564200-e75d5e30476c?auto=format&fit=crop&w=600&q=80',
-    board_name: 'Easy Chocolate Desserts',
-    link: 'https://myrecipeblog.com/chocolate-lava-cake',
-    status: 'pending',
-    source: 'google_sheets',
-    posted_at: null,
-    created_at: new Date(Date.now() - 3600000 * 1).toISOString(),
-    account_name: 'DessertLovers_Global',
-  },
-  {
-    id: 'pin-4',
-    account_id: 'acc-3',
-    title: 'Avocado Keto Salad',
-    description: 'Fresh avocado salad with spinach, olive oil and chia seeds.',
-    image_url: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=600&q=80',
-    board_name: 'Non-existent Board',
-    link: 'https://myrecipeblog.com/avocado-salad',
-    status: 'failed',
-    source: 'google_sheets',
-    posted_at: null,
-    created_at: new Date(Date.now() - 86400000 * 1).toISOString(),
-    account_name: 'KetoRecipes_Hub',
-  },
 ];
 
-let mockLogs: Log[] = [
-  {
-    id: 'log-1',
-    pin_id: 'pin-1',
-    account_id: 'acc-1',
-    webhook_id: 'hook-1',
-    status: 'success',
-    message: 'Sent to Make successfully',
-    webhook_used: 'https://hook.make.com/abc123healthy1',
-    created_at: new Date(Date.now() - 3600000 * 2).toISOString(),
-    account_name: 'HealthyBites_US',
-    pin_title: '30-Minute Creamy Garlic Chicken',
-    webhook_label: 'Primary Hook',
-  },
-  {
-    id: 'log-2',
-    pin_id: 'pin-4',
-    account_id: 'acc-3',
-    webhook_id: 'hook-4',
-    status: 'error',
-    message: 'Board not found for this account',
-    webhook_used: null,
-    created_at: new Date(Date.now() - 86400000 * 1).toISOString(),
-    account_name: 'KetoRecipes_Hub',
-    pin_title: 'Avocado Keto Salad',
-    webhook_label: 'Backup Hook',
-  },
-];
-
+let mockLogs: Log[] = [];
 let mockAuditLogs: AuditLog[] = [];
 
 interface RawAccount extends Account {
@@ -364,6 +293,26 @@ export async function getBoards(): Promise<Board[]> {
   } catch (err) {
     console.warn('Supabase fetch boards error, using fallback:', err);
     return mockBoards;
+  }
+}
+
+// Fetch Boards for specific account
+export async function getBoardsForAccount(accountId: string): Promise<Board[]> {
+  if (!supabase) {
+    return mockBoards.filter((b) => b.account_id === accountId);
+  }
+  try {
+    const { data, error } = await supabase
+      .from('boards')
+      .select('*')
+      .eq('account_id', accountId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return (data as Board[]) || [];
+  } catch (err) {
+    console.warn('Supabase fetch boards for account error, using fallback:', err);
+    return mockBoards.filter((b) => b.account_id === accountId);
   }
 }
 
@@ -502,23 +451,6 @@ export async function createAccount(payload: {
       primary_webhook_label: 'Primary',
     };
     mockAccounts.unshift(newAcc);
-    mockWebhooks.unshift({
-      id: 'hook-' + Date.now(),
-      account_id: newAcc.id,
-      label: 'Primary',
-      webhook_url: payload.webhook_url,
-      monthly_capacity: 500,
-      monthly_usage: 0,
-      remaining_capacity: 500,
-      priority: 1,
-      is_active: payload.is_active ?? true,
-      is_primary: true,
-      last_used_at: null,
-      last_failed_at: null,
-      last_failure_reason: null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    });
     return { data: newAcc, error: null };
   }
 
@@ -537,7 +469,6 @@ export async function createAccount(payload: {
     return { data: null, error: error.message };
   }
 
-  // Also insert corresponding primary webhook in account_webhooks
   if (data) {
     await supabase.from('account_webhooks').insert({
       account_id: data.id,
@@ -688,8 +619,6 @@ export async function updateBoard(
   return { data: data as Board, error: null };
 }
 
-// 9. Multi-Webhook Specific Operations
-
 export async function createAccountWebhook(payload: {
   account_id: string;
   label: string;
@@ -700,7 +629,6 @@ export async function createAccountWebhook(payload: {
   is_primary?: boolean;
 }): Promise<{ data: AccountWebhook | null; error: string | null }> {
   if (!supabase) {
-    // If set as primary, unset other primaries for this account
     if (payload.is_primary) {
       mockWebhooks.forEach((w) => {
         if (w.account_id === payload.account_id) w.is_primary = false;
@@ -855,42 +783,77 @@ export async function toggleAccountWebhookActive(
   return updateAccountWebhook(id, { is_active });
 }
 
-// Selection strategy for backend execution engine
-export async function selectOptimalWebhookForAccount(
-  accountId: string
-): Promise<{ webhook: AccountWebhook | null; error: string | null }> {
-  const webhooks = await getAccountWebhooks(accountId);
+// 10. Importer Bulk Pin Operations
 
-  const eligible = webhooks.filter((w) => w.is_active && w.remaining_capacity > 0);
-
-  if (eligible.length === 0) {
-    return {
-      webhook: null,
-      error: 'No eligible webhook with remaining capacity for this account',
-    };
+export async function bulkInsertPins(
+  pins: Partial<Pin>[],
+  sessionMeta?: {
+    account_id: string;
+    source_type: string;
+    source_label?: string;
+    total_rows: number;
+    valid_rows: number;
+    invalid_rows: number;
+  }
+): Promise<{ count: number; error: string | null }> {
+  if (!pins || pins.length === 0) {
+    return { count: 0, error: null };
   }
 
-  // 1. Prefer Primary webhook if active and has remaining capacity
-  const primary = eligible.find((w) => w.is_primary);
-  if (primary) {
-    return { webhook: primary, error: null };
+  if (!supabase) {
+    pins.forEach((p, idx) => {
+      const newPin: Pin = {
+        id: 'pin-imp-' + Date.now() + '-' + idx,
+        account_id: p.account_id || 'acc-1',
+        title: p.title || 'Untitled Pin',
+        description: p.description || null,
+        image_url: p.image_url || '',
+        board_name: p.board_name || null,
+        link: p.link || null,
+        status: 'pending',
+        source: p.source || 'csv_import',
+        posted_at: null,
+        scheduled_for: p.scheduled_for || null,
+        created_at: new Date().toISOString(),
+        account_name: 'Imported Account',
+      };
+      mockPins.unshift(newPin);
+    });
+    return { count: pins.length, error: null };
   }
 
-  // 2. Sort remaining eligible webhooks:
-  //    - Lowest priority number first (1 is top priority)
-  //    - Highest remaining_capacity
-  //    - Oldest last_used_at (null first)
-  eligible.sort((a, b) => {
-    if (a.priority !== b.priority) {
-      return a.priority - b.priority;
-    }
-    if (a.remaining_capacity !== b.remaining_capacity) {
-      return b.remaining_capacity - a.remaining_capacity;
-    }
-    if (!a.last_used_at) return -1;
-    if (!b.last_used_at) return 1;
-    return new Date(a.last_used_at).getTime() - new Date(b.last_used_at).getTime();
-  });
+  try {
+    const chunkSize = 50;
+    let totalInserted = 0;
 
-  return { webhook: eligible[0], error: null };
+    for (let i = 0; i < pins.length; i += chunkSize) {
+      const chunk = pins.slice(i, i + chunkSize);
+      const { data, error } = await supabase
+        .from('pins')
+        .insert(chunk)
+        .select('id');
+
+      if (error) {
+        return { count: totalInserted, error: error.message };
+      }
+      totalInserted += (data ? data.length : chunk.length);
+    }
+
+    // Log import session if metadata provided
+    if (sessionMeta) {
+      await supabase.from('import_sessions').insert({
+        account_id: sessionMeta.account_id,
+        source_type: sessionMeta.source_type,
+        source_label: sessionMeta.source_label || null,
+        total_rows: sessionMeta.total_rows,
+        valid_rows: sessionMeta.valid_rows,
+        invalid_rows: sessionMeta.invalid_rows,
+        imported_rows: totalInserted,
+      });
+    }
+
+    return { count: totalInserted, error: null };
+  } catch (err: any) {
+    return { count: 0, error: err.message || 'Bulk insert failed' };
+  }
 }
