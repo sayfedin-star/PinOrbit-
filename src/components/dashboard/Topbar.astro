@@ -1,0 +1,97 @@
+---
+interface Props {
+  title?: string;
+}
+
+const { title = 'Dashboard' } = Astro.props;
+---
+
+<header class="sticky top-0 z-20 flex h-16 w-full items-center justify-between border-b border-border bg-card/80 px-4 backdrop-blur-md sm:px-6 lg:px-8">
+  <div class="flex items-center gap-4">
+    <!-- Mobile Hamburger Button -->
+    <button
+      id="open-mobile-sidebar"
+      class="flex h-9 w-9 items-center justify-center rounded-lg border border-border text-muted-foreground hover:bg-muted hover:text-foreground lg:hidden"
+      aria-label="Open sidebar"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="4" y1="12" x2="20" y2="12"/>
+        <line x1="4" y1="6" x2="20" y2="6"/>
+        <line x1="4" y1="18" x2="20" y2="18"/>
+      </svg>
+    </button>
+
+    <h2 class="text-lg font-semibold tracking-tight text-foreground lg:text-xl">{title}</h2>
+  </div>
+
+  <div class="flex items-center gap-3">
+    <!-- Read-Only Badge -->
+    <div class="hidden sm:flex items-center gap-2 rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-600 dark:text-amber-400">
+      <span class="h-2 w-2 rounded-full bg-amber-500 animate-pulse"></span>
+      Read-Only Mode
+    </div>
+
+    <!-- Dark Mode Toggle Button -->
+    <button
+      id="theme-toggle"
+      class="flex h-9 w-9 items-center justify-center rounded-lg border border-border text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+      aria-label="Toggle theme"
+    >
+      <!-- Sun Icon (shows in Dark) -->
+      <svg id="theme-toggle-light-icon" class="hidden h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="4"/>
+        <path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>
+      </svg>
+      <!-- Moon Icon (shows in Light) -->
+      <svg id="theme-toggle-dark-icon" class="hidden h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>
+      </svg>
+    </button>
+  </div>
+</header>
+
+<script>
+  // Dark mode toggle script
+  const themeToggle = document.getElementById('theme-toggle');
+  const lightIcon = document.getElementById('theme-toggle-light-icon');
+  const darkIcon = document.getElementById('theme-toggle-dark-icon');
+
+  function updateIcons() {
+    const isDark = document.documentElement.classList.contains('dark');
+    if (isDark) {
+      lightIcon?.classList.remove('hidden');
+      darkIcon?.classList.add('hidden');
+    } else {
+      darkIcon?.classList.remove('hidden');
+      lightIcon?.classList.add('hidden');
+    }
+  }
+
+  updateIcons();
+
+  themeToggle?.addEventListener('click', () => {
+    const isDark = document.documentElement.classList.toggle('dark');
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    updateIcons();
+  });
+
+  // Mobile sidebar drawer script
+  const openBtn = document.getElementById('open-mobile-sidebar');
+  const closeBtn = document.getElementById('close-mobile-sidebar');
+  const sidebar = document.getElementById('mobile-sidebar');
+  const backdrop = document.getElementById('mobile-sidebar-backdrop');
+
+  function openDrawer() {
+    sidebar?.classList.remove('-translate-x-full');
+    backdrop?.classList.remove('hidden');
+  }
+
+  function closeDrawer() {
+    sidebar?.classList.add('-translate-x-full');
+    backdrop?.classList.add('hidden');
+  }
+
+  openBtn?.addEventListener('click', openDrawer);
+  closeBtn?.addEventListener('click', closeDrawer);
+  backdrop?.addEventListener('click', closeDrawer);
+</script>

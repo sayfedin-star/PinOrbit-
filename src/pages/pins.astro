@@ -1,0 +1,199 @@
+---
+import Layout from '../layouts/Layout.astro';
+import SectionHeader from '../components/ui/SectionHeader.astro';
+import StatusBadge from '../components/ui/StatusBadge.astro';
+import EmptyState from '../components/ui/EmptyState.astro';
+import { getPins } from '../lib/supabase';
+
+const pins = await getPins('all');
+---
+
+<Layout title="Pins Management">
+  <SectionHeader
+    title="Pins Queue & History"
+    description="All recipe pins synced from Google Sheets pending execution or already published."
+  />
+
+  <!-- Filter & Search Control Bar -->
+  <div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <!-- Filter Tabs -->
+    <div class="inline-flex rounded-lg border border-border bg-card p-1 text-xs font-medium">
+      <button
+        data-filter="all"
+        class="filter-btn rounded-md px-3.5 py-1.5 transition-colors bg-primary text-primary-foreground font-semibold"
+      >
+        All ({pins.length})
+      </button>
+      <button
+        data-filter="pending"
+        class="filter-btn rounded-md px-3.5 py-1.5 text-muted-foreground hover:text-foreground transition-colors"
+      >
+        Pending ({pins.filter(p => p.status === 'pending').length})
+      </button>
+      <button
+        data-filter="posted"
+        class="filter-btn rounded-md px-3.5 py-1.5 text-muted-foreground hover:text-foreground transition-colors"
+      >
+        Posted ({pins.filter(p => p.status === 'posted').length})
+      </button>
+      <button
+        data-filter="failed"
+        class="filter-btn rounded-md px-3.5 py-1.5 text-muted-foreground hover:text-foreground transition-colors"
+      >
+        Failed ({pins.filter(p => p.status === 'failed').length})
+      </button>
+    </div>
+
+    <!-- Search Input -->
+    <div class="relative w-full sm:w-72">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+      </svg>
+      <input
+        id="pin-search"
+        type="text"
+        placeholder="Search titles, boards or accounts..."
+        class="w-full rounded-lg border border-border bg-card py-2 pl-9 pr-4 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+      />
+    </div>
+  </div>
+
+  {pins.length === 0 ? (
+    <EmptyState
+      title="No Pins Found"
+      description="New rows uploaded to Google Sheets will sync into Supabase pins table."
+    />
+  ) : (
+    <div class="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm">
+          <thead class="border-b border-border bg-muted/50 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <tr>
+              <th class="px-6 py-3.5">Pin Title & Details</th>
+              <th class="px-6 py-3.5">Account</th>
+              <th class="px-6 py-3.5">Target Board</th>
+              <th class="px-6 py-3.5">Status</th>
+              <th class="px-6 py-3.5">Created Date</th>
+              <th class="px-6 py-3.5">Posted Date</th>
+            </tr>
+          </thead>
+          <tbody id="pins-table-body" class="divide-y divide-border">
+            {pins.map((pin) => (
+              <tr
+                class="pin-row transition-colors hover:bg-muted/40"
+                data-status={pin.status}
+                data-title={(pin.title || '').toLowerCase()}
+                data-account={(pin.account_name || '').toLowerCase()}
+                data-board={(pin.board_name || '').toLowerCase()}
+              >
+                <td class="px-6 py-4">
+                  <div class="flex items-center gap-3.5">
+                    <img
+                      src={pin.image_url}
+                      alt={pin.title}
+                      class="h-12 w-12 rounded-lg object-cover border border-border bg-muted flex-shrink-0"
+                      onerror="this.src='https://images.unsplash.com/photo-1495521821757-a1efb6729352?auto=format&fit=crop&w=150&q=80'"
+                    />
+                    <div class="max-w-xs sm:max-w-md">
+                      <p class="font-semibold text-foreground truncate" title={pin.title}>{pin.title}</p>
+                      {pin.link && (
+                        <a
+                          href={pin.link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="text-xs text-primary hover:underline flex items-center gap-1 mt-0.5"
+                        >
+                          <span class="truncate">{pin.link}</span>
+                          <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </td>
+                <td class="px-6 py-4 font-medium text-foreground">
+                  {pin.account_name}
+                </td>
+                <td class="px-6 py-4 text-muted-foreground">
+                  <span class="rounded bg-muted/60 px-2 py-1 text-xs font-medium">
+                    {pin.board_name || 'Unassigned'}
+                  </span>
+                </td>
+                <td class="px-6 py-4">
+                  <StatusBadge status={pin.status} />
+                </td>
+                <td class="px-6 py-4 text-xs text-muted-foreground whitespace-nowrap">
+                  {new Date(pin.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </td>
+                <td class="px-6 py-4 text-xs text-muted-foreground whitespace-nowrap">
+                  {pin.posted_at
+                    ? new Date(pin.posted_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+                    : '-'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )}
+</Layout>
+
+<script>
+  // Client side filtering & search script
+  const filterBtns = document.querySelectorAll<HTMLButtonElement>('.filter-btn');
+  const searchInput = document.getElementById('pin-search') as HTMLInputElement | null;
+  const rows = document.querySelectorAll<HTMLTableRowElement>('.pin-row');
+
+  let currentFilter = 'all';
+  let currentSearch = '';
+
+  function applyFilters() {
+    rows.forEach((row) => {
+      const status = row.getAttribute('data-status') || '';
+      const title = row.getAttribute('data-title') || '';
+      const account = row.getAttribute('data-account') || '';
+      const board = row.getAttribute('data-board') || '';
+
+      const matchesStatus = currentFilter === 'all' || status === currentFilter;
+      const matchesSearch =
+        !currentSearch ||
+        title.includes(currentSearch) ||
+        account.includes(currentSearch) ||
+        board.includes(currentSearch);
+
+      if (matchesStatus && matchesSearch) {
+        row.style.display = '';
+      } else {
+        row.style.display = 'none';
+      }
+    });
+  }
+
+  filterBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      filterBtns.forEach((b) => {
+        b.classList.remove('bg-primary', 'text-primary-foreground', 'font-semibold');
+        b.classList.add('text-muted-foreground');
+      });
+      btn.classList.add('bg-primary', 'text-primary-foreground', 'font-semibold');
+      btn.classList.remove('text-muted-foreground');
+
+      currentFilter = btn.getAttribute('data-filter') || 'all';
+      applyFilters();
+    });
+  });
+
+  searchInput?.addEventListener('input', (e) => {
+    currentSearch = (e.target as HTMLInputElement).value.toLowerCase().trim();
+    applyFilters();
+  });
+</script>

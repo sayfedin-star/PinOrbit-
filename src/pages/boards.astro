@@ -1,0 +1,106 @@
+---
+import Layout from '../layouts/Layout.astro';
+import SectionHeader from '../components/ui/SectionHeader.astro';
+import EmptyState from '../components/ui/EmptyState.astro';
+import { getBoards, getAccounts } from '../lib/supabase';
+
+const boards = await getBoards();
+const accounts = await getAccounts();
+
+// Group boards by account_name
+const groupedBoards = accounts.map((acc) => {
+  return {
+    account: acc,
+    boards: boards.filter((b) => b.account_id === acc.id || b.account_name === acc.account_name),
+  };
+});
+
+// Ungrouped boards if any
+const orphanBoards = boards.filter(
+  (b) => !accounts.some((acc) => acc.id === b.account_id || acc.account_name === b.account_name)
+);
+---
+
+<Layout title="Pinterest Boards">
+  <SectionHeader
+    title="Pinterest Boards"
+    description="Board mappings per account used by Edge Function for automatic target board matching."
+  />
+
+  {boards.length === 0 ? (
+    <EmptyState
+      title="No Boards Mapping Configured"
+      description="Add board mappings to Supabase boards table to match Pin board_names automatically."
+      iconName="folder"
+    />
+  ) : (
+    <div class="space-y-8">
+      {groupedBoards.map(({ account, boards: accountBoards }) => (
+        <div class="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+          <!-- Account Header -->
+          <div class="flex items-center justify-between border-b border-border bg-muted/40 px-6 py-4">
+            <div class="flex items-center gap-3">
+              <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold text-xs">
+                {account.account_name.slice(0, 2).toUpperCase()}
+              </div>
+              <div>
+                <h3 class="text-sm font-bold text-foreground">{account.account_name}</h3>
+                <p class="text-xs text-muted-foreground">{accountBoards.length} boards configured</p>
+              </div>
+            </div>
+            <span class="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+              Max {account.max_pins_per_day} pins/day
+            </span>
+          </div>
+
+          <!-- Boards List -->
+          {accountBoards.length === 0 ? (
+            <div class="p-6 text-center text-xs text-muted-foreground">
+              No boards registered for this account yet.
+            </div>
+          ) : (
+            <div class="divide-y divide-border">
+              {accountBoards.map((board) => (
+                <div class="flex items-center justify-between px-6 py-4 transition-colors hover:bg-muted/30">
+                  <div class="flex items-center gap-3">
+                    <div class="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L8.6 3.3A2 2 0 0 0 6.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+                    </div>
+                    <div>
+                      <p class="text-sm font-semibold text-foreground">{board.board_name}</p>
+                      <p class="text-xs font-mono text-muted-foreground">ID: {board.board_id}</p>
+                    </div>
+                  </div>
+                  <div class="text-xs text-muted-foreground">
+                    Added {new Date(board.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+
+      {orphanBoards.length > 0 && (
+        <div class="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+          <div class="border-b border-border bg-muted/40 px-6 py-4">
+            <h3 class="text-sm font-bold text-foreground">Other / Unlinked Boards</h3>
+          </div>
+          <div class="divide-y divide-border">
+            {orphanBoards.map((board) => (
+              <div class="flex items-center justify-between px-6 py-4">
+                <div>
+                  <p class="text-sm font-semibold text-foreground">{board.board_name}</p>
+                  <p class="text-xs font-mono text-muted-foreground">ID: {board.board_id}</p>
+                </div>
+                <div class="text-xs text-muted-foreground">
+                  {board.account_name}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )}
+</Layout>

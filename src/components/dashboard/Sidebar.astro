@@ -1,0 +1,134 @@
+---
+const pathname = Astro.url.pathname;
+
+const navItems = [
+  {
+    name: 'Dashboard',
+    href: '/dashboard',
+    icon: `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>`,
+  },
+  {
+    name: 'Accounts',
+    href: '/accounts',
+    icon: `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
+  },
+  {
+    name: 'Boards',
+    href: '/boards',
+    icon: `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L8.6 3.3A2 2 0 0 0 6.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>`,
+  },
+  {
+    name: 'Pins',
+    href: '/pins',
+    icon: `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`,
+  },
+  {
+    name: 'Logs',
+    href: '/logs',
+    icon: `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>`,
+  },
+];
+
+function isActive(href: string) {
+  if (href === '/dashboard' && (pathname === '/' || pathname === '/dashboard')) return true;
+  return pathname.startsWith(href) && href !== '/dashboard';
+}
+---
+
+<!-- Desktop Sidebar -->
+<aside class="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-border bg-card transition-all lg:flex">
+  <!-- Brand Header -->
+  <div class="flex h-16 items-center gap-3 border-b border-border px-6">
+    <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M12 8v8"/>
+        <path d="m8 12 4 4 4-4"/>
+      </svg>
+    </div>
+    <div class="flex flex-col">
+      <span class="text-base font-bold tracking-tight text-foreground">PinOrbit</span>
+      <span class="text-xs text-muted-foreground font-medium">Pinterest Automation</span>
+    </div>
+  </div>
+
+  <!-- Navigation Items -->
+  <nav class="flex-1 space-y-1.5 p-4 overflow-y-auto">
+    <div class="px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">
+      Navigation
+    </div>
+    {navItems.map((item) => {
+      const active = isActive(item.href);
+      return (
+        <a
+          href={item.href}
+          class={`flex items-center gap-3 rounded-lg px-3.5 py-2.5 text-sm font-medium transition-colors ${
+            active
+              ? 'bg-primary/10 text-primary dark:bg-primary/15'
+              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+          }`}
+        >
+          <Fragment set:html={item.icon} />
+          <span>{item.name}</span>
+          {active && (
+            <span class="ml-auto h-1.5 w-1.5 rounded-full bg-primary"></span>
+          )}
+        </a>
+      );
+    })}
+  </nav>
+
+  <!-- Sidebar Footer -->
+  <div class="border-t border-border p-4">
+    <div class="flex items-center justify-between rounded-lg bg-muted/50 p-3">
+      <div class="flex items-center gap-2">
+        <span class="relative flex h-2 w-2">
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+          <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+        </span>
+        <span class="text-xs font-medium text-muted-foreground">System Engine</span>
+      </div>
+      <span class="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+        Ready
+      </span>
+    </div>
+  </div>
+</aside>
+
+<!-- Mobile Sidebar Backdrop & Drawer -->
+<div id="mobile-sidebar-backdrop" class="fixed inset-0 z-40 bg-background/80 backdrop-blur-sm hidden lg:hidden"></div>
+<aside id="mobile-sidebar" class="fixed inset-y-0 left-0 z-50 w-72 flex-col border-r border-border bg-card -translate-x-full transition-transform duration-300 ease-in-out lg:hidden flex">
+  <div class="flex h-16 items-center justify-between border-b border-border px-6">
+    <div class="flex items-center gap-3">
+      <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M12 8v8"/>
+          <path d="m8 12 4 4 4-4"/>
+        </svg>
+      </div>
+      <span class="text-base font-bold tracking-tight text-foreground">PinOrbit</span>
+    </div>
+    <button id="close-mobile-sidebar" class="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+  <nav class="flex-1 space-y-1.5 p-4 overflow-y-auto">
+    {navItems.map((item) => {
+      const active = isActive(item.href);
+      return (
+        <a
+          href={item.href}
+          class={`flex items-center gap-3 rounded-lg px-3.5 py-2.5 text-sm font-medium transition-colors ${
+            active
+              ? 'bg-primary/10 text-primary dark:bg-primary/15'
+              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+          }`}
+        >
+          <Fragment set:html={item.icon} />
+          <span>{item.name}</span>
+        </a>
+      );
+    })}
+  </nav>
+</aside>

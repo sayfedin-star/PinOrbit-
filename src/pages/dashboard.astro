@@ -1,0 +1,133 @@
+---
+import Layout from '../layouts/Layout.astro';
+import SectionHeader from '../components/ui/SectionHeader.astro';
+import KPIStatCard from '../components/ui/KPIStatCard.astro';
+import StatusBadge from '../components/ui/StatusBadge.astro';
+import EmptyState from '../components/ui/EmptyState.astro';
+import { getDashboardKPIs, getPins, getLogs } from '../lib/supabase';
+
+const kpis = await getDashboardKPIs();
+const recentPins = await getPins('all');
+const latestLogs = await getLogs(5);
+---
+
+<Layout title="Dashboard">
+  <SectionHeader
+    title="Overview & Performance"
+    description="Real-time status monitor for automated Pinterest recipe publishing."
+  />
+
+  <!-- 4 KPI Cards -->
+  <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+    <KPIStatCard
+      title="Total Accounts"
+      value={kpis.totalAccounts}
+      subtitle={`${kpis.activeAccounts} accounts active`}
+      iconName="users"
+      color="slate"
+    />
+    <KPIStatCard
+      title="Pending Pins"
+      value={kpis.pendingPins}
+      subtitle="Queued for next cycle"
+      iconName="clock"
+      color="amber"
+    />
+    <KPIStatCard
+      title="Posted Pins"
+      value={kpis.postedPins}
+      subtitle="Successfully published"
+      iconName="check-circle"
+      color="emerald"
+    />
+    <KPIStatCard
+      title="Failed Pins"
+      value={kpis.failedPins}
+      subtitle="Requires review"
+      iconName="alert-triangle"
+      color="rose"
+    />
+  </div>
+
+  <!-- Content Grid: Recent Pins & System Logs -->
+  <div class="grid grid-cols-1 gap-8 lg:grid-cols-3">
+    <!-- Recent Pins (2 columns on large screens) -->
+    <div class="lg:col-span-2 space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="text-base font-semibold text-foreground">Recent Pins Queue</h3>
+        <a href="/pins" class="text-xs font-medium text-primary hover:underline flex items-center gap-1">
+          View all pins
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+        </a>
+      </div>
+
+      {recentPins.length === 0 ? (
+        <EmptyState title="No Pins Found" description="New pins uploaded via Google Sheets will appear here." />
+      ) : (
+        <div class="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+          <div class="divide-y divide-border">
+            {recentPins.slice(0, 5).map((pin) => (
+              <div class="flex items-center justify-between p-4 transition-colors hover:bg-muted/40">
+                <div class="flex items-center gap-3.5 min-w-0">
+                  <img
+                    src={pin.image_url}
+                    alt={pin.title}
+                    class="h-12 w-12 rounded-lg object-cover border border-border bg-muted flex-shrink-0"
+                    onerror="this.src='https://images.unsplash.com/photo-1495521821757-a1efb6729352?auto=format&fit=crop&w=150&q=80'"
+                  />
+                  <div class="min-w-0 flex-1">
+                    <p class="text-sm font-medium text-foreground truncate">{pin.title}</p>
+                    <div class="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                      <span>{pin.account_name}</span>
+                      <span>•</span>
+                      <span class="truncate">{pin.board_name || 'No Board'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="flex items-center gap-3 flex-shrink-0 ml-4">
+                  <StatusBadge status={pin.status} />
+                  <span class="text-xs text-muted-foreground hidden sm:inline">
+                    {new Date(pin.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+
+    <!-- Latest Activity Logs (1 column) -->
+    <div class="space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="text-base font-semibold text-foreground">Latest System Logs</h3>
+        <a href="/logs" class="text-xs font-medium text-primary hover:underline flex items-center gap-1">
+          View all logs
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+        </a>
+      </div>
+
+      {latestLogs.length === 0 ? (
+        <EmptyState title="No Execution Logs" description="Logs will record status as Make.com webhooks trigger." />
+      ) : (
+        <div class="overflow-hidden rounded-xl border border-border bg-card shadow-sm p-4 space-y-3">
+          {latestLogs.map((log) => (
+            <div class="rounded-lg border border-border bg-background p-3 text-xs space-y-1.5">
+              <div class="flex items-center justify-between">
+                <StatusBadge status={log.status} size="sm" />
+                <span class="text-[11px] text-muted-foreground">
+                  {new Date(log.created_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
+              <p class="font-medium text-foreground truncate">{log.pin_title || 'System Operation'}</p>
+              {log.message && (
+                <p class="text-muted-foreground line-clamp-2 leading-relaxed">{log.message}</p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  </div>
+</Layout>

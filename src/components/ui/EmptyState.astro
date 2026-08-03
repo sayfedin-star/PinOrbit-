@@ -1,0 +1,25 @@
+---
+interface Props {
+  title: string;
+  description: string;
+  iconName?: 'folder' | 'inbox' | 'alert-circle';
+}
+
+const { title, description, iconName = 'inbox' } = Astro.props;
+---
+
+<div class="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/50 p-12 text-center">
+  <div class="flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground mb-4">
+    {iconName === 'folder' && (
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L8.6 3.3A2 2 0 0 0 6.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+    )}
+    {iconName === 'inbox' && (
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+    )}
+    {iconName === 'alert-circle' && (
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    )}
+  </div>
+  <h3 class="text-base font-semibold text-foreground mb-1">{title}</h3>
+  <p class="text-sm text-muted-foreground max-w-sm">{description}</p>
+</div>

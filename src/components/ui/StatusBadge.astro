@@ -1,0 +1,34 @@
+---
+interface Props {
+  status: 'pending' | 'posted' | 'failed' | 'success' | 'error' | boolean | string;
+  label?: string;
+  size?: 'sm' | 'md';
+}
+
+const { status, label, size = 'sm' } = Astro.props;
+
+let normalizedStatus = typeof status === 'boolean'
+  ? (status ? 'active' : 'inactive')
+  : String(status).toLowerCase();
+
+let variantStyles = 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20';
+
+if (['posted', 'success', 'active', 'true'].includes(normalizedStatus)) {
+  variantStyles = 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20';
+} else if (['pending'].includes(normalizedStatus)) {
+  variantStyles = 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20';
+} else if (['failed', 'error', 'inactive', 'false'].includes(normalizedStatus)) {
+  variantStyles = 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20';
+}
+
+const sizeStyles = size === 'sm' ? 'px-2.5 py-0.5 text-xs font-medium' : 'px-3 py-1 text-sm font-medium';
+const displayLabel = label || normalizedStatus.charAt(0).toUpperCase() + normalizedStatus.slice(1);
+---
+
+<span class={`inline-flex items-center gap-1.5 rounded-full border transition-colors ${variantStyles} ${sizeStyles}`}>
+  <span class={`h-1.5 w-1.5 rounded-full ${
+    ['posted', 'success', 'active', 'true'].includes(normalizedStatus) ? 'bg-emerald-500' :
+    ['pending'].includes(normalizedStatus) ? 'bg-amber-500' : 'bg-rose-500'
+  }`}></span>
+  {displayLabel}
+</span>

@@ -1,0 +1,74 @@
+---
+import Layout from '../layouts/Layout.astro';
+import SectionHeader from '../components/ui/SectionHeader.astro';
+import StatusBadge from '../components/ui/StatusBadge.astro';
+import EmptyState from '../components/ui/EmptyState.astro';
+import { getAccounts } from '../lib/supabase';
+
+const accounts = await getAccounts();
+---
+
+<Layout title="Pinterest Accounts">
+  <SectionHeader
+    title="Pinterest Accounts"
+    description="Manage connected Pinterest accounts, webhooks, and daily posting limits."
+  />
+
+  {accounts.length === 0 ? (
+    <EmptyState
+      title="No Accounts Registered"
+      description="Accounts will appear here once added to your Supabase accounts table."
+      iconName="folder"
+    />
+  ) : (
+    <div class="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm">
+          <thead class="border-b border-border bg-muted/50 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <tr>
+              <th class="px-6 py-3.5">Account Name</th>
+              <th class="px-6 py-3.5">Status</th>
+              <th class="px-6 py-3.5">Daily Limit</th>
+              <th class="px-6 py-3.5">Linked Boards</th>
+              <th class="px-6 py-3.5">Make.com Webhook URL</th>
+              <th class="px-6 py-3.5">Added Date</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-border">
+            {accounts.map((account) => (
+              <tr class="transition-colors hover:bg-muted/40">
+                <td class="px-6 py-4 font-semibold text-foreground">
+                  <div class="flex items-center gap-2.5">
+                    <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold text-xs">
+                      {account.account_name.slice(0, 2).toUpperCase()}
+                    </div>
+                    <span>{account.account_name}</span>
+                  </div>
+                </td>
+                <td class="px-6 py-4">
+                  <StatusBadge status={account.is_active ? 'active' : 'inactive'} />
+                </td>
+                <td class="px-6 py-4 font-medium text-foreground">
+                  <span class="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-1 text-xs font-semibold">
+                    {account.max_pins_per_day} pins / day
+                  </span>
+                </td>
+                <td class="px-6 py-4 text-muted-foreground">
+                  <span class="font-medium text-foreground">{account.boards_count ?? 0}</span> boards
+                </td>
+                <td class="px-6 py-4 font-mono text-xs text-muted-foreground">
+                  <div class="max-w-xs truncate rounded bg-muted/60 px-2 py-1" title={account.webhook_url}>
+                    {account.webhook_url}
+                  </div>
+                </td>
+                <td class="px-6 py-4 text-xs text-muted-foreground">
+                  {new Date(account.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )}
+</Layout>
