@@ -1,21 +1,19 @@
 {
   "name": "pinorbit",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "private": true,
+  "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "astro dev",
+    "start": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/sayfedin-star/PinOrbit-.git"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
-  "bugs": {
-    "url": "https://github.com/sayfedin-star/PinOrbit-/issues"
-  },
-  "homepage": "https://github.com/sayfedin-star/PinOrbit-#readme"
+  "dependencies": {
+    "@astrojs/tailwind": "^5.1.0",
+    "@supabase/supabase-js": "^2.45.0",
+    "astro": "^4.15.0",
+    "tailwindcss": "^3.4.10"
+  }
 }
