@@ -85,10 +85,14 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
           <p id="sched-posting-interval" class="text-xs font-bold text-primary">Loading...</p>
         </div>
         <div class="p-3 rounded-xl border border-border bg-background space-y-1">
+          <span class="text-[11px] font-medium text-muted-foreground">Random Delay</span>
+          <p id="sched-random-delay" class="text-xs font-bold text-foreground">0 mins</p>
+        </div>
+        <div class="p-3 rounded-xl border border-border bg-background space-y-1">
           <span class="text-[11px] font-medium text-muted-foreground">Timezone</span>
           <p id="sched-timezone" class="text-xs font-bold text-foreground">Loading...</p>
         </div>
-        <div class="p-3 rounded-xl border border-border bg-background space-y-1 sm:col-span-2 lg:col-span-2">
+        <div class="p-3 rounded-xl border border-border bg-background space-y-1 sm:col-span-2 lg:col-span-1">
           <span class="text-[11px] font-medium text-muted-foreground">Last Published At</span>
           <p id="sched-last-published" class="text-xs font-bold text-emerald-500">Loading...</p>
         </div>
@@ -108,7 +112,7 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
           </div>
         </div>
         <a
-          href="/accounts"
+          href="https://pinorbit.mr-doumimouad.workers.dev/accounts"
           class="inline-flex items-center gap-1 rounded-lg border border-primary/30 bg-primary/10 px-2.5 py-1.5 text-xs font-semibold text-primary hover:bg-primary hover:text-primary-foreground transition-all"
         >
           <span>Manage Webhooks &rarr;</span>
@@ -224,6 +228,12 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
         <div id="sched-custom-interval-container" class="hidden">
           <label class="block text-xs font-medium text-muted-foreground mb-1">Custom Minutes Between Posts</label>
           <input id="sched-input-custom-interval" type="number" min="1" placeholder="e.g. 25" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none" />
+        </div>
+
+        <div>
+          <label for="sched-input-random-delay" class="block text-xs font-semibold text-foreground mb-1">Random delay (minutes)</label>
+          <input id="sched-input-random-delay" type="number" min="0" value="0" placeholder="0" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+          <p class="text-[11px] text-muted-foreground mt-1">Adds a random delay (0 to X minutes) to your posting interval for human-like scheduling variation.</p>
         </div>
 
         <div>
@@ -447,6 +457,7 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
     const startedElem = document.getElementById('sched-started-at');
     const windowElem = document.getElementById('sched-posting-window');
     const intervalElem = document.getElementById('sched-posting-interval');
+    const delayElem = document.getElementById('sched-random-delay');
     const tzElem = document.getElementById('sched-timezone');
     const lastPubElem = document.getElementById('sched-last-published');
 
@@ -461,6 +472,10 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
     if (intervalElem) {
       const mins = acc.posting_interval_minutes || 30;
       intervalElem.textContent = mins >= 60 ? `Every ${mins / 60} ${mins === 60 ? 'hour' : 'hours'}` : `Every ${mins} mins`;
+    }
+    if (delayElem) {
+      const delay = acc.random_delay_minutes || 0;
+      delayElem.textContent = `${delay} mins`;
     }
     if (tzElem) {
       tzElem.textContent = acc.timezone || 'UTC';
@@ -666,11 +681,13 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
     const intervalPreset = document.getElementById('sched-input-interval-preset') as HTMLSelectElement;
     const customContainer = document.getElementById('sched-custom-interval-container');
     const customInput = document.getElementById('sched-input-custom-interval') as HTMLInputElement;
+    const delayInput = document.getElementById('sched-input-random-delay') as HTMLInputElement;
     const started = document.getElementById('sched-input-started-at') as HTMLInputElement;
 
     if (tz) tz.value = currentAccount.timezone || 'UTC';
     if (start) start.value = currentAccount.posting_window_start || '09:00';
     if (end) end.value = currentAccount.posting_window_end || '21:00';
+    if (delayInput) delayInput.value = String(currentAccount.random_delay_minutes || 0);
     if (started) started.value = currentAccount.pinning_started_at ? currentAccount.pinning_started_at.slice(0, 10) : '';
 
     const mins = currentAccount.posting_interval_minutes || 30;
@@ -714,6 +731,8 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
       const start = (document.getElementById('sched-input-start') as HTMLInputElement).value;
       const end = (document.getElementById('sched-input-end') as HTMLInputElement).value;
       const startedAt = (document.getElementById('sched-input-started-at') as HTMLInputElement).value;
+      const delayVal = parseInt((document.getElementById('sched-input-random-delay') as HTMLInputElement).value, 10);
+      const randomDelayMins = !isNaN(delayVal) && delayVal >= 0 ? delayVal : 0;
 
       const presetVal = (document.getElementById('sched-input-interval-preset') as HTMLSelectElement).value;
       let intervalMins = 30;
@@ -732,6 +751,7 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
         posting_window_start: start || null,
         posting_window_end: end || null,
         posting_interval_minutes: intervalMins,
+        random_delay_minutes: randomDelayMins,
         pinning_started_at: startedAt ? new Date(startedAt).toISOString() : null,
       });
 
@@ -742,6 +762,7 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
           posting_window_start: start || null,
           posting_window_end: end || null,
           posting_interval_minutes: intervalMins,
+          random_delay_minutes: randomDelayMins,
           pinning_started_at: startedAt ? new Date(startedAt).toISOString() : null,
         };
         refreshAccountUI(updated);

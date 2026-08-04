@@ -1125,6 +1125,7 @@ export async function updateAccountScheduling(
     posting_window_start?: string | null;
     posting_window_end?: string | null;
     posting_interval_minutes?: number | null;
+    random_delay_minutes?: number | null;
     timezone?: string;
     pinning_started_at?: string | null;
   }
@@ -1135,6 +1136,7 @@ export async function updateAccountScheduling(
       if (data.posting_window_start !== undefined) acc.posting_window_start = data.posting_window_start;
       if (data.posting_window_end !== undefined) acc.posting_window_end = data.posting_window_end;
       if (data.posting_interval_minutes !== undefined && data.posting_interval_minutes !== null) acc.posting_interval_minutes = data.posting_interval_minutes;
+      if (data.random_delay_minutes !== undefined && data.random_delay_minutes !== null) acc.random_delay_minutes = data.random_delay_minutes;
       if (data.timezone !== undefined) acc.timezone = data.timezone;
       if (data.pinning_started_at !== undefined) acc.pinning_started_at = data.pinning_started_at;
     }
@@ -1148,6 +1150,7 @@ export async function updateAccountScheduling(
         ...(data.posting_window_start !== undefined && { posting_window_start: data.posting_window_start }),
         ...(data.posting_window_end !== undefined && { posting_window_end: data.posting_window_end }),
         ...(data.posting_interval_minutes !== undefined && { posting_interval_minutes: data.posting_interval_minutes }),
+        ...(data.random_delay_minutes !== undefined && { random_delay_minutes: data.random_delay_minutes }),
         ...(data.timezone !== undefined && { timezone: data.timezone }),
         ...(data.pinning_started_at !== undefined && { pinning_started_at: data.pinning_started_at }),
       })

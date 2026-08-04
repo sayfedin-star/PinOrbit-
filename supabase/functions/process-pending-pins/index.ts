@@ -10,6 +10,7 @@ interface Account {
   posting_window_start?: string | null;
   posting_window_end?: string | null;
   posting_interval_minutes?: number | null;
+  random_delay_minutes?: number | null;
   timezone?: string | null;
   last_published_at?: string | null;
 }
@@ -357,14 +358,18 @@ Deno.serve(async (req: Request) => {
         continue;
       }
 
-      // Rule 5d: Posting interval check (per-account elapsed time since last published pin)
+      // Rule 5d: Posting interval check (per-account elapsed time since last published pin + random delay jitter)
       if (account.last_published_at) {
         const lastPubDate = new Date(account.last_published_at);
         if (!isNaN(lastPubDate.getTime())) {
-          const intervalMin = account.posting_interval_minutes ?? 30;
+          const baseInterval = account.posting_interval_minutes ?? 30;
+          const maxDelay = account.random_delay_minutes ?? 0;
+          const jitter = maxDelay > 0 ? Math.floor(Math.random() * (maxDelay + 1)) : 0;
+          const targetInterval = baseInterval + jitter;
+
           const elapsedMs = now.getTime() - lastPubDate.getTime();
           const elapsedMinutes = Math.floor(elapsedMs / 60000);
-          if (elapsedMinutes < intervalMin) {
+          if (elapsedMinutes < targetInterval) {
             skippedDueToInterval++;
             continue;
           }

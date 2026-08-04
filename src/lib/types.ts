@@ -26,6 +26,7 @@ export interface Account {
   posting_window_start?: string | null;
   posting_window_end?: string | null;
   posting_interval_minutes?: number;
+  random_delay_minutes?: number;
   timezone?: string;
   created_at: string;
   boards_count?: number;
