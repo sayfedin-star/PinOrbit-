@@ -66,10 +66,11 @@ export interface Pin {
   image_url: string;
   board_name: string | null;
   link: string | null;
-  status: 'pending' | 'posted' | 'failed';
+  status: 'pending' | 'processing' | 'posted' | 'failed';
   source: string;
   posted_at: string | null;
   scheduled_for?: string | null;
+  processing_started_at?: string | null;
   created_at: string;
   account_name?: string;
 }

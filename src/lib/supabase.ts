@@ -471,7 +471,7 @@ export async function getDashboardKPIs(): Promise<DashboardKPIs> {
   return {
     totalAccounts: accounts.length,
     activeAccounts: accounts.filter((a) => a.is_active).length,
-    pendingPins: pins.filter((p) => p.status === 'pending').length,
+    pendingPins: pins.filter((p) => p.status === 'pending' || p.status === 'processing').length,
     postedPins: pins.filter((p) => p.status === 'posted').length,
     failedPins: pins.filter((p) => p.status === 'failed').length,
     totalLogs: logs.length,
@@ -1025,7 +1025,7 @@ export async function getAccountPinStats(accountId: string): Promise<AccountPinS
     const acc = accResult.data;
 
     const total = pins.length;
-    const pending = pins.filter((p) => p.status === 'pending').length;
+    const pending = pins.filter((p) => p.status === 'pending' || p.status === 'processing').length;
     const posted = pins.filter((p) => p.status === 'posted').length;
     const failed = pins.filter((p) => p.status === 'failed').length;
 

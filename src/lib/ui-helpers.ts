@@ -11,6 +11,9 @@ export function renderStatusBadge(status: string | boolean, customLabel?: string
   if (['posted', 'success', 'active', 'true'].includes(normalized)) {
     variantStyles = 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20';
     dotColor = 'bg-emerald-500';
+  } else if (['processing'].includes(normalized)) {
+    variantStyles = 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20';
+    dotColor = 'bg-sky-500 animate-pulse';
   } else if (['pending'].includes(normalized)) {
     variantStyles = 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20';
     dotColor = 'bg-amber-500';

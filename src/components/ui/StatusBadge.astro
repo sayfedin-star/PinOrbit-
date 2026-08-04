@@ -1,6 +1,6 @@
 ---
 interface Props {
-  status: 'pending' | 'posted' | 'failed' | 'success' | 'error' | boolean | string;
+  status: 'pending' | 'processing' | 'posted' | 'failed' | 'success' | 'error' | boolean | string;
   label?: string;
   size?: 'sm' | 'md';
 }
@@ -15,6 +15,8 @@ let variantStyles = 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-s
 
 if (['posted', 'success', 'active', 'true'].includes(normalizedStatus)) {
   variantStyles = 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20';
+} else if (['processing'].includes(normalizedStatus)) {
+  variantStyles = 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20';
 } else if (['pending'].includes(normalizedStatus)) {
   variantStyles = 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20';
 } else if (['failed', 'error', 'inactive', 'false'].includes(normalizedStatus)) {
@@ -28,6 +30,7 @@ const displayLabel = label || normalizedStatus.charAt(0).toUpperCase() + normali
 <span class={`inline-flex items-center gap-1.5 rounded-full border transition-colors ${variantStyles} ${sizeStyles}`}>
   <span class={`h-1.5 w-1.5 rounded-full ${
     ['posted', 'success', 'active', 'true'].includes(normalizedStatus) ? 'bg-emerald-500' :
+    ['processing'].includes(normalizedStatus) ? 'bg-sky-500 animate-pulse' :
     ['pending'].includes(normalizedStatus) ? 'bg-amber-500' : 'bg-rose-500'
   }`}></span>
   {displayLabel}
