@@ -383,6 +383,7 @@ Deno.serve(async (req: Request) => {
         .eq("account_id", account.id)
         .eq("status", "pending")
         .or(`scheduled_for.is.null,scheduled_for.lte.${nowIso}`)
+        .or(`next_retry_at.is.null,next_retry_at.lte.${nowIso}`)
         .order("scheduled_for", { ascending: true, nullsFirst: true })
         .order("created_at", { ascending: true })
         .limit(1);
@@ -545,21 +546,67 @@ Deno.serve(async (req: Request) => {
           sentCount++;
         } else {
           const responseText = await webhookResponse.text();
-          const errorMessage = `Webhook failed [HTTP ${webhookResponse.status}]: ${responseText.slice(0, 300)}`;
+          const status = webhookResponse.status;
+          const errorMessage = `Webhook failed [HTTP ${status}]: ${responseText.slice(0, 300)}`;
 
-          await supabase
-            .from("pins")
-            .update({ status: "failed", processing_started_at: null })
-            .eq("id", currentPin.id);
+          // Classify failure: HTTP 400, 401, 403, 404 are permanent; 429 & 5xx are transient
+          const isPermanent = [400, 401, 403, 404].includes(status);
+          const failureType = isPermanent ? 'permanent' : (status === 429 ? 'rate_limited' : 'transient');
 
-          await supabase.from("logs").insert({
-            pin_id: currentPin.id,
-            account_id: account.id,
-            webhook_id: targetWebhook.id || null,
-            status: "error",
-            message: errorMessage,
-            webhook_used: targetWebhook.webhook_url,
-          });
+          const currentRetryCount = (currentPin as any).retry_count || 0;
+          const maxRetries = (currentPin as any).max_retries || 3;
+          const isEligibleForRetry = !isPermanent && currentRetryCount < maxRetries;
+
+          if (isEligibleForRetry) {
+            const nextRetryCount = currentRetryCount + 1;
+            const expDelay = Math.min(1800, 60 * Math.pow(2, nextRetryCount));
+            const jitterSec = expDelay * (0.5 + Math.random() * 0.5);
+            const nextRetryAt = new Date(Date.now() + jitterSec * 1000).toISOString();
+
+            await supabase
+              .from("pins")
+              .update({
+                status: "pending",
+                retry_count: nextRetryCount,
+                next_retry_at: nextRetryAt,
+                last_failure_reason: errorMessage,
+                last_attempt_at: new Date().toISOString(),
+                failure_type: failureType,
+                processing_started_at: null,
+              })
+              .eq("id", currentPin.id);
+
+            await supabase.from("logs").insert({
+              pin_id: currentPin.id,
+              account_id: account.id,
+              webhook_id: targetWebhook.id || null,
+              status: "error",
+              message: `Attempt ${nextRetryCount}/${maxRetries} failed: ${errorMessage}. Retrying in ${Math.round(jitterSec / 60)}m.`,
+              webhook_used: targetWebhook.webhook_url,
+            });
+          } else {
+            await supabase
+              .from("pins")
+              .update({
+                status: "failed",
+                retry_count: currentRetryCount + 1,
+                next_retry_at: null,
+                last_failure_reason: errorMessage,
+                last_attempt_at: new Date().toISOString(),
+                failure_type: failureType,
+                processing_started_at: null,
+              })
+              .eq("id", currentPin.id);
+
+            await supabase.from("logs").insert({
+              pin_id: currentPin.id,
+              account_id: account.id,
+              webhook_id: targetWebhook.id || null,
+              status: "error",
+              message: `Final Failure (${failureType}): ${errorMessage}`,
+              webhook_used: targetWebhook.webhook_url,
+            });
+          }
 
           if (targetWebhook.id) {
             await supabase
@@ -579,19 +626,60 @@ Deno.serve(async (req: Request) => {
           ? "Webhook dispatch timed out after 15 seconds"
           : `Network error dispatching webhook: ${fetchErr?.message || String(fetchErr)}`;
 
-        await supabase
-          .from("pins")
-          .update({ status: "failed", processing_started_at: null })
-          .eq("id", currentPin.id);
+        const currentRetryCount = (currentPin as any).retry_count || 0;
+        const maxRetries = (currentPin as any).max_retries || 3;
+        const isEligibleForRetry = currentRetryCount < maxRetries;
 
-        await supabase.from("logs").insert({
-          pin_id: currentPin.id,
-          account_id: account.id,
-          webhook_id: targetWebhook.id || null,
-          status: "error",
-          message: errorMessage,
-          webhook_used: targetWebhook.webhook_url,
-        });
+        if (isEligibleForRetry) {
+          const nextRetryCount = currentRetryCount + 1;
+          const expDelay = Math.min(1800, 60 * Math.pow(2, nextRetryCount));
+          const jitterSec = expDelay * (0.5 + Math.random() * 0.5);
+          const nextRetryAt = new Date(Date.now() + jitterSec * 1000).toISOString();
+
+          await supabase
+            .from("pins")
+            .update({
+              status: "pending",
+              retry_count: nextRetryCount,
+              next_retry_at: nextRetryAt,
+              last_failure_reason: errorMessage,
+              last_attempt_at: new Date().toISOString(),
+              failure_type: "transient",
+              processing_started_at: null,
+            })
+            .eq("id", currentPin.id);
+
+          await supabase.from("logs").insert({
+            pin_id: currentPin.id,
+            account_id: account.id,
+            webhook_id: targetWebhook.id || null,
+            status: "error",
+            message: `Attempt ${nextRetryCount}/${maxRetries} failed: ${errorMessage}. Retrying in ${Math.round(jitterSec / 60)}m.`,
+            webhook_used: targetWebhook.webhook_url,
+          });
+        } else {
+          await supabase
+            .from("pins")
+            .update({
+              status: "failed",
+              retry_count: currentRetryCount + 1,
+              next_retry_at: null,
+              last_failure_reason: errorMessage,
+              last_attempt_at: new Date().toISOString(),
+              failure_type: "transient",
+              processing_started_at: null,
+            })
+            .eq("id", currentPin.id);
+
+          await supabase.from("logs").insert({
+            pin_id: currentPin.id,
+            account_id: account.id,
+            webhook_id: targetWebhook.id || null,
+            status: "error",
+            message: `Final Failure (transient exhausted): ${errorMessage}`,
+            webhook_used: targetWebhook.webhook_url,
+          });
+        }
 
         if (targetWebhook.id) {
           await supabase

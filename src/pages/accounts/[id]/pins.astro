@@ -1,0 +1,1022 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import { getAccounts } from '../../../lib/supabase';
+
+export async function getStaticPaths() {
+  const accounts = await getAccounts();
+  const fallbackIds = ['acc-1', 'acc-2', 'acc-3'];
+  const fetchedIds = (accounts || []).map((a) => a.id);
+  const allIds = Array.from(new Set([...fallbackIds, ...fetchedIds]));
+
+  return allIds.map((id) => ({
+    params: { id },
+  }));
+}
+
+const { id } = Astro.params;
+---
+
+<Layout title="All Pins — Account Pins Manager" description="Full account-scoped pins management table with filtering, pagination, sorting, and bulk actions.">
+  <!-- Back Link & Breadcrumb -->
+  <div class="mb-4 flex items-center justify-between">
+    <a id="back-to-account-link" href={`/accounts/details?id=${id}`} class="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      <span>&larr; Back to Account Details</span>
+    </a>
+    <span class="text-xs text-muted-foreground font-mono">Account ID: <span id="display-account-id">{id}</span></span>
+  </div>
+
+  <!-- Global Feedback Banner -->
+  <div id="pins-feedback-banner" class="hidden mb-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3.5 text-xs text-emerald-600 dark:text-emerald-400 flex items-center justify-between shadow-sm">
+    <div class="flex items-center gap-2.5">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+      </svg>
+      <span id="pins-feedback-text">Action completed successfully.</span>
+    </div>
+    <button id="close-pins-feedback" class="font-bold opacity-70 hover:opacity-100">&times;</button>
+  </div>
+
+  <!-- Page Title Header -->
+  <div class="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2.5">
+        <span id="page-account-title">All Pins</span>
+        <span id="page-pins-total-badge" class="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-bold text-primary">0</span>
+      </h1>
+      <p class="text-xs text-muted-foreground mt-1">
+        Account-scoped pins repository with full filtering, sorting, pagination, and bulk orchestration.
+      </p>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <a
+        id="btn-import-link"
+        href={`/imports?account=${id}`}
+        class="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-semibold text-white shadow hover:bg-emerald-700 transition-all"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <span>+ Import Pins</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Filter Bar -->
+  <div class="mb-4 rounded-xl border border-border bg-card p-4 shadow-sm space-y-3">
+    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 text-xs">
+      <div class="flex flex-wrap items-center gap-2.5 flex-1">
+        <!-- Search Input -->
+        <div class="relative flex-1 min-w-[200px] max-w-sm">
+          <svg xmlns="http://www.w3.org/2000/svg" class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input
+            id="filter-search-input"
+            type="text"
+            placeholder="Filter by pin title..."
+            class="w-full rounded-xl border border-border bg-background py-2 pl-9 pr-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+          />
+        </div>
+
+        <!-- Status Filter -->
+        <select id="filter-status-select" class="rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none">
+          <option value="all">All Statuses</option>
+          <option value="pending">Pending</option>
+          <option value="retrying">Retrying</option>
+          <option value="posted">Posted</option>
+          <option value="failed">Failed</option>
+          <option value="processing">Processing</option>
+        </select>
+
+        <!-- Board Filter -->
+        <select id="filter-board-select" class="rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none max-w-[200px]">
+          <option value="all">All Boards</option>
+        </select>
+
+        <!-- Date Range Filter -->
+        <div class="flex items-center gap-1.5">
+          <input id="filter-date-from" type="date" title="From date" class="rounded-xl border border-border bg-background py-2 px-2.5 text-xs text-foreground focus:border-primary focus:outline-none" />
+          <span class="text-muted-foreground text-xs">-</span>
+          <input id="filter-date-to" type="date" title="To date" class="rounded-xl border border-border bg-background py-2 px-2.5 text-xs text-foreground focus:border-primary focus:outline-none" />
+        </div>
+
+        <!-- Clear Filters -->
+        <button id="filter-clear-btn" class="hidden rounded-xl border border-border bg-muted/50 px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-all">
+          Clear filters
+        </button>
+      </div>
+
+      <div class="flex items-center justify-between lg:justify-end gap-3 text-xs text-muted-foreground">
+        <span id="filter-showing-count" class="font-medium">Showing 0 of 0 pins</span>
+        <div class="flex items-center gap-1.5">
+          <span>Page size:</span>
+          <select id="page-size-select" class="rounded-lg border border-border bg-background py-1 px-2 text-xs text-foreground focus:border-primary focus:outline-none">
+            <option value="25">25</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Global Select All Banner (Visible when page selection is active) -->
+  <div id="global-select-banner" class="hidden mb-3 rounded-xl border border-primary/30 bg-primary/10 p-3 text-xs text-foreground flex items-center justify-between">
+    <span id="global-select-text">All 25 pins on this page are selected.</span>
+    <button id="btn-select-all-matching" class="font-bold text-primary hover:underline">
+      Select all pins matching active filters
+    </button>
+  </div>
+
+  <!-- Sticky Contextual Bulk Action Bar -->
+  <div id="bulk-action-bar" class="hidden sticky top-4 z-40 mb-4 rounded-2xl border border-primary/40 bg-card p-3.5 shadow-xl flex flex-wrap items-center justify-between gap-3 backdrop-blur-md">
+    <div class="flex items-center gap-3">
+      <span class="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-xs" id="selected-count-badge">0</span>
+      <span class="text-xs font-semibold text-foreground" id="selected-count-text">0 pins selected</span>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-2">
+      <button id="bulk-btn-retry" class="inline-flex items-center gap-1.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400 hover:bg-amber-500 hover:text-white transition-all">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6"/><path d="M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+        <span>Retry Now</span>
+      </button>
+
+      <button id="bulk-btn-edit" class="inline-flex items-center gap-1.5 rounded-xl border border-border bg-background px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted transition-all">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        <span>Bulk Edit</span>
+      </button>
+
+      <button id="bulk-btn-cancel" class="inline-flex items-center gap-1.5 rounded-xl border border-border bg-background px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-all">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+        <span>Bulk Cancel</span>
+      </button>
+
+      <button id="bulk-btn-delete" class="inline-flex items-center gap-1.5 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-xs font-semibold text-rose-500 hover:bg-rose-500 hover:text-white transition-all">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+        <span>Bulk Delete</span>
+      </button>
+
+      <div class="h-4 w-px bg-border my-auto mx-1"></div>
+
+      <button id="bulk-btn-clear" class="p-1 text-muted-foreground hover:text-foreground font-bold text-xs" title="Clear selection">
+        &times;
+      </button>
+    </div>
+  </div>
+
+  <!-- Pins Table Container -->
+  <div id="pins-table-container">
+    <div class="overflow-hidden rounded-xl border border-border bg-card p-12 text-center text-xs text-muted-foreground animate-pulse">
+      Loading account pins...
+    </div>
+  </div>
+
+  <!-- Pagination Bar -->
+  <div id="pagination-bar" class="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs">
+    <span id="pagination-info" class="text-muted-foreground">Showing 0 to 0 of 0 entries</span>
+    <div class="flex items-center gap-2">
+      <button id="pg-prev-btn" disabled class="rounded-xl border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground disabled:opacity-50 hover:bg-muted transition-all">
+        &larr; Previous
+      </button>
+      <span id="pg-page-num" class="font-bold text-foreground px-2">Page 1 of 1</span>
+      <button id="pg-next-btn" disabled class="rounded-xl border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground disabled:opacity-50 hover:bg-muted transition-all">
+        Next &rarr;
+      </button>
+    </div>
+  </div>
+
+  <!-- MODAL: Bulk Edit -->
+  <div id="bulk-edit-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" aria-modal="true" role="dialog">
+    <div class="relative w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-4 z-10">
+      <div class="flex items-center justify-between border-b border-border pb-3">
+        <h3 class="text-base font-bold text-foreground">Bulk Edit Selected Pins</h3>
+        <button id="close-bulk-edit" class="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground">&times;</button>
+      </div>
+
+      <div class="space-y-4 text-xs">
+        <div>
+          <label class="block font-medium text-muted-foreground mb-1">Reassign Target Board</label>
+          <select id="bulk-edit-board-select" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none">
+            <option value="">-- No Board Change --</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block font-medium text-muted-foreground mb-1">Reschedule Date & Time</label>
+          <input id="bulk-edit-schedule-input" type="datetime-local" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none" />
+          <p class="text-[11px] text-muted-foreground mt-1">Leave empty to keep existing schedule, or pick date/time to update.</p>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 border-t border-border pt-4">
+        <button id="cancel-bulk-edit" class="rounded-xl border border-border px-4 py-2 text-xs font-medium text-muted-foreground hover:bg-muted">Cancel</button>
+        <button id="save-bulk-edit" class="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow hover:bg-primary/90">Apply Changes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Bulk Delete Confirmation -->
+  <div id="bulk-delete-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" aria-modal="true" role="dialog">
+    <div class="relative w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-4 z-10">
+      <div class="flex items-center gap-3 text-rose-500 border-b border-border pb-3">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <h3 class="text-base font-bold text-foreground">Confirm Bulk Deletion</h3>
+      </div>
+
+      <p id="bulk-delete-confirm-text" class="text-xs text-muted-foreground">
+        Are you sure you want to delete the selected pins? This action cannot be undone.
+      </p>
+
+      <div class="flex items-center justify-end gap-2 border-t border-border pt-4">
+        <button id="cancel-bulk-delete" class="rounded-xl border border-border px-4 py-2 text-xs font-medium text-muted-foreground hover:bg-muted">Cancel</button>
+        <button id="confirm-bulk-delete-btn" class="rounded-xl bg-rose-600 px-4 py-2 text-xs font-semibold text-white shadow hover:bg-rose-700">Delete Pins</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Pin Detail View -->
+  <div id="pin-detail-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" aria-modal="true" role="dialog">
+    <div class="relative w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-4 z-10 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between border-b border-border pb-3">
+        <h3 class="text-base font-bold text-foreground">Pin Details</h3>
+        <button id="close-pin-detail-modal" class="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground">&times;</button>
+      </div>
+
+      <div id="pin-detail-content" class="space-y-4 text-xs">
+        <!-- Dynamically rendered -->
+      </div>
+
+      <div class="flex items-center justify-end border-t border-border pt-4">
+        <button id="dismiss-pin-detail-btn" class="rounded-xl border border-border px-4 py-2 text-xs font-semibold text-foreground hover:bg-muted">Close</button>
+      </div>
+    </div>
+  </div>
+</Layout>
+
+<script>
+  import { requireAuth } from '../../../lib/auth';
+  import {
+    getAccountDetails,
+    getAccountPins,
+    getAccountBoards,
+    bulkDeletePins,
+    bulkEditPins,
+    bulkRetryPinsNow,
+    bulkCancelPins,
+  } from '../../../lib/supabase';
+  import { renderStatusBadge, formatDate, formatTime, renderEmptyStateHTML, escapeHtml } from '../../../lib/ui-helpers';
+  import type { Account, Pin, Board } from '../../../lib/types';
+
+  let accountId: string = '';
+  let accountData: Account | null = null;
+  let accountBoards: Board[] = [];
+  let currentPagePins: Pin[] = [];
+  let totalPinsCount: number = 0;
+  let totalPagesCount: number = 1;
+
+  // Filter & Pagination & Sort State
+  let filterStatus = 'all';
+  let filterBoard = 'all';
+  let filterSearch = '';
+  let filterDateFrom = '';
+  let filterDateTo = '';
+  let currentPage = 1;
+  let pageSize = 25;
+  let sortBy = 'created_at';
+  let sortDir: 'asc' | 'desc' = 'desc';
+
+  let searchDebounceTimer: any = null;
+
+  // Selection state
+  let selectedPinIds: Set<string> = new Set();
+  let isGlobalSelectAll = false;
+
+  async function init() {
+    const isAuth = await requireAuth();
+    if (!isAuth) return;
+
+    // Extract accountId from path or URL query string
+    const urlParams = new URLSearchParams(window.location.search);
+    const queryId = urlParams.get('id');
+    const pathParts = window.location.pathname.split('/accounts/');
+    let pathId = '';
+    if (pathParts.length > 1) {
+      pathId = pathParts[1].split('/')[0].split('?')[0];
+    }
+
+    accountId = queryId || (pathId && pathId !== '[id]' && pathId !== 'pins' ? pathId : '');
+
+    const displayElem = document.getElementById('display-account-id');
+    if (displayElem) displayElem.textContent = accountId || '---';
+
+    const backLink = document.getElementById('back-to-account-link') as HTMLAnchorElement;
+    if (backLink && accountId) {
+      backLink.href = `/accounts/details?id=${accountId}`;
+    }
+
+    const importLink = document.getElementById('btn-import-link') as HTMLAnchorElement;
+    if (importLink && accountId) {
+      importLink.href = `/imports?account=${accountId}`;
+    }
+
+    if (!accountId) return;
+
+    // Initialize state from URL params
+    filterStatus = urlParams.get('status') || 'all';
+    filterBoard = urlParams.get('board') || 'all';
+    filterSearch = urlParams.get('q') || '';
+    filterDateFrom = urlParams.get('from') || '';
+    filterDateTo = urlParams.get('to') || '';
+    currentPage = parseInt(urlParams.get('page') || '1', 10) || 1;
+    pageSize = parseInt(urlParams.get('size') || '25', 10) || 25;
+    sortBy = urlParams.get('sort') || 'created_at';
+    sortDir = (urlParams.get('dir') as 'asc' | 'desc') || 'desc';
+
+    initFilterInputs();
+    setupEventListeners();
+    await loadInitialData();
+  }
+
+  function initFilterInputs() {
+    const statusSelect = document.getElementById('filter-status-select') as HTMLSelectElement;
+    const searchInput = document.getElementById('filter-search-input') as HTMLInputElement;
+    const dateFromInput = document.getElementById('filter-date-from') as HTMLInputElement;
+    const dateToInput = document.getElementById('filter-date-to') as HTMLInputElement;
+    const pageSizeSelect = document.getElementById('page-size-select') as HTMLSelectElement;
+
+    if (statusSelect) statusSelect.value = filterStatus;
+    if (searchInput) searchInput.value = filterSearch;
+    if (dateFromInput) dateFromInput.value = filterDateFrom;
+    if (dateToInput) dateToInput.value = filterDateTo;
+    if (pageSizeSelect) pageSizeSelect.value = String(pageSize);
+  }
+
+  function syncStateToURL() {
+    const url = new URL(window.location.href);
+    if (filterStatus && filterStatus !== 'all') url.searchParams.set('status', filterStatus);
+    else url.searchParams.delete('status');
+
+    if (filterBoard && filterBoard !== 'all') url.searchParams.set('board', filterBoard);
+    else url.searchParams.delete('board');
+
+    if (filterSearch && filterSearch.trim() !== '') url.searchParams.set('q', filterSearch.trim());
+    else url.searchParams.delete('q');
+
+    if (filterDateFrom) url.searchParams.set('from', filterDateFrom);
+    else url.searchParams.delete('from');
+
+    if (filterDateTo) url.searchParams.set('to', filterDateTo);
+    else url.searchParams.delete('to');
+
+    url.searchParams.set('page', String(currentPage));
+    url.searchParams.set('size', String(pageSize));
+    url.searchParams.set('sort', sortBy);
+    url.searchParams.set('dir', sortDir);
+
+    window.history.replaceState({}, '', url.toString());
+
+    // Toggle clear filters button visibility
+    const clearBtn = document.getElementById('filter-clear-btn');
+    const isFiltered = filterStatus !== 'all' || filterBoard !== 'all' || filterSearch !== '' || filterDateFrom !== '' || filterDateTo !== '';
+    if (clearBtn) {
+      if (isFiltered) clearBtn.classList.remove('hidden');
+      else clearBtn.classList.add('hidden');
+    }
+  }
+
+  async function loadInitialData() {
+    try {
+      const [acc, boards] = await Promise.all([
+        getAccountDetails(accountId),
+        getAccountBoards(accountId),
+      ]);
+
+      if (acc) {
+        accountData = acc;
+        const pageTitle = document.getElementById('page-account-title');
+        if (pageTitle) pageTitle.textContent = `All Pins — ${acc.account_name}`;
+      }
+
+      accountBoards = boards;
+      populateBoardSelects(boards);
+      await fetchAndRenderPins();
+    } catch (err) {
+      console.error('Error loading pins page initial data:', err);
+    }
+  }
+
+  function populateBoardSelects(boards: Board[]) {
+    const filterBoardSelect = document.getElementById('filter-board-select') as HTMLSelectElement;
+    const bulkEditBoardSelect = document.getElementById('bulk-edit-board-select') as HTMLSelectElement;
+
+    const boardOptions = boards.map((b) => `<option value="${escapeHtml(b.board_name)}">${escapeHtml(b.board_name)}</option>`).join('');
+
+    if (filterBoardSelect) {
+      filterBoardSelect.innerHTML = `<option value="all">All Boards</option>` + boardOptions;
+      filterBoardSelect.value = filterBoard;
+    }
+
+    if (bulkEditBoardSelect) {
+      bulkEditBoardSelect.innerHTML = `<option value="">-- No Board Change --</option>` + boardOptions;
+    }
+  }
+
+  async function fetchAndRenderPins() {
+    syncStateToURL();
+
+    const res = await getAccountPins({
+      accountId,
+      status: filterStatus,
+      boardId: filterBoard,
+      search: filterSearch,
+      dateFrom: filterDateFrom,
+      dateTo: filterDateTo,
+      page: currentPage,
+      pageSize,
+      sortBy: sortBy as any,
+      sortDir,
+    });
+
+    currentPagePins = res.pins;
+    totalPinsCount = res.totalCount;
+    totalPagesCount = res.totalPages;
+
+    renderTable(res.pins);
+    renderPagination(res.page, res.totalPages, res.totalCount);
+    updateSelectionUI();
+  }
+
+  function renderPinStatusBadgeWithRetry(pin: Pin) {
+    if (pin.status === 'posted') {
+      return `<span class="inline-flex items-center rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">Posted</span>`;
+    }
+    if (pin.status === 'processing') {
+      return `<span class="inline-flex items-center rounded-full bg-blue-500/10 border border-blue-500/20 px-2.5 py-0.5 text-[11px] font-semibold text-blue-500">Processing</span>`;
+    }
+    if (pin.status === 'pending' && (pin.retry_count || 0) > 0) {
+      let retryCountdownText = '';
+      if (pin.next_retry_at) {
+        const diffMs = new Date(pin.next_retry_at).getTime() - Date.now();
+        if (diffMs > 0) {
+          const mins = Math.max(1, Math.round(diffMs / 60000));
+          retryCountdownText = ` (${mins}m)`;
+        }
+      }
+      return `<span class="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 px-2.5 py-0.5 text-[11px] font-semibold text-amber-600 dark:text-amber-400" title="${escapeHtml(pin.last_failure_reason || 'Retrying soon')}">
+        <span>Retrying${retryCountdownText}</span>
+      </span>`;
+    }
+    if (pin.status === 'pending') {
+      return `<span class="inline-flex items-center rounded-full bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 text-[11px] font-semibold text-amber-600 dark:text-amber-400">Pending</span>`;
+    }
+    if (pin.status === 'failed') {
+      return `<span class="inline-flex items-center rounded-full bg-rose-500/10 border border-rose-500/20 px-2.5 py-0.5 text-[11px] font-semibold text-rose-500 cursor-help" title="${escapeHtml(pin.last_failure_reason || 'Execution failed')}">Failed</span>`;
+    }
+    return renderStatusBadge(pin.status);
+  }
+
+  function renderTable(pins: Pin[]) {
+    const container = document.getElementById('pins-table-container');
+    const showingCountElem = document.getElementById('filter-showing-count');
+    const totalBadge = document.getElementById('page-pins-total-badge');
+
+    if (showingCountElem) {
+      showingCountElem.textContent = `Showing ${pins.length} of ${totalPinsCount} pins`;
+    }
+    if (totalBadge) {
+      totalBadge.textContent = String(totalPinsCount);
+    }
+
+    if (!container) return;
+
+    if (!pins || pins.length === 0) {
+      const isFiltered = filterStatus !== 'all' || filterBoard !== 'all' || filterSearch !== '' || filterDateFrom !== '' || filterDateTo !== '';
+      container.innerHTML = renderEmptyStateHTML(
+        isFiltered ? 'No Pins Match Selected Filters' : 'No Pins Configured for Account',
+        isFiltered ? 'Try clearing or modifying your filter parameters.' : 'Import posts to add pins to this account.',
+        'inbox'
+      );
+      return;
+    }
+
+    const sortIcon = (col: string) => {
+      if (sortBy !== col) return '';
+      return sortDir === 'asc' ? ' &uarr;' : ' &darr;';
+    };
+
+    const rowsHtml = pins
+      .map((pin) => {
+        const isChecked = selectedPinIds.has(pin.id);
+        return `
+        <tr class="transition-colors hover:bg-muted/40 text-xs ${isChecked ? 'bg-primary/5' : ''}">
+          <td class="px-4 py-3 text-center">
+            <input type="checkbox" class="row-checkbox h-4 w-4 rounded border-border text-primary cursor-pointer" data-id="${pin.id}" ${isChecked ? 'checked' : ''} />
+          </td>
+          <td class="px-4 py-3 font-medium text-foreground">
+            <div class="flex items-center gap-3">
+              <img src="${escapeHtml(pin.image_url)}" alt="" class="h-10 w-10 rounded-lg object-cover border border-border bg-muted flex-shrink-0" onerror="this.src='https://images.unsplash.com/photo-1495521821757-a1efb6729352?auto=format&fit=crop&w=150&q=80'" />
+              <div class="space-y-0.5">
+                <a href="#" class="font-semibold text-foreground hover:text-primary transition-colors max-w-sm truncate block pin-detail-trigger" data-id="${pin.id}">${escapeHtml(pin.title)}</a>
+                ${pin.description ? `<p class="max-w-xs truncate text-[11px] text-muted-foreground">${escapeHtml(pin.description)}</p>` : ''}
+              </div>
+            </div>
+          </td>
+          <td class="px-4 py-3 text-muted-foreground font-medium">${escapeHtml(pin.board_name || 'No board')}</td>
+          <td class="px-4 py-3">${renderPinStatusBadgeWithRetry(pin)}</td>
+          <td class="px-4 py-3 font-mono text-[11px] text-muted-foreground">${pin.retry_count || 0}/${pin.max_retries || 3}</td>
+          <td class="px-4 py-3 text-muted-foreground whitespace-nowrap">${pin.scheduled_for ? formatDate(pin.scheduled_for) : 'Immediate'}</td>
+          <td class="px-4 py-3 text-muted-foreground whitespace-nowrap">${pin.posted_at ? formatDate(pin.posted_at) : formatDate(pin.created_at)}</td>
+          <td class="px-4 py-3 text-right whitespace-nowrap">
+            <button data-id="${pin.id}" class="pin-detail-trigger rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted transition-all">
+              View
+            </button>
+          </td>
+        </tr>
+      `;
+      })
+      .join('');
+
+    container.innerHTML = `
+      <div class="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left">
+            <thead class="border-b border-border bg-muted/50 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <tr>
+                <th class="px-4 py-3.5 text-center w-10">
+                  <input id="header-select-all" type="checkbox" class="h-4 w-4 rounded border-border text-primary cursor-pointer" />
+                </th>
+                <th class="px-4 py-3.5 cursor-pointer hover:text-foreground sort-trigger" data-col="title">Pin Title${sortIcon('title')}</th>
+                <th class="px-4 py-3.5">Target Board</th>
+                <th class="px-4 py-3.5 cursor-pointer hover:text-foreground sort-trigger" data-col="status">Status${sortIcon('status')}</th>
+                <th class="px-4 py-3.5">Attempts</th>
+                <th class="px-4 py-3.5 cursor-pointer hover:text-foreground sort-trigger" data-col="scheduled_for">Scheduled For${sortIcon('scheduled_for')}</th>
+                <th class="px-4 py-3.5 cursor-pointer hover:text-foreground sort-trigger" data-col="created_at">Posted / Created${sortIcon('created_at')}</th>
+                <th class="px-4 py-3.5 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-border">
+              ${rowsHtml}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+
+    bindTableEvents();
+  }
+
+  function bindTableEvents() {
+    // Header Select All
+    const headerCheck = document.getElementById('header-select-all') as HTMLInputElement;
+    if (headerCheck) {
+      const pageIds = currentPagePins.map((p) => p.id);
+      const allSelectedOnPage = pageIds.length > 0 && pageIds.every((id) => selectedPinIds.has(id));
+      const someSelectedOnPage = pageIds.some((id) => selectedPinIds.has(id));
+
+      headerCheck.checked = allSelectedOnPage;
+      headerCheck.indeterminate = someSelectedOnPage && !allSelectedOnPage;
+
+      headerCheck.addEventListener('change', (e) => {
+        const checked = (e.target as HTMLInputElement).checked;
+        isGlobalSelectAll = false;
+        if (checked) {
+          pageIds.forEach((id) => selectedPinIds.add(id));
+        } else {
+          pageIds.forEach((id) => selectedPinIds.delete(id));
+        }
+        fetchAndRenderPins();
+      });
+    }
+
+    // Row Checkboxes
+    document.querySelectorAll('.row-checkbox').forEach((chk) => {
+      chk.addEventListener('change', (e) => {
+        const id = (e.target as HTMLElement).getAttribute('data-id');
+        const checked = (e.target as HTMLInputElement).checked;
+        if (id) {
+          if (checked) selectedPinIds.add(id);
+          else {
+            selectedPinIds.delete(id);
+            isGlobalSelectAll = false;
+          }
+          updateSelectionUI();
+        }
+      });
+    });
+
+    // Sort Triggers
+    document.querySelectorAll('.sort-trigger').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        const col = (e.currentTarget as HTMLElement).getAttribute('data-col');
+        if (col) {
+          if (sortBy === col) {
+            sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+          } else {
+            sortBy = col;
+            sortDir = 'desc';
+          }
+          fetchAndRenderPins();
+        }
+      });
+    });
+
+    // View Pin Details
+    document.querySelectorAll('.pin-detail-trigger').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        const id = (e.currentTarget as HTMLElement).getAttribute('data-id');
+        if (id) openPinDetailModal(id);
+      });
+    });
+  }
+
+  function updateSelectionUI() {
+    const bulkBar = document.getElementById('bulk-action-bar');
+    const badge = document.getElementById('selected-count-badge');
+    const text = document.getElementById('selected-count-text');
+    const banner = document.getElementById('global-select-banner');
+    const bannerText = document.getElementById('global-select-text');
+
+    const count = isGlobalSelectAll ? totalPinsCount : selectedPinIds.size;
+
+    if (count > 0) {
+      bulkBar?.classList.remove('hidden');
+      if (badge) badge.textContent = String(count);
+      if (text) text.textContent = `${count} ${count === 1 ? 'pin' : 'pins'} selected`;
+
+      const pageIds = currentPagePins.map((p) => p.id);
+      const allSelectedOnPage = pageIds.length > 0 && pageIds.every((id) => selectedPinIds.has(id));
+
+      if (allSelectedOnPage && totalPinsCount > pageIds.length && !isGlobalSelectAll) {
+        banner?.classList.remove('hidden');
+        if (bannerText) bannerText.textContent = `All ${pageIds.length} pins on this page are selected.`;
+      } else if (isGlobalSelectAll) {
+        banner?.classList.remove('hidden');
+        if (bannerText) bannerText.textContent = `All ${totalPinsCount} pins matching active filters are selected.`;
+      } else {
+        banner?.classList.add('hidden');
+      }
+    } else {
+      bulkBar?.classList.add('hidden');
+      banner?.classList.add('hidden');
+    }
+  }
+
+  function renderPagination(page: number, totalPages: number, totalCount: number) {
+    const prevBtn = document.getElementById('pg-prev-btn') as HTMLButtonElement;
+    const nextBtn = document.getElementById('pg-next-btn') as HTMLButtonElement;
+    const pageNumElem = document.getElementById('pg-page-num');
+    const infoElem = document.getElementById('pagination-info');
+
+    const startIdx = totalCount > 0 ? (page - 1) * pageSize + 1 : 0;
+    const endIdx = Math.min(totalCount, page * pageSize);
+
+    if (infoElem) infoElem.textContent = `Showing ${startIdx} to ${endIdx} of ${totalCount} entries`;
+    if (pageNumElem) pageNumElem.textContent = `Page ${page} of ${totalPages || 1}`;
+
+    if (prevBtn) prevBtn.disabled = page <= 1;
+    if (nextBtn) nextBtn.disabled = page >= totalPages;
+  }
+
+  function setupEventListeners() {
+    // Filters
+    document.getElementById('filter-status-select')?.addEventListener('change', (e) => {
+      filterStatus = (e.target as HTMLSelectElement).value;
+      currentPage = 1;
+      selectedPinIds.clear();
+      isGlobalSelectAll = false;
+      fetchAndRenderPins();
+    });
+
+    document.getElementById('filter-board-select')?.addEventListener('change', (e) => {
+      filterBoard = (e.target as HTMLSelectElement).value;
+      currentPage = 1;
+      selectedPinIds.clear();
+      isGlobalSelectAll = false;
+      fetchAndRenderPins();
+    });
+
+    document.getElementById('filter-search-input')?.addEventListener('input', (e) => {
+      filterSearch = (e.target as HTMLInputElement).value;
+      clearTimeout(searchDebounceTimer);
+      searchDebounceTimer = setTimeout(() => {
+        currentPage = 1;
+        selectedPinIds.clear();
+        isGlobalSelectAll = false;
+        fetchAndRenderPins();
+      }, 300);
+    });
+
+    document.getElementById('filter-date-from')?.addEventListener('change', (e) => {
+      filterDateFrom = (e.target as HTMLInputElement).value;
+      currentPage = 1;
+      fetchAndRenderPins();
+    });
+
+    document.getElementById('filter-date-to')?.addEventListener('change', (e) => {
+      filterDateTo = (e.target as HTMLInputElement).value;
+      currentPage = 1;
+      fetchAndRenderPins();
+    });
+
+    document.getElementById('filter-clear-btn')?.addEventListener('click', () => {
+      filterStatus = 'all';
+      filterBoard = 'all';
+      filterSearch = '';
+      filterDateFrom = '';
+      filterDateTo = '';
+      currentPage = 1;
+      selectedPinIds.clear();
+      isGlobalSelectAll = false;
+      initFilterInputs();
+      const boardSel = document.getElementById('filter-board-select') as HTMLSelectElement;
+      if (boardSel) boardSel.value = 'all';
+      fetchAndRenderPins();
+    });
+
+    document.getElementById('page-size-select')?.addEventListener('change', (e) => {
+      pageSize = parseInt((e.target as HTMLSelectElement).value, 10) || 25;
+      currentPage = 1;
+      fetchAndRenderPins();
+    });
+
+    // Pagination buttons
+    document.getElementById('pg-prev-btn')?.addEventListener('click', () => {
+      if (currentPage > 1) {
+        currentPage--;
+        fetchAndRenderPins();
+      }
+    });
+
+    document.getElementById('pg-next-btn')?.addEventListener('click', () => {
+      if (currentPage < totalPagesCount) {
+        currentPage++;
+        fetchAndRenderPins();
+      }
+    });
+
+    // Global Select Matching
+    document.getElementById('btn-select-all-matching')?.addEventListener('click', () => {
+      isGlobalSelectAll = true;
+      updateSelectionUI();
+    });
+
+    // Clear Selection
+    document.getElementById('bulk-btn-clear')?.addEventListener('click', () => {
+      selectedPinIds.clear();
+      isGlobalSelectAll = false;
+      fetchAndRenderPins();
+    });
+
+    // Bulk Delete Action
+    document.getElementById('bulk-btn-delete')?.addEventListener('click', () => {
+      const modal = document.getElementById('bulk-delete-modal');
+      const text = document.getElementById('bulk-delete-confirm-text');
+      const count = isGlobalSelectAll ? totalPinsCount : selectedPinIds.size;
+
+      if (text) {
+        text.textContent = `Are you sure you want to delete ${count} ${count === 1 ? 'pin' : 'pins'}? This action cannot be undone.`;
+      }
+      modal?.classList.remove('hidden');
+      modal?.classList.add('flex');
+    });
+
+    document.getElementById('cancel-bulk-delete')?.addEventListener('click', () => {
+      document.getElementById('bulk-delete-modal')?.classList.add('hidden');
+    });
+
+    document.getElementById('confirm-bulk-delete-btn')?.addEventListener('click', async () => {
+      const modal = document.getElementById('bulk-delete-modal');
+      modal?.classList.add('hidden');
+
+      let idsToDelete: string[] = [];
+      if (isGlobalSelectAll) {
+        const fullRes = await getAccountPins({
+          accountId,
+          status: filterStatus,
+          boardId: filterBoard,
+          search: filterSearch,
+          dateFrom: filterDateFrom,
+          dateTo: filterDateTo,
+          page: 1,
+          pageSize: 10000,
+        });
+        idsToDelete = fullRes.pins.map((p) => p.id);
+      } else {
+        idsToDelete = Array.from(selectedPinIds);
+      }
+
+      const res = await bulkDeletePins(idsToDelete, accountId);
+      if (res.error) {
+        showFeedback(res.error, 'error');
+      } else {
+        showFeedback(`Successfully deleted ${res.count} pin(s).`, 'success');
+        selectedPinIds.clear();
+        isGlobalSelectAll = false;
+        await fetchAndRenderPins();
+      }
+    });
+
+    // Bulk Retry Now
+    document.getElementById('bulk-btn-retry')?.addEventListener('click', async () => {
+      let idsToRetry: string[] = [];
+      if (isGlobalSelectAll) {
+        const fullRes = await getAccountPins({
+          accountId,
+          status: filterStatus,
+          boardId: filterBoard,
+          search: filterSearch,
+          dateFrom: filterDateFrom,
+          dateTo: filterDateTo,
+          page: 1,
+          pageSize: 10000,
+        });
+        idsToRetry = fullRes.pins.filter((p) => p.status === 'failed' || p.status === 'pending').map((p) => p.id);
+      } else {
+        idsToRetry = Array.from(selectedPinIds);
+      }
+
+      const res = await bulkRetryPinsNow(idsToRetry, accountId);
+      if (res.error) {
+        showFeedback(res.error, 'error');
+      } else {
+        showFeedback(`Forced immediate retry for ${res.count} pin(s).`, 'success');
+        selectedPinIds.clear();
+        isGlobalSelectAll = false;
+        await fetchAndRenderPins();
+      }
+    });
+
+    // Bulk Cancel
+    document.getElementById('bulk-btn-cancel')?.addEventListener('click', async () => {
+      let idsToCancel: string[] = [];
+      if (isGlobalSelectAll) {
+        const fullRes = await getAccountPins({
+          accountId,
+          status: filterStatus,
+          boardId: filterBoard,
+          search: filterSearch,
+          dateFrom: filterDateFrom,
+          dateTo: filterDateTo,
+          page: 1,
+          pageSize: 10000,
+        });
+        idsToCancel = fullRes.pins.filter((p) => p.status === 'pending').map((p) => p.id);
+      } else {
+        idsToCancel = Array.from(selectedPinIds);
+      }
+
+      const res = await bulkCancelPins(idsToCancel, accountId);
+      if (res.error) {
+        showFeedback(res.error, 'error');
+      } else {
+        showFeedback(`Cancelled ${res.count} pending pin(s).`, 'success');
+        selectedPinIds.clear();
+        isGlobalSelectAll = false;
+        await fetchAndRenderPins();
+      }
+    });
+
+    // Bulk Edit Modal
+    document.getElementById('bulk-btn-edit')?.addEventListener('click', () => {
+      const modal = document.getElementById('bulk-edit-modal');
+      modal?.classList.remove('hidden');
+      modal?.classList.add('flex');
+    });
+
+    document.getElementById('close-bulk-edit')?.addEventListener('click', () => {
+      document.getElementById('bulk-edit-modal')?.classList.add('hidden');
+    });
+
+    document.getElementById('cancel-bulk-edit')?.addEventListener('click', () => {
+      document.getElementById('bulk-edit-modal')?.classList.add('hidden');
+    });
+
+    document.getElementById('save-bulk-edit')?.addEventListener('click', async () => {
+      const modal = document.getElementById('bulk-edit-modal');
+      const boardVal = (document.getElementById('bulk-edit-board-select') as HTMLSelectElement).value;
+      const schedVal = (document.getElementById('bulk-edit-schedule-input') as HTMLInputElement).value;
+
+      modal?.classList.add('hidden');
+
+      const updates: { board_name?: string; scheduled_for?: string | null } = {};
+      if (boardVal) updates.board_name = boardVal;
+      if (schedVal) updates.scheduled_for = new Date(schedVal).toISOString();
+
+      let idsToEdit: string[] = [];
+      if (isGlobalSelectAll) {
+        const fullRes = await getAccountPins({
+          accountId,
+          status: filterStatus,
+          boardId: filterBoard,
+          search: filterSearch,
+          dateFrom: filterDateFrom,
+          dateTo: filterDateTo,
+          page: 1,
+          pageSize: 10000,
+        });
+        idsToEdit = fullRes.pins.map((p) => p.id);
+      } else {
+        idsToEdit = Array.from(selectedPinIds);
+      }
+
+      const res = await bulkEditPins(idsToEdit, updates, accountId);
+      if (res.error) {
+        showFeedback(res.error, 'error');
+      } else {
+        showFeedback(`Applied updates to ${res.count} pin(s).`, 'success');
+        selectedPinIds.clear();
+        isGlobalSelectAll = false;
+        await fetchAndRenderPins();
+      }
+    });
+
+    // Feedback banner close
+    document.getElementById('close-pins-feedback')?.addEventListener('click', () => {
+      document.getElementById('pins-feedback-banner')?.classList.add('hidden');
+    });
+
+    // Pin Detail Modal Close
+    document.getElementById('close-pin-detail-modal')?.addEventListener('click', () => {
+      document.getElementById('pin-detail-modal')?.classList.add('hidden');
+    });
+    document.getElementById('dismiss-pin-detail-btn')?.addEventListener('click', () => {
+      document.getElementById('pin-detail-modal')?.classList.add('hidden');
+    });
+  }
+
+  function openPinDetailModal(pinId: string) {
+    const pin = currentPagePins.find((p) => p.id === pinId);
+    if (!pin) return;
+
+    const modal = document.getElementById('pin-detail-modal');
+    const content = document.getElementById('pin-detail-content');
+
+    if (content) {
+      content.innerHTML = `
+        <div class="flex items-start gap-4 pb-3 border-b border-border">
+          <img src="${escapeHtml(pin.image_url)}" alt="" class="h-20 w-20 rounded-xl object-cover border border-border bg-muted flex-shrink-0" />
+          <div class="space-y-1">
+            <h4 class="font-bold text-sm text-foreground">${escapeHtml(pin.title)}</h4>
+            <p class="text-xs text-muted-foreground">${escapeHtml(pin.description || 'No description provided.')}</p>
+            <div class="pt-1">${renderPinStatusBadgeWithRetry(pin)}</div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 text-xs">
+          <div class="p-2.5 rounded-xl border border-border bg-background space-y-0.5">
+            <span class="text-[11px] font-medium text-muted-foreground">Target Board</span>
+            <p class="font-bold text-foreground">${escapeHtml(pin.board_name || 'Unassigned')}</p>
+          </div>
+          <div class="p-2.5 rounded-xl border border-border bg-background space-y-0.5">
+            <span class="text-[11px] font-medium text-muted-foreground">Attempts</span>
+            <p class="font-bold text-foreground font-mono">${pin.retry_count || 0} / ${pin.max_retries || 3}</p>
+          </div>
+          <div class="p-2.5 rounded-xl border border-border bg-background space-y-0.5">
+            <span class="text-[11px] font-medium text-muted-foreground">Scheduled For</span>
+            <p class="font-bold text-foreground">${pin.scheduled_for ? formatDate(pin.scheduled_for) : 'Immediate'}</p>
+          </div>
+          <div class="p-2.5 rounded-xl border border-border bg-background space-y-0.5">
+            <span class="text-[11px] font-medium text-muted-foreground">Posted / Created</span>
+            <p class="font-bold text-foreground">${pin.posted_at ? formatDate(pin.posted_at) : formatDate(pin.created_at)}</p>
+          </div>
+        </div>
+
+        ${pin.last_failure_reason ? `
+          <div class="p-3 rounded-xl border border-rose-500/30 bg-rose-500/10 space-y-1">
+            <span class="text-[11px] font-bold text-rose-500 uppercase tracking-wide">Last Failure Reason</span>
+            <p class="text-xs text-rose-600 dark:text-rose-400 font-mono break-all">${escapeHtml(pin.last_failure_reason)}</p>
+          </div>
+        ` : ''}
+
+        ${pin.link ? `
+          <div>
+            <span class="text-[11px] font-medium text-muted-foreground">Destination Link</span>
+            <a href="${escapeHtml(pin.link)}" target="_blank" rel="noopener noreferrer" class="block font-mono text-xs text-primary hover:underline truncate">${escapeHtml(pin.link)}</a>
+          </div>
+        ` : ''}
+      `;
+    }
+
+    modal?.classList.remove('hidden');
+    modal?.classList.add('flex');
+  }
+
+  function showFeedback(msg: string, type: 'success' | 'error' = 'success') {
+    const banner = document.getElementById('pins-feedback-banner');
+    const text = document.getElementById('pins-feedback-text');
+    if (!banner || !text) return;
+
+    text.textContent = msg;
+    if (type === 'error') {
+      banner.className = 'mb-4 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3.5 text-xs text-rose-500 flex items-center justify-between shadow-sm';
+    } else {
+      banner.className = 'mb-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3.5 text-xs text-emerald-600 dark:text-emerald-400 flex items-center justify-between shadow-sm';
+    }
+    banner.classList.remove('hidden');
+
+    setTimeout(() => {
+      banner.classList.add('hidden');
+    }, 5000);
+  }
+
+  document.addEventListener('DOMContentLoaded', init);
+</script>

@@ -144,8 +144,64 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
   <!-- Section 4: Recent Account Pins Queue -->
   <div class="mb-8 space-y-3">
     <div class="flex items-center justify-between">
-      <h3 class="text-sm font-bold text-foreground tracking-wide uppercase">Recent Account Pins Queue</h3>
-      <a href="/pins" class="text-xs font-semibold text-primary hover:underline">View all pins &rarr;</a>
+      <div class="flex items-center gap-2">
+        <h3 class="text-sm font-bold text-foreground tracking-wide uppercase">Recent Account Pins Queue</h3>
+        <span id="pin-queue-count-badge" class="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">0</span>
+      </div>
+      <a id="view-all-pins-link" href="/pins" class="text-xs font-semibold text-primary hover:underline flex items-center gap-1">
+        <span>View all pins</span>
+        <span>&rarr;</span>
+      </a>
+    </div>
+
+    <!-- Compact Inline Filter Bar -->
+    <div class="rounded-xl border border-border bg-card p-3 shadow-sm">
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2.5 text-xs">
+        <div class="flex flex-wrap items-center gap-2 flex-1">
+          <!-- Search Input -->
+          <div class="relative flex-1 min-w-[160px] max-w-xs">
+            <svg xmlns="http://www.w3.org/2000/svg" class="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input
+              id="pin-search-input"
+              type="text"
+              placeholder="Search pin title..."
+              class="w-full rounded-lg border border-border bg-background py-1.5 pl-8 pr-2 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+            />
+          </div>
+
+          <!-- Status Dropdown -->
+          <select id="pin-status-select" class="rounded-lg border border-border bg-background py-1.5 px-2.5 text-xs text-foreground focus:border-primary focus:outline-none">
+            <option value="all">All Statuses</option>
+            <option value="pending">Pending</option>
+            <option value="retrying">Retrying</option>
+            <option value="posted">Posted</option>
+            <option value="failed">Failed</option>
+            <option value="processing">Processing</option>
+          </select>
+
+          <!-- Board Dropdown -->
+          <select id="pin-board-select" class="rounded-lg border border-border bg-background py-1.5 px-2.5 text-xs text-foreground focus:border-primary focus:outline-none max-w-[160px]">
+            <option value="all">All Boards</option>
+          </select>
+
+          <!-- Date Range -->
+          <div class="flex items-center gap-1">
+            <input id="pin-date-from" type="date" title="From date" class="rounded-lg border border-border bg-background py-1.5 px-2 text-xs text-foreground focus:border-primary focus:outline-none" />
+            <span class="text-muted-foreground text-[10px]">-</span>
+            <input id="pin-date-to" type="date" title="To date" class="rounded-lg border border-border bg-background py-1.5 px-2 text-xs text-foreground focus:border-primary focus:outline-none" />
+          </div>
+
+          <!-- Clear Filters -->
+          <button id="pin-clear-filters-btn" class="hidden rounded-lg border border-border bg-muted/50 px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-all">
+            Clear filters
+          </button>
+        </div>
+
+        <!-- Showing Count -->
+        <div id="pin-result-count" class="text-xs text-muted-foreground font-medium whitespace-nowrap">
+          Showing 0 pins
+        </div>
+      </div>
     </div>
 
     <div id="account-pins-container">
@@ -419,7 +475,8 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
   import {
     getAccountDetails,
     getAccountPinStats,
-    getAccountRecentPins,
+    getAccountPins,
+    getAccountBoards,
     getAccountRecentLogs,
     getAccountWebhookSummary,
     getAccountWebhooks,
@@ -432,12 +489,21 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
     toggleAccountActive,
   } from '../../lib/supabase';
   import { renderStatusBadge, formatDate, formatTime, renderEmptyStateHTML, escapeHtml } from '../../lib/ui-helpers';
-  import type { Account, AccountPinStats, Pin, Log, AccountWebhook } from '../../lib/types';
+  import type { Account, AccountPinStats, Pin, Log, AccountWebhook, Board } from '../../lib/types';
 
   let currentAccount: Account | null = null;
   let currentStats: AccountPinStats | null = null;
   let accountId: string = '';
   let activeAccountWebhooks: AccountWebhook[] = [];
+  let accountBoards: Board[] = [];
+
+  // Filter State
+  let filterStatus = 'all';
+  let filterBoard = 'all';
+  let filterSearch = '';
+  let filterDateFrom = '';
+  let filterDateTo = '';
+  let searchDebounceTimer: any = null;
 
   async function init() {
     const isAuth = await requireAuth();
@@ -459,16 +525,127 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
 
     if (!accountId) return;
 
+    // Update "View all pins" link to dedicated route
+    const viewAllLink = document.getElementById('view-all-pins-link') as HTMLAnchorElement;
+    if (viewAllLink) {
+      viewAllLink.href = `/accounts/${accountId}/pins`;
+    }
+
+    // Read initial filters from URL params
+    filterStatus = urlParams.get('status') || 'all';
+    filterBoard = urlParams.get('board') || 'all';
+    filterSearch = urlParams.get('q') || '';
+    filterDateFrom = urlParams.get('from') || '';
+    filterDateTo = urlParams.get('to') || '';
+
+    // Initialize UI inputs from state
+    initFilterInputs();
+    setupFilterListeners();
     setupModalListeners();
+
     await loadAllData();
+  }
+
+  function initFilterInputs() {
+    const statusSelect = document.getElementById('pin-status-select') as HTMLSelectElement;
+    const searchInput = document.getElementById('pin-search-input') as HTMLInputElement;
+    const dateFromInput = document.getElementById('pin-date-from') as HTMLInputElement;
+    const dateToInput = document.getElementById('pin-date-to') as HTMLInputElement;
+
+    if (statusSelect) statusSelect.value = filterStatus;
+    if (searchInput) searchInput.value = filterSearch;
+    if (dateFromInput) dateFromInput.value = filterDateFrom;
+    if (dateToInput) dateToInput.value = filterDateTo;
+  }
+
+  function setupFilterListeners() {
+    const statusSelect = document.getElementById('pin-status-select');
+    const boardSelect = document.getElementById('pin-board-select');
+    const searchInput = document.getElementById('pin-search-input');
+    const dateFromInput = document.getElementById('pin-date-from');
+    const dateToInput = document.getElementById('pin-date-to');
+    const clearBtn = document.getElementById('pin-clear-filters-btn');
+
+    statusSelect?.addEventListener('change', (e) => {
+      filterStatus = (e.target as HTMLSelectElement).value;
+      onFilterChange();
+    });
+
+    boardSelect?.addEventListener('change', (e) => {
+      filterBoard = (e.target as HTMLSelectElement).value;
+      onFilterChange();
+    });
+
+    searchInput?.addEventListener('input', (e) => {
+      filterSearch = (e.target as HTMLInputElement).value;
+      clearTimeout(searchDebounceTimer);
+      searchDebounceTimer = setTimeout(() => {
+        onFilterChange();
+      }, 300);
+    });
+
+    dateFromInput?.addEventListener('change', (e) => {
+      filterDateFrom = (e.target as HTMLInputElement).value;
+      onFilterChange();
+    });
+
+    dateToInput?.addEventListener('change', (e) => {
+      filterDateTo = (e.target as HTMLInputElement).value;
+      onFilterChange();
+    });
+
+    clearBtn?.addEventListener('click', () => {
+      filterStatus = 'all';
+      filterBoard = 'all';
+      filterSearch = '';
+      filterDateFrom = '';
+      filterDateTo = '';
+      initFilterInputs();
+      const boardSel = document.getElementById('pin-board-select') as HTMLSelectElement;
+      if (boardSel) boardSel.value = 'all';
+      onFilterChange();
+    });
+  }
+
+  function syncFilterStateToURL() {
+    const url = new URL(window.location.href);
+    if (filterStatus && filterStatus !== 'all') url.searchParams.set('status', filterStatus);
+    else url.searchParams.delete('status');
+
+    if (filterBoard && filterBoard !== 'all') url.searchParams.set('board', filterBoard);
+    else url.searchParams.delete('board');
+
+    if (filterSearch && filterSearch.trim() !== '') url.searchParams.set('q', filterSearch.trim());
+    else url.searchParams.delete('q');
+
+    if (filterDateFrom) url.searchParams.set('from', filterDateFrom);
+    else url.searchParams.delete('from');
+
+    if (filterDateTo) url.searchParams.set('to', filterDateTo);
+    else url.searchParams.delete('to');
+
+    window.history.replaceState({}, '', url.toString());
+
+    // Toggle clear filters button visibility
+    const clearBtn = document.getElementById('pin-clear-filters-btn');
+    const isFiltered = filterStatus !== 'all' || filterBoard !== 'all' || filterSearch !== '' || filterDateFrom !== '' || filterDateTo !== '';
+    if (clearBtn) {
+      if (isFiltered) clearBtn.classList.remove('hidden');
+      else clearBtn.classList.add('hidden');
+    }
+  }
+
+  async function onFilterChange() {
+    syncFilterStateToURL();
+    await loadRecentPins();
   }
 
   async function loadAllData() {
     try {
-      const [acc, stats, pins, logs, whSummary] = await Promise.all([
+      const [acc, stats, boards, logs, whSummary] = await Promise.all([
         getAccountDetails(accountId),
         getAccountPinStats(accountId),
-        getAccountRecentPins(accountId, 10),
+        getAccountBoards(accountId),
         getAccountRecentLogs(accountId, 10),
         getAccountWebhookSummary(accountId),
       ]);
@@ -484,16 +661,117 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
 
       currentAccount = acc;
       currentStats = stats;
+      accountBoards = boards;
 
+      populateBoardDropdown(boards);
       renderHeader(acc);
       renderKPIs(stats, acc);
       renderScheduling(acc);
       renderWebhookSummary(whSummary);
-      renderRecentPins(pins);
       renderRecentLogs(logs);
+
+      await loadRecentPins();
     } catch (err) {
       console.error('Error loading account details:', err);
     }
+  }
+
+  function populateBoardDropdown(boards: Board[]) {
+    const boardSelect = document.getElementById('pin-board-select') as HTMLSelectElement;
+    if (!boardSelect) return;
+
+    boardSelect.innerHTML = `<option value="all">All Boards</option>` +
+      boards.map((b) => `<option value="${escapeHtml(b.board_name)}">${escapeHtml(b.board_name)}</option>`).join('');
+
+    if (filterBoard) {
+      boardSelect.value = filterBoard;
+    }
+  }
+
+  async function loadRecentPins() {
+    const res = await getAccountPins({
+      accountId,
+      status: filterStatus,
+      boardId: filterBoard,
+      search: filterSearch,
+      dateFrom: filterDateFrom,
+      dateTo: filterDateTo,
+      page: 1,
+      pageSize: 10,
+      sortBy: 'created_at',
+      sortDir: 'desc',
+    });
+
+    renderRecentPins(res.pins, res.totalCount);
+  }
+
+  function renderPinStatusBadgeWithRetry(pin: Pin) {
+    if (pin.status === 'posted') {
+      return `<span class="inline-flex items-center rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">Posted</span>`;
+    }
+    if (pin.status === 'processing') {
+      return `<span class="inline-flex items-center rounded-full bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 text-[11px] font-semibold text-blue-500">Processing</span>`;
+    }
+    if (pin.status === 'pending' && (pin.retry_count || 0) > 0) {
+      let retryCountdownText = '';
+      if (pin.next_retry_at) {
+        const diffMs = new Date(pin.next_retry_at).getTime() - Date.now();
+        if (diffMs > 0) {
+          const mins = Math.max(1, Math.round(diffMs / 60000));
+          retryCountdownText = ` (${mins}m)`;
+        }
+      }
+      return `<span class="inline-flex items-center gap-1 rounded-full bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 text-[11px] font-semibold text-amber-600 dark:text-amber-400" title="${escapeHtml(pin.last_failure_reason || 'Retrying soon')}">
+        <span>Retrying${retryCountdownText}</span>
+      </span>`;
+    }
+    if (pin.status === 'pending') {
+      return `<span class="inline-flex items-center rounded-full bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 text-[11px] font-semibold text-amber-600 dark:text-amber-400">Pending</span>`;
+    }
+    if (pin.status === 'failed') {
+      return `<span class="inline-flex items-center rounded-full bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 text-[11px] font-semibold text-rose-500 cursor-help" title="${escapeHtml(pin.last_failure_reason || 'Execution failed')}">Failed</span>`;
+    }
+    return renderStatusBadge(pin.status);
+  }
+
+  function renderKPIs(stats: AccountPinStats, acc: Account) {
+    const container = document.getElementById('kpis-grid-container');
+    if (!container) return;
+
+    container.innerHTML = `
+      <div class="rounded-xl border border-border bg-card p-3 text-center space-y-1">
+        <span class="text-[11px] font-semibold text-muted-foreground">Total Posts</span>
+        <p class="text-xl font-bold text-foreground">${stats.total}</p>
+      </div>
+      <div class="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-center space-y-1">
+        <span class="text-[11px] font-semibold text-amber-600 dark:text-amber-400">Pending</span>
+        <p class="text-xl font-bold text-amber-600 dark:text-amber-400">${stats.pending}</p>
+      </div>
+      <div class="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-center space-y-1">
+        <span class="text-[11px] font-semibold text-amber-600 dark:text-amber-400">Retrying</span>
+        <p class="text-xl font-bold text-amber-600 dark:text-amber-400">${stats.retrying || 0}</p>
+      </div>
+      <div class="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-center space-y-1">
+        <span class="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">Posted</span>
+        <p class="text-xl font-bold text-emerald-600 dark:text-emerald-400">${stats.posted}</p>
+      </div>
+      <div class="rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 text-center space-y-1">
+        <span class="text-[11px] font-semibold text-rose-500">Failed</span>
+        <p class="text-xl font-bold text-rose-500">${stats.failed}</p>
+      </div>
+      <div class="rounded-xl border border-primary/20 bg-primary/5 p-3 text-center space-y-1">
+        <span class="text-[11px] font-semibold text-primary">Remaining</span>
+        <p class="text-xl font-bold text-primary">${stats.remainingToday}</p>
+      </div>
+      <div class="rounded-xl border border-border bg-card p-3 text-center space-y-1">
+        <span class="text-[11px] font-semibold text-muted-foreground">Daily Limit</span>
+        <p class="text-xl font-bold text-foreground">${acc.max_pins_per_day}</p>
+      </div>
+      <div class="rounded-xl border border-border bg-card p-3 text-center space-y-1">
+        <span class="text-[11px] font-semibold text-muted-foreground">Boards</span>
+        <p class="text-xl font-bold text-foreground">${acc.boards_count || 0}</p>
+      </div>
+    `;
   }
 
   function renderHeader(acc: Account) {
@@ -550,46 +828,6 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
     document.getElementById('btn-toggle-active')?.addEventListener('click', handleToggleActive);
   }
 
-  function renderKPIs(stats: AccountPinStats, acc: Account) {
-    const container = document.getElementById('kpis-grid-container');
-    if (!container) return;
-
-    container.innerHTML = `
-      <div class="rounded-xl border border-border bg-card p-3 text-center space-y-1">
-        <span class="text-[11px] font-semibold text-muted-foreground">Total Posts</span>
-        <p class="text-xl font-bold text-foreground">${stats.total}</p>
-      </div>
-      <div class="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-center space-y-1">
-        <span class="text-[11px] font-semibold text-amber-600 dark:text-amber-400">Pending</span>
-        <p class="text-xl font-bold text-amber-600 dark:text-amber-400">${stats.pending}</p>
-      </div>
-      <div class="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-center space-y-1">
-        <span class="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">Posted</span>
-        <p class="text-xl font-bold text-emerald-600 dark:text-emerald-400">${stats.posted}</p>
-      </div>
-      <div class="rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 text-center space-y-1">
-        <span class="text-[11px] font-semibold text-rose-500">Failed</span>
-        <p class="text-xl font-bold text-rose-500">${stats.failed}</p>
-      </div>
-      <div class="rounded-xl border border-primary/20 bg-primary/5 p-3 text-center space-y-1">
-        <span class="text-[11px] font-semibold text-primary">Remaining</span>
-        <p class="text-xl font-bold text-primary">${stats.remainingToday}</p>
-      </div>
-      <div class="rounded-xl border border-border bg-card p-3 text-center space-y-1">
-        <span class="text-[11px] font-semibold text-muted-foreground">Daily Limit</span>
-        <p class="text-xl font-bold text-foreground">${acc.max_pins_per_day}</p>
-      </div>
-      <div class="rounded-xl border border-border bg-card p-3 text-center space-y-1">
-        <span class="text-[11px] font-semibold text-muted-foreground">Boards</span>
-        <p class="text-xl font-bold text-foreground">${acc.boards_count || 0}</p>
-      </div>
-      <div class="rounded-xl border border-border bg-card p-3 text-center space-y-1">
-        <span class="text-[11px] font-semibold text-muted-foreground">Webhooks</span>
-        <p class="text-xl font-bold text-foreground">${acc.active_webhooks_count || 0}</p>
-      </div>
-    `;
-  }
-
   function renderScheduling(acc: Account) {
     const startedElem = document.getElementById('sched-started-at');
     const windowElem = document.getElementById('sched-posting-window');
@@ -643,14 +881,25 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
     }
   }
 
-  function renderRecentPins(pins: Pin[]) {
+  function renderRecentPins(pins: Pin[], totalCount: number = 0) {
     const container = document.getElementById('account-pins-container');
+    const resultCountElem = document.getElementById('pin-result-count');
+    const queueBadge = document.getElementById('pin-queue-count-badge');
+
+    if (resultCountElem) {
+      resultCountElem.textContent = `Showing ${pins.length} of ${totalCount} pins`;
+    }
+    if (queueBadge) {
+      queueBadge.textContent = String(totalCount);
+    }
+
     if (!container) return;
 
     if (!pins || pins.length === 0) {
+      const isFiltered = filterStatus !== 'all' || filterBoard !== 'all' || filterSearch !== '' || filterDateFrom !== '' || filterDateTo !== '';
       container.innerHTML = renderEmptyStateHTML(
-        'No Pins Found for Account',
-        'Import scheduled posts to populate this account queue.',
+        isFiltered ? 'No Pins Match Filters' : 'No Pins Found for Account',
+        isFiltered ? 'Try clearing or broadening your search filters.' : 'Import scheduled posts to populate this account queue.',
         'inbox'
       );
       return;
@@ -663,11 +912,15 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
           <td class="px-5 py-3 font-medium text-foreground">
             <div class="flex items-center gap-3">
               <img src="${escapeHtml(pin.image_url)}" alt="" class="h-9 w-9 rounded-lg object-cover border border-border bg-muted flex-shrink-0" onerror="this.src='https://images.unsplash.com/photo-1495521821757-a1efb6729352?auto=format&fit=crop&w=150&q=80'" />
-              <span class="max-w-xs truncate" title="${escapeHtml(pin.title)}">${escapeHtml(pin.title)}</span>
+              <div class="space-y-0.5">
+                <p class="max-w-xs font-semibold truncate text-foreground" title="${escapeHtml(pin.title)}">${escapeHtml(pin.title)}</p>
+                ${pin.description ? `<p class="max-w-xs truncate text-[11px] text-muted-foreground">${escapeHtml(pin.description)}</p>` : ''}
+              </div>
             </div>
           </td>
           <td class="px-5 py-3 text-muted-foreground">${escapeHtml(pin.board_name || 'No board')}</td>
-          <td class="px-5 py-3">${renderStatusBadge(pin.status)}</td>
+          <td class="px-5 py-3">${renderPinStatusBadgeWithRetry(pin)}</td>
+          <td class="px-5 py-3 text-muted-foreground font-mono text-[11px]">${pin.retry_count || 0}/${pin.max_retries || 3}</td>
           <td class="px-5 py-3 text-muted-foreground whitespace-nowrap">${pin.scheduled_for ? formatDate(pin.scheduled_for) : 'Immediate'}</td>
           <td class="px-5 py-3 text-muted-foreground whitespace-nowrap">${pin.posted_at ? formatDate(pin.posted_at) : formatDate(pin.created_at)}</td>
         </tr>
@@ -684,6 +937,7 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
                 <th class="px-5 py-3">Pin Title</th>
                 <th class="px-5 py-3">Target Board</th>
                 <th class="px-5 py-3">Status</th>
+                <th class="px-5 py-3">Attempts</th>
                 <th class="px-5 py-3">Scheduled For</th>
                 <th class="px-5 py-3">Posted / Created</th>
               </tr>

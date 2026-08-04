@@ -41,6 +41,7 @@ export interface AccountPinStats {
   pending: number;
   posted: number;
   failed: number;
+  retrying: number;
   remainingToday: number;
 }
 
@@ -75,6 +76,12 @@ export interface Pin {
   processing_started_at?: string | null;
   created_at: string;
   account_name?: string;
+  retry_count?: number;
+  max_retries?: number;
+  next_retry_at?: string | null;
+  last_failure_reason?: string | null;
+  last_attempt_at?: string | null;
+  failure_type?: 'transient' | 'permanent' | 'rate_limited' | null;
 }
 
 export interface Log {

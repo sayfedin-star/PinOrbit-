@@ -162,6 +162,8 @@ let mockPins: Pin[] = [
     scheduled_for: null,
     created_at: new Date(Date.now() - 3600000 * 5).toISOString(),
     account_name: 'HealthyBites_US',
+    retry_count: 0,
+    max_retries: 3,
   },
   {
     id: 'pin-2',
@@ -174,9 +176,70 @@ let mockPins: Pin[] = [
     status: 'pending',
     source: 'google_sheets',
     posted_at: null,
-    scheduled_for: null,
+    scheduled_for: new Date(Date.now() + 3600000 * 4).toISOString(),
     created_at: new Date(Date.now() - 3600000 * 3).toISOString(),
     account_name: 'HealthyBites_US',
+    retry_count: 0,
+    max_retries: 3,
+  },
+  {
+    id: 'pin-3',
+    account_id: 'acc-1',
+    title: 'Matcha Green Tea Smoothie Bowl',
+    description: 'Antioxidant packed smoothie bowl with kiwi, chia seeds and coconut flakes.',
+    image_url: 'https://images.unsplash.com/photo-1590301157890-4810ed352733?auto=format&fit=crop&w=600&q=80',
+    board_name: 'Healthy Meal Prep',
+    link: 'https://myrecipeblog.com/matcha-smoothie',
+    status: 'pending',
+    source: 'csv_upload',
+    posted_at: null,
+    scheduled_for: new Date(Date.now() + 3600000 * 1).toISOString(),
+    created_at: new Date(Date.now() - 3600000 * 12).toISOString(),
+    account_name: 'HealthyBites_US',
+    retry_count: 1,
+    max_retries: 3,
+    next_retry_at: new Date(Date.now() + 3600000 * 0.25).toISOString(),
+    last_failure_reason: 'Webhook dispatch timed out (504 Gateway Timeout)',
+    last_attempt_at: new Date(Date.now() - 3600000 * 0.5).toISOString(),
+    failure_type: 'transient',
+  },
+  {
+    id: 'pin-4',
+    account_id: 'acc-1',
+    title: 'Avocado Toast with Poached Eggs',
+    description: 'Crispy sourdough topped with smashed avocado, red pepper flakes and poached eggs.',
+    image_url: 'https://images.unsplash.com/photo-1525351484163-7529414344d8?auto=format&fit=crop&w=600&q=80',
+    board_name: 'Breakfast & Brunch',
+    link: 'https://myrecipeblog.com/avocado-toast',
+    status: 'failed',
+    source: 'google_sheets',
+    posted_at: null,
+    scheduled_for: null,
+    created_at: new Date(Date.now() - 3600000 * 24).toISOString(),
+    account_name: 'HealthyBites_US',
+    retry_count: 3,
+    max_retries: 3,
+    next_retry_at: null,
+    last_failure_reason: 'HTTP 400 Bad Request: Invalid board ID provided',
+    last_attempt_at: new Date(Date.now() - 3600000 * 2).toISOString(),
+    failure_type: 'permanent',
+  },
+  {
+    id: 'pin-5',
+    account_id: 'acc-1',
+    title: 'Berry Protein Pancake Stack',
+    description: 'Fluffy high-protein pancakes served with fresh blueberry syrup.',
+    image_url: 'https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?auto=format&fit=crop&w=600&q=80',
+    board_name: 'Breakfast & Brunch',
+    link: 'https://myrecipeblog.com/protein-pancakes',
+    status: 'posted',
+    source: 'google_sheets',
+    posted_at: new Date(Date.now() - 3600000 * 18).toISOString(),
+    scheduled_for: null,
+    created_at: new Date(Date.now() - 3600000 * 30).toISOString(),
+    account_name: 'HealthyBites_US',
+    retry_count: 0,
+    max_retries: 3,
   },
 ];
 
@@ -1000,7 +1063,8 @@ export async function getAccountPinStats(accountId: string): Promise<AccountPinS
   if (!supabase) {
     const accPins = mockPins.filter((p) => p.account_id === accountId);
     const total = accPins.length;
-    const pending = accPins.filter((p) => p.status === 'pending').length;
+    const retrying = accPins.filter((p) => p.status === 'pending' && (p.retry_count || 0) > 0).length;
+    const pending = accPins.filter((p) => p.status === 'pending' && (!p.retry_count || p.retry_count === 0)).length;
     const posted = accPins.filter((p) => p.status === 'posted').length;
     const failed = accPins.filter((p) => p.status === 'failed').length;
 
@@ -1014,13 +1078,12 @@ export async function getAccountPinStats(accountId: string): Promise<AccountPinS
 
     const remainingToday = Math.max(0, maxDaily - postedToday);
 
-    return { total, pending, posted, failed, remainingToday };
+    return { total, pending, posted, failed, retrying, remainingToday };
   }
 
   try {
-    // ⚡ Execute both queries in parallel to eliminate sequential network waterfall
     const [pinsResult, accResult] = await Promise.all([
-      supabase.from('pins').select('status, posted_at').eq('account_id', accountId),
+      supabase.from('pins').select('status, posted_at, retry_count').eq('account_id', accountId),
       supabase.from('accounts').select('max_pins_per_day').eq('id', accountId).maybeSingle(),
     ]);
 
@@ -1028,7 +1091,8 @@ export async function getAccountPinStats(accountId: string): Promise<AccountPinS
     const acc = accResult.data;
 
     const total = pins.length;
-    const pending = pins.filter((p) => p.status === 'pending' || p.status === 'processing').length;
+    const retrying = pins.filter((p) => p.status === 'pending' && (p.retry_count || 0) > 0).length;
+    const pending = pins.filter((p) => (p.status === 'pending' && (!p.retry_count || p.retry_count === 0)) || p.status === 'processing').length;
     const posted = pins.filter((p) => p.status === 'posted').length;
     const failed = pins.filter((p) => p.status === 'failed').length;
 
@@ -1040,10 +1104,10 @@ export async function getAccountPinStats(accountId: string): Promise<AccountPinS
 
     const remainingToday = Math.max(0, maxDaily - postedToday);
 
-    return { total, pending, posted, failed, remainingToday };
+    return { total, pending, posted, failed, retrying, remainingToday };
   } catch (err) {
     console.warn(`Supabase getAccountPinStats error for ${accountId}:`, err);
-    return { total: 0, pending: 0, posted: 0, failed: 0, remainingToday: 0 };
+    return { total: 0, pending: 0, posted: 0, failed: 0, retrying: 0, remainingToday: 0 };
   }
 }
 
@@ -1164,4 +1228,435 @@ export async function updateAccountScheduling(
     return { data: null, error: err.message || 'Failed to update account scheduling', success: false };
   }
 }
+
+// 23. Fetch Account-Scoped Pins with Filtering, Searching, Date Range, & Pagination
+export interface FetchAccountPinsOptions {
+  accountId: string;
+  status?: string; // 'all' | 'pending' | 'retrying' | 'posted' | 'failed' | 'processing'
+  boardId?: string; // 'all' | board name or board id
+  search?: string; // title search
+  dateFrom?: string;
+  dateTo?: string;
+  page?: number;
+  pageSize?: number;
+  sortBy?: 'created_at' | 'posted_at' | 'scheduled_for' | 'title' | 'status';
+  sortDir?: 'asc' | 'desc';
+}
+
+export interface FetchAccountPinsResult {
+  pins: Pin[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+export async function getAccountBoards(accountId: string): Promise<Board[]> {
+  if (!supabase) {
+    return mockBoards.filter((b) => b.account_id === accountId);
+  }
+  try {
+    const { data, error } = await supabase
+      .from('boards')
+      .select('*')
+      .eq('account_id', accountId)
+      .order('board_name', { ascending: true });
+    if (error || !data) return mockBoards.filter((b) => b.account_id === accountId);
+    return data as Board[];
+  } catch (err) {
+    console.warn(`Supabase getAccountBoards error for ${accountId}:`, err);
+    return mockBoards.filter((b) => b.account_id === accountId);
+  }
+}
+
+function getMockAccountPins(options: FetchAccountPinsOptions): FetchAccountPinsResult {
+  const {
+    accountId,
+    status = 'all',
+    boardId = 'all',
+    search = '',
+    dateFrom,
+    dateTo,
+    page = 1,
+    pageSize = 10,
+    sortBy = 'created_at',
+    sortDir = 'desc',
+  } = options;
+
+  let filtered = mockPins.filter((p) => p.account_id === accountId);
+
+  if (status && status !== 'all') {
+    if (status === 'retrying') {
+      filtered = filtered.filter((p) => p.status === 'pending' && (p.retry_count || 0) > 0);
+    } else if (status === 'pending') {
+      filtered = filtered.filter((p) => p.status === 'pending' && (!p.retry_count || p.retry_count === 0));
+    } else {
+      filtered = filtered.filter((p) => p.status === status);
+    }
+  }
+
+  if (boardId && boardId !== 'all') {
+    filtered = filtered.filter((p) => p.board_name === boardId || p.board_name?.toLowerCase().includes(boardId.toLowerCase()));
+  }
+
+  if (search && search.trim() !== '') {
+    const q = search.trim().toLowerCase();
+    filtered = filtered.filter((p) => p.title.toLowerCase().includes(q) || (p.description && p.description.toLowerCase().includes(q)));
+  }
+
+  if (dateFrom) {
+    const fromTime = new Date(dateFrom).getTime();
+    filtered = filtered.filter((p) => new Date(p.created_at).getTime() >= fromTime || (p.scheduled_for && new Date(p.scheduled_for).getTime() >= fromTime));
+  }
+
+  if (dateTo) {
+    const toTime = new Date(dateTo).getTime() + 86400000;
+    filtered = filtered.filter((p) => new Date(p.created_at).getTime() <= toTime || (p.scheduled_for && new Date(p.scheduled_for).getTime() <= toTime));
+  }
+
+  filtered.sort((a: any, b: any) => {
+    let valA = a[sortBy] || '';
+    let valB = b[sortBy] || '';
+    if (sortBy === 'created_at' || sortBy === 'posted_at' || sortBy === 'scheduled_for') {
+      valA = valA ? new Date(valA).getTime() : 0;
+      valB = valB ? new Date(valB).getTime() : 0;
+    }
+    if (valA < valB) return sortDir === 'asc' ? -1 : 1;
+    if (valA > valB) return sortDir === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  const totalCount = filtered.length;
+  const totalPages = Math.ceil(totalCount / pageSize) || 1;
+  const startIdx = (page - 1) * pageSize;
+  const paginatedPins = filtered.slice(startIdx, startIdx + pageSize);
+
+  return {
+    pins: paginatedPins,
+    totalCount,
+    page,
+    pageSize,
+    totalPages,
+  };
+}
+
+export async function getAccountPins(options: FetchAccountPinsOptions): Promise<FetchAccountPinsResult> {
+  const {
+    accountId,
+    status = 'all',
+    boardId = 'all',
+    search = '',
+    dateFrom,
+    dateTo,
+    page = 1,
+    pageSize = 10,
+    sortBy = 'created_at',
+    sortDir = 'desc',
+  } = options;
+
+  if (!supabase) {
+    return getMockAccountPins(options);
+  }
+
+  try {
+    let query = supabase
+      .from('pins')
+      .select('*, accounts(account_name)', { count: 'exact' })
+      .eq('account_id', accountId);
+
+    if (status && status !== 'all') {
+      if (status === 'retrying') {
+        query = query.eq('status', 'pending').gt('retry_count', 0);
+      } else if (status === 'pending') {
+        query = query.eq('status', 'pending').or('retry_count.is.null,retry_count.eq.0');
+      } else {
+        query = query.eq('status', status);
+      }
+    }
+
+    if (boardId && boardId !== 'all') {
+      query = query.eq('board_name', boardId);
+    }
+
+    if (search && search.trim() !== '') {
+      query = query.ilike('title', `%${search.trim()}%`);
+    }
+
+    if (dateFrom) {
+      query = query.gte('created_at', dateFrom);
+    }
+
+    if (dateTo) {
+      query = query.lte('created_at', `${dateTo}T23:59:59.999Z`);
+    }
+
+    query = query.order(sortBy, { ascending: sortDir === 'asc' });
+
+    const fromIdx = (page - 1) * pageSize;
+    const toIdx = page * pageSize - 1;
+    query = query.range(fromIdx, toIdx);
+
+    const { data, error, count } = await query;
+
+    if (error) throw error;
+
+    const totalCount = count || 0;
+    const totalPages = Math.ceil(totalCount / pageSize) || 1;
+
+    const pins = (data as RawPin[] || []).map((p) => ({
+      ...p,
+      account_name: p.accounts ? p.accounts.account_name : undefined,
+    }));
+
+    return {
+      pins,
+      totalCount,
+      page,
+      pageSize,
+      totalPages,
+    };
+  } catch (err) {
+    console.warn(`Supabase getAccountPins error for ${accountId}:`, err);
+    return getMockAccountPins(options);
+  }
+}
+
+// 24. Bulk Actions Data Layer Functions
+
+export async function bulkDeletePins(
+  pinIds: string[],
+  accountId?: string
+): Promise<{ count: number; error: string | null }> {
+  if (!pinIds || pinIds.length === 0) return { count: 0, error: null };
+
+  if (!supabase) {
+    const beforeCount = mockPins.length;
+    mockPins = mockPins.filter((p) => !pinIds.includes(p.id));
+    const deletedCount = beforeCount - mockPins.length;
+
+    mockAuditLogs.unshift({
+      id: 'audit-' + Date.now(),
+      table_name: 'pins',
+      record_id: pinIds.join(','),
+      action: 'BULK_DELETE',
+      old_data: { count: deletedCount, pin_ids: pinIds },
+      new_data: null,
+      changed_by: 'admin',
+      changed_at: new Date().toISOString(),
+    });
+
+    return { count: deletedCount, error: null };
+  }
+
+  try {
+    const { error } = await supabase.from('pins').delete().in('id', pinIds);
+    if (error) return { count: 0, error: error.message };
+
+    await supabase.from('audit_log').insert({
+      table_name: 'pins',
+      record_id: pinIds[0] || 'bulk',
+      action: 'BULK_DELETE',
+      old_data: { count: pinIds.length, pin_ids: pinIds },
+      new_data: null,
+      changed_by: 'admin',
+    });
+
+    if (accountId) {
+      await supabase.from('logs').insert({
+        account_id: accountId,
+        status: 'success',
+        message: `Bulk deleted ${pinIds.length} pin(s)`,
+      });
+    }
+
+    return { count: pinIds.length, error: null };
+  } catch (err: any) {
+    return { count: 0, error: err.message || 'Failed to delete pins' };
+  }
+}
+
+export async function bulkEditPins(
+  pinIds: string[],
+  updates: { board_name?: string; scheduled_for?: string | null },
+  accountId?: string
+): Promise<{ count: number; error: string | null }> {
+  if (!pinIds || pinIds.length === 0) return { count: 0, error: null };
+
+  const payload: Record<string, any> = {};
+  if (updates.board_name !== undefined) payload.board_name = updates.board_name;
+  if (updates.scheduled_for !== undefined) payload.scheduled_for = updates.scheduled_for;
+
+  if (Object.keys(payload).length === 0) return { count: 0, error: 'No fields to update' };
+
+  if (!supabase) {
+    let updatedCount = 0;
+    mockPins.forEach((p) => {
+      if (pinIds.includes(p.id)) {
+        if (updates.board_name !== undefined) p.board_name = updates.board_name;
+        if (updates.scheduled_for !== undefined) p.scheduled_for = updates.scheduled_for;
+        updatedCount++;
+      }
+    });
+
+    mockAuditLogs.unshift({
+      id: 'audit-' + Date.now(),
+      table_name: 'pins',
+      record_id: pinIds.join(','),
+      action: 'BULK_EDIT',
+      old_data: null,
+      new_data: payload,
+      changed_by: 'admin',
+      changed_at: new Date().toISOString(),
+    });
+
+    return { count: updatedCount, error: null };
+  }
+
+  try {
+    const { error } = await supabase.from('pins').update(payload).in('id', pinIds);
+    if (error) return { count: 0, error: error.message };
+
+    await supabase.from('audit_log').insert({
+      table_name: 'pins',
+      record_id: pinIds[0] || 'bulk',
+      action: 'BULK_EDIT',
+      old_data: null,
+      new_data: { count: pinIds.length, updates: payload, pin_ids: pinIds },
+      changed_by: 'admin',
+    });
+
+    if (accountId) {
+      await supabase.from('logs').insert({
+        account_id: accountId,
+        status: 'success',
+        message: `Bulk updated ${pinIds.length} pin(s): ${JSON.stringify(payload)}`,
+      });
+    }
+
+    return { count: pinIds.length, error: null };
+  } catch (err: any) {
+    return { count: 0, error: err.message || 'Failed to bulk edit pins' };
+  }
+}
+
+export async function bulkRetryPinsNow(
+  pinIds: string[],
+  accountId?: string
+): Promise<{ count: number; error: string | null }> {
+  if (!pinIds || pinIds.length === 0) return { count: 0, error: null };
+
+  if (!supabase) {
+    let updatedCount = 0;
+    mockPins.forEach((p) => {
+      if (pinIds.includes(p.id) && (p.status === 'failed' || p.status === 'pending')) {
+        p.status = 'pending';
+        p.next_retry_at = null;
+        updatedCount++;
+      }
+    });
+
+    mockAuditLogs.unshift({
+      id: 'audit-' + Date.now(),
+      table_name: 'pins',
+      record_id: pinIds.join(','),
+      action: 'BULK_RETRY_NOW',
+      old_data: null,
+      new_data: { count: updatedCount },
+      changed_by: 'admin',
+      changed_at: new Date().toISOString(),
+    });
+
+    return { count: updatedCount, error: null };
+  }
+
+  try {
+    const { error } = await supabase
+      .from('pins')
+      .update({
+        status: 'pending',
+        next_retry_at: null,
+      })
+      .in('id', pinIds);
+
+    if (error) return { count: 0, error: error.message };
+
+    await supabase.from('audit_log').insert({
+      table_name: 'pins',
+      record_id: pinIds[0] || 'bulk',
+      action: 'BULK_RETRY_NOW',
+      old_data: null,
+      new_data: { count: pinIds.length, pin_ids: pinIds },
+      changed_by: 'admin',
+    });
+
+    if (accountId) {
+      await supabase.from('logs').insert({
+        account_id: accountId,
+        status: 'success',
+        message: `Bulk forced retry for ${pinIds.length} pin(s)`,
+      });
+    }
+
+    return { count: pinIds.length, error: null };
+  } catch (err: any) {
+    return { count: 0, error: err.message || 'Failed to force retry pins' };
+  }
+}
+
+export async function bulkCancelPins(
+  pinIds: string[],
+  accountId?: string
+): Promise<{ count: number; error: string | null }> {
+  if (!pinIds || pinIds.length === 0) return { count: 0, error: null };
+
+  if (!supabase) {
+    let updatedCount = 0;
+    mockPins.forEach((p) => {
+      if (pinIds.includes(p.id) && p.status === 'pending') {
+        p.status = 'failed';
+        p.last_failure_reason = 'Cancelled by user via bulk action';
+        p.failure_type = 'permanent';
+        updatedCount++;
+      }
+    });
+
+    return { count: updatedCount, error: null };
+  }
+
+  try {
+    const { error } = await supabase
+      .from('pins')
+      .update({
+        status: 'failed',
+        last_failure_reason: 'Cancelled by user via bulk action',
+        failure_type: 'permanent',
+        next_retry_at: null,
+      })
+      .in('id', pinIds);
+
+    if (error) return { count: 0, error: error.message };
+
+    await supabase.from('audit_log').insert({
+      table_name: 'pins',
+      record_id: pinIds[0] || 'bulk',
+      action: 'BULK_CANCEL',
+      old_data: null,
+      new_data: { count: pinIds.length, pin_ids: pinIds },
+      changed_by: 'admin',
+    });
+
+    if (accountId) {
+      await supabase.from('logs').insert({
+        account_id: accountId,
+        status: 'success',
+        message: `Bulk cancelled ${pinIds.length} pending pin(s)`,
+      });
+    }
+
+    return { count: pinIds.length, error: null };
+  } catch (err: any) {
+    return { count: 0, error: err.message || 'Failed to cancel pins' };
+  }
+}
+
 
