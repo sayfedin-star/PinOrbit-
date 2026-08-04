@@ -9,6 +9,7 @@ interface Account {
   pinning_started_at?: string | null;
   posting_window_start?: string | null;
   posting_window_end?: string | null;
+  posting_interval_minutes?: number | null;
   timezone?: string | null;
   last_published_at?: string | null;
 }
@@ -264,6 +265,7 @@ Deno.serve(async (req: Request) => {
   let failedCount = 0;
   let skippedDueToLimit = 0;
   let skippedDueToWindow = 0;
+  let skippedDueToInterval = 0;
   let skippedDueToWebhook = 0;
   let skippedDueToMissingBoard = 0;
   let recoveredLocks = 0;
@@ -352,6 +354,17 @@ Deno.serve(async (req: Request) => {
       if (todayPostedCount >= account.max_pins_per_day) {
         skippedDueToLimit++;
         continue;
+      }
+
+      // Rule 5d: Posting interval check (per-account elapsed time since last published pin)
+      if (account.last_published_at) {
+        const intervalMin = account.posting_interval_minutes ?? 30;
+        const elapsedMs = now.getTime() - new Date(account.last_published_at).getTime();
+        const elapsedMinutes = Math.floor(elapsedMs / 60000);
+        if (elapsedMinutes < intervalMin) {
+          skippedDueToInterval++;
+          continue;
+        }
       }
 
       // 6. Select Candidate Pending Pin
@@ -594,6 +607,7 @@ Deno.serve(async (req: Request) => {
         pins_failed: failedCount,
         skipped_due_to_limit: skippedDueToLimit,
         skipped_due_to_window: skippedDueToWindow,
+        skipped_due_to_interval: skippedDueToInterval,
         skipped_due_to_webhook: skippedDueToWebhook,
         skipped_due_to_missing_board: skippedDueToMissingBoard,
         stale_locks_recovered: recoveredLocks,

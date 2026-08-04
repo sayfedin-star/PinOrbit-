@@ -71,7 +71,7 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
         </button>
       </div>
 
-      <div id="scheduling-info-container" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div id="scheduling-info-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         <div class="p-3 rounded-xl border border-border bg-background space-y-1">
           <span class="text-[11px] font-medium text-muted-foreground">Pinning Started At</span>
           <p id="sched-started-at" class="text-xs font-bold text-foreground">Loading...</p>
@@ -81,10 +81,14 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
           <p id="sched-posting-window" class="text-xs font-bold text-foreground">Loading...</p>
         </div>
         <div class="p-3 rounded-xl border border-border bg-background space-y-1">
+          <span class="text-[11px] font-medium text-muted-foreground">Posting Interval</span>
+          <p id="sched-posting-interval" class="text-xs font-bold text-primary">Loading...</p>
+        </div>
+        <div class="p-3 rounded-xl border border-border bg-background space-y-1">
           <span class="text-[11px] font-medium text-muted-foreground">Timezone</span>
           <p id="sched-timezone" class="text-xs font-bold text-foreground">Loading...</p>
         </div>
-        <div class="p-3 rounded-xl border border-border bg-background space-y-1">
+        <div class="p-3 rounded-xl border border-border bg-background space-y-1 sm:col-span-2 lg:col-span-2">
           <span class="text-[11px] font-medium text-muted-foreground">Last Published At</span>
           <p id="sched-last-published" class="text-xs font-bold text-emerald-500">Loading...</p>
         </div>
@@ -196,6 +200,30 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
             <label class="block text-xs font-medium text-muted-foreground mb-1">Window End Time</label>
             <input id="sched-input-end" type="time" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none" />
           </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-muted-foreground mb-1">Posting Frequency / Interval</label>
+          <select id="sched-input-interval-preset" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none">
+            <option value="5">Every 5 Minutes</option>
+            <option value="10">Every 10 Minutes</option>
+            <option value="15">Every 15 Minutes</option>
+            <option value="30">Every 30 Minutes (Default)</option>
+            <option value="45">Every 45 Minutes</option>
+            <option value="60">Every 1 Hour (60 mins)</option>
+            <option value="120">Every 2 Hours (120 mins)</option>
+            <option value="180">Every 3 Hours (180 mins)</option>
+            <option value="240">Every 4 Hours (240 mins)</option>
+            <option value="360">Every 6 Hours (360 mins)</option>
+            <option value="720">Every 12 Hours (720 mins)</option>
+            <option value="1440">Every 24 Hours (1440 mins)</option>
+            <option value="custom">Custom Minutes...</option>
+          </select>
+        </div>
+
+        <div id="sched-custom-interval-container" class="hidden">
+          <label class="block text-xs font-medium text-muted-foreground mb-1">Custom Minutes Between Posts</label>
+          <input id="sched-input-custom-interval" type="number" min="1" placeholder="e.g. 25" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none" />
         </div>
 
         <div>
@@ -418,6 +446,7 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
   function renderScheduling(acc: Account) {
     const startedElem = document.getElementById('sched-started-at');
     const windowElem = document.getElementById('sched-posting-window');
+    const intervalElem = document.getElementById('sched-posting-interval');
     const tzElem = document.getElementById('sched-timezone');
     const lastPubElem = document.getElementById('sched-last-published');
 
@@ -428,6 +457,10 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
       const start = acc.posting_window_start || '09:00';
       const end = acc.posting_window_end || '21:00';
       windowElem.textContent = `${start} — ${end}`;
+    }
+    if (intervalElem) {
+      const mins = acc.posting_interval_minutes || 30;
+      intervalElem.textContent = mins >= 60 ? `Every ${mins / 60} ${mins === 60 ? 'hour' : 'hours'}` : `Every ${mins} mins`;
     }
     if (tzElem) {
       tzElem.textContent = acc.timezone || 'UTC';
@@ -630,12 +663,26 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
     const tz = document.getElementById('sched-input-timezone') as HTMLSelectElement;
     const start = document.getElementById('sched-input-start') as HTMLInputElement;
     const end = document.getElementById('sched-input-end') as HTMLInputElement;
+    const intervalPreset = document.getElementById('sched-input-interval-preset') as HTMLSelectElement;
+    const customContainer = document.getElementById('sched-custom-interval-container');
+    const customInput = document.getElementById('sched-input-custom-interval') as HTMLInputElement;
     const started = document.getElementById('sched-input-started-at') as HTMLInputElement;
 
     if (tz) tz.value = currentAccount.timezone || 'UTC';
     if (start) start.value = currentAccount.posting_window_start || '09:00';
     if (end) end.value = currentAccount.posting_window_end || '21:00';
     if (started) started.value = currentAccount.pinning_started_at ? currentAccount.pinning_started_at.slice(0, 10) : '';
+
+    const mins = currentAccount.posting_interval_minutes || 30;
+    const standardPresets = ['5', '10', '15', '30', '45', '60', '120', '180', '240', '360', '720', '1440'];
+    if (standardPresets.includes(String(mins))) {
+      if (intervalPreset) intervalPreset.value = String(mins);
+      if (customContainer) customContainer.classList.add('hidden');
+    } else {
+      if (intervalPreset) intervalPreset.value = 'custom';
+      if (customContainer) customContainer.classList.remove('hidden');
+      if (customInput) customInput.value = String(mins);
+    }
 
     modal?.classList.remove('hidden');
     modal?.classList.add('flex');
@@ -648,6 +695,17 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
     document.getElementById('cancel-sched-modal')?.addEventListener('click', closeSchedModal);
     document.getElementById('edit-sched-backdrop')?.addEventListener('click', closeSchedModal);
 
+    const intervalPresetSelect = document.getElementById('sched-input-interval-preset') as HTMLSelectElement;
+    intervalPresetSelect?.addEventListener('change', (e) => {
+      const val = (e.target as HTMLSelectElement).value;
+      const customContainer = document.getElementById('sched-custom-interval-container');
+      if (val === 'custom') {
+        customContainer?.classList.remove('hidden');
+      } else {
+        customContainer?.classList.add('hidden');
+      }
+    });
+
     document.getElementById('sched-form')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       if (!currentAccount) return;
@@ -657,6 +715,15 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
       const end = (document.getElementById('sched-input-end') as HTMLInputElement).value;
       const startedAt = (document.getElementById('sched-input-started-at') as HTMLInputElement).value;
 
+      const presetVal = (document.getElementById('sched-input-interval-preset') as HTMLSelectElement).value;
+      let intervalMins = 30;
+      if (presetVal === 'custom') {
+        const customVal = parseInt((document.getElementById('sched-input-custom-interval') as HTMLInputElement).value, 10);
+        intervalMins = !isNaN(customVal) && customVal >= 1 ? customVal : 30;
+      } else {
+        intervalMins = parseInt(presetVal, 10) || 30;
+      }
+
       const errorBox = document.getElementById('sched-modal-error');
       if (errorBox) errorBox.classList.add('hidden');
 
@@ -664,6 +731,7 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
         timezone: tz,
         posting_window_start: start || null,
         posting_window_end: end || null,
+        posting_interval_minutes: intervalMins,
         pinning_started_at: startedAt ? new Date(startedAt).toISOString() : null,
       });
 
@@ -673,6 +741,7 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
           timezone: tz,
           posting_window_start: start || null,
           posting_window_end: end || null,
+          posting_interval_minutes: intervalMins,
           pinning_started_at: startedAt ? new Date(startedAt).toISOString() : null,
         };
         refreshAccountUI(updated);
