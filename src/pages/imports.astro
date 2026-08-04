@@ -121,12 +121,9 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
           <input
             id="gsheet-url-input"
             type="url"
-            placeholder="https://docs.google.com/spreadsheets/d/1ABC.../edit?gid=0"
+            placeholder="https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit?usp=sharing"
             class="w-full rounded-xl border border-border bg-background py-2.5 px-3.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
           />
-          <p class="text-[11px] text-muted-foreground">
-            Must be publicly accessible. Set share permissions to "Anyone with the link can view" or Publish to Web as CSV.
-          </p>
         </div>
       </div>
 
@@ -173,6 +170,60 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
         </button>
       </div>
 
+      <!-- Missing Boards Remediation Card -->
+      <div id="missing-boards-card" class="hidden rounded-2xl border border-amber-500/30 bg-amber-500/10 p-5 shadow-sm space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-amber-500/20 pb-3">
+          <div class="flex items-center gap-2.5">
+            <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/20 text-amber-600 dark:text-amber-400 font-bold text-xs flex-shrink-0">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            </div>
+            <div>
+              <h4 class="text-sm font-bold text-foreground flex items-center gap-2">
+                <span>Missing Boards Detected</span>
+                <span id="missing-boards-badge" class="rounded-full bg-amber-500/20 px-2 py-0.5 text-[11px] font-bold text-amber-600 dark:text-amber-400">0</span>
+              </h4>
+              <p id="missing-boards-subtext" class="text-xs text-muted-foreground">0 missing boards affect 0 staged rows for this account.</p>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-3">
+            <label class="flex items-center gap-2 text-xs font-semibold text-foreground cursor-pointer">
+              <input id="chk-auto-create-toggle" type="checkbox" class="h-4 w-4 rounded border-border text-primary focus:ring-primary cursor-pointer" />
+              <span>Auto-create missing boards during import</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+          <!-- Webhook Selector -->
+          <div class="md:col-span-1 space-y-1.5">
+            <label for="board-creation-webhook-select" class="block font-semibold text-foreground">Use Webhook for Board Creation *</label>
+            <select id="board-creation-webhook-select" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs font-semibold text-foreground focus:border-primary focus:outline-none">
+              <option value="">Loading webhooks...</option>
+            </select>
+          </div>
+
+          <!-- Missing Board List & Bulk Creation -->
+          <div class="md:col-span-2 space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="font-semibold text-foreground">Missing Board Remediation List</span>
+              <button
+                id="btn-create-all-missing-boards"
+                type="button"
+                class="inline-flex items-center gap-1.5 rounded-xl bg-amber-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow hover:bg-amber-700 transition-all disabled:opacity-50"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                <span id="btn-create-all-text">Create All Missing Boards</span>
+              </button>
+            </div>
+
+            <div id="missing-boards-list" class="space-y-2 max-h-48 overflow-y-auto pr-1">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Summary KPI Metrics Cards -->
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div class="rounded-xl border border-border bg-background p-3.5">
@@ -209,7 +260,7 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
                   <th class="px-4 py-3">Title & Image</th>
                   <th class="px-4 py-3">Target Board</th>
                   <th class="px-4 py-3">Scheduled For</th>
-                  <th class="px-4 py-3">Validation Status</th>
+                  <th class="px-4 py-3">Validation Status & Actions</th>
                 </tr>
               </thead>
               <tbody id="preview-table-body" class="divide-y divide-border text-xs">
@@ -225,9 +276,18 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
 
 <script>
   import { requireAuth } from '../lib/auth';
-  import { getAccounts, getBoardsForAccount, getPins, bulkInsertPins } from '../lib/supabase';
+  import {
+    getAccounts,
+    getBoardsForAccount,
+    getPins,
+    bulkInsertPins,
+    getAccountWebhooks,
+    createBoardViaWebhook,
+    bulkCreateMissingBoardsViaWebhook,
+    updateAccountAutoBoardSettings,
+  } from '../lib/supabase';
   import { formatDate, escapeHtml } from '../lib/ui-helpers';
-  import type { Account, Board, Pin } from '../lib/types';
+  import type { Account, Board, Pin, AccountWebhook } from '../lib/types';
 
   interface ParsedImportRow {
     rowNum: number;
@@ -243,17 +303,26 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
     normalizedPin?: Partial<Pin>;
   }
 
+  interface MissingBoardGroup {
+    rawName: string;
+    normalizedName: string;
+    affectedRows: ParsedImportRow[];
+  }
+
   let accounts: Account[] = [];
   let selectedAccount: Account | null = null;
   let accountBoards: Board[] = [];
   let existingAccountPins: Pin[] = [];
+  let accountWebhooks: AccountWebhook[] = [];
 
   let activeSourceType: 'file' | 'url' = 'file';
   let loadedFile: File | null = null;
 
   let parsedRows: ParsedImportRow[] = [];
   let validPinsToCommit: Partial<Pin>[] = [];
+  let missingBoardGroups: Map<string, MissingBoardGroup> = new Map();
   let showAllRows = false;
+  let lastCsvText = '';
 
   async function init() {
     const isAuth = await requireAuth();
@@ -288,26 +357,64 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
     if (preselectedAccountId) {
       const match = accounts.find((a) => a.id === preselectedAccountId);
       if (match) {
-        selectedAccount = match;
-        const [boards, pins] = await Promise.all([
-          getBoardsForAccount(selectedAccount.id),
-          getPins('all', selectedAccount.id),
-        ]);
-        accountBoards = boards;
-        existingAccountPins = pins;
+        await selectAccount(match);
       }
     }
 
     select.addEventListener('change', async (e) => {
       const id = (e.target as HTMLSelectElement).value;
-      selectedAccount = accounts.find((a) => a.id === id) || null;
+      const match = accounts.find((a) => a.id === id) || null;
+      if (match) {
+        await selectAccount(match);
+      }
+    });
+  }
+
+  async function selectAccount(acc: Account) {
+    selectedAccount = acc;
+    const [boards, pins, hooks] = await Promise.all([
+      getBoardsForAccount(acc.id),
+      getPins('all', acc.id),
+      getAccountWebhooks(acc.id),
+    ]);
+    accountBoards = boards;
+    existingAccountPins = pins;
+    accountWebhooks = hooks;
+
+    populateWebhookSelector(hooks, acc);
+    initAutoCreateToggle(acc);
+  }
+
+  function populateWebhookSelector(hooks: AccountWebhook[], acc: Account) {
+    const hookSelect = document.getElementById('board-creation-webhook-select') as HTMLSelectElement | null;
+    if (!hookSelect) return;
+
+    const activeHooks = hooks.filter((h) => h.is_active);
+    if (activeHooks.length === 0) {
+      hookSelect.innerHTML = '<option value="" disabled selected>No active webhooks configured for account</option>';
+      return;
+    }
+
+    const selectedWebhookId = acc.board_creation_webhook_id || (activeHooks.find((h) => h.is_primary) || activeHooks[0]).id;
+
+    hookSelect.innerHTML = activeHooks
+      .map((h) => `<option value="${h.id}" ${h.id === selectedWebhookId ? 'selected' : ''}>${escapeHtml(h.label)} (${h.remaining_capacity} capacity remaining)</option>`)
+      .join('');
+  }
+
+  function initAutoCreateToggle(acc: Account) {
+    const chkToggle = document.getElementById('chk-auto-create-toggle') as HTMLInputElement | null;
+    if (!chkToggle) return;
+
+    chkToggle.checked = !!acc.auto_create_missing_boards;
+
+    chkToggle.addEventListener('change', async (e) => {
+      const enabled = (e.target as HTMLInputElement).checked;
       if (selectedAccount) {
-        const [boards, pins] = await Promise.all([
-          getBoardsForAccount(selectedAccount.id),
-          getPins('all', selectedAccount.id),
-        ]);
-        accountBoards = boards;
-        existingAccountPins = pins;
+        selectedAccount.auto_create_missing_boards = enabled;
+        const hookSelect = document.getElementById('board-creation-webhook-select') as HTMLSelectElement;
+        const selectedHookId = hookSelect ? hookSelect.value : null;
+        await updateAccountAutoBoardSettings(selectedAccount.id, enabled, selectedHookId);
       }
     });
   }
@@ -317,7 +424,7 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
       const boardName = accountBoards.length > 0 ? accountBoards[0].board_name : 'Quick Dinner Recipes';
       const sampleCsv = `title,image_url,board_name,description,link,scheduled_for
 30-Minute Creamy Garlic Chicken,https://images.unsplash.com/photo-1604908176997-125f25cc6f3d,${boardName},Easy and delicious one-pan creamy garlic chicken recipe.,https://myrecipeblog.com/creamy-garlic-chicken,2026-08-10T18:00:00Z
-Keto Cauliflower Rice Bowl,https://images.unsplash.com/photo-1546069901-ba9599a7e63c,${boardName},Low carb cauliflower bowl with avocado.,https://myrecipeblog.com/cauliflower-bowl,2026-08-11T12:00:00Z`;
+Keto Cauliflower Rice Bowl,https://images.unsplash.com/photo-1546069901-ba9599a7e63c,Unconfigured Recipe Board,Low carb cauliflower bowl with avocado.,https://myrecipeblog.com/cauliflower-bowl,2026-08-11T12:00:00Z`;
 
       const blob = new Blob([sampleCsv], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
@@ -422,6 +529,10 @@ Keto Cauliflower Rice Bowl,https://images.unsplash.com/photo-1546069901-ba9599a7
       showAllRows = !showAllRows;
       renderPreviewSection();
     });
+
+    document.getElementById('btn-create-all-missing-boards')?.addEventListener('click', async () => {
+      await handleCreateAllMissingBoards();
+    });
   }
 
   async function processAndValidateSource() {
@@ -434,7 +545,6 @@ Keto Cauliflower Rice Bowl,https://images.unsplash.com/photo-1546069901-ba9599a7
     }
 
     let csvRawText = '';
-
     setParseLoading(true);
 
     try {
@@ -454,7 +564,6 @@ Keto Cauliflower Rice Bowl,https://images.unsplash.com/photo-1546069901-ba9599a7
         }
 
         const normalizedUrl = normalizeGoogleSheetUrl(urlInput);
-
         try {
           const res = await fetch(normalizedUrl);
           if (!res.ok) {
@@ -467,16 +576,20 @@ Keto Cauliflower Rice Bowl,https://images.unsplash.com/photo-1546069901-ba9599a7
             throw new Error('This Google Sheet is not publicly accessible as CSV. Please ensure share settings are set to "Anyone with the link" or published to web.');
           }
         } catch (err: any) {
-          const msg = (err.message && err.message !== 'Failed to fetch')
-            ? err.message
-            : 'Failed to fetch Google Sheet CSV. Please ensure the link is a valid public Google Sheet with share settings set to "Anyone with the link can view" or published to web.';
-          showError(msg);
+          showError(err.message || 'Failed to fetch Google Sheet CSV.');
           setParseLoading(false);
           return;
         }
       }
 
-      parseAndValidateCSV(csvRawText);
+      lastCsvText = csvRawText;
+      await parseAndValidateCSV(csvRawText);
+
+      // Phase 2: If auto_create_missing_boards is enabled, auto-provision missing boards immediately!
+      const chkToggle = document.getElementById('chk-auto-create-toggle') as HTMLInputElement | null;
+      if ((chkToggle?.checked || selectedAccount.auto_create_missing_boards) && missingBoardGroups.size > 0) {
+        await handleCreateAllMissingBoards(true);
+      }
     } catch (err: any) {
       showError('Import parsing error: ' + (err.message || String(err)));
     } finally {
@@ -556,7 +669,7 @@ Keto Cauliflower Rice Bowl,https://images.unsplash.com/photo-1546069901-ba9599a7
     return lines.filter((l) => l.some((cell) => cell.length > 0));
   }
 
-  function parseAndValidateCSV(csvText: string) {
+  async function parseAndValidateCSV(csvText: string) {
     const rows = parseCSV(csvText);
     if (rows.length < 2) {
       showError('CSV file is empty or missing header row.');
@@ -579,6 +692,7 @@ Keto Cauliflower Rice Bowl,https://images.unsplash.com/photo-1546069901-ba9599a7
 
     parsedRows = [];
     validPinsToCommit = [];
+    missingBoardGroups = new Map();
     const seenBatchKeys = new Set<string>();
 
     for (let i = 1; i < rows.length; i++) {
@@ -597,12 +711,13 @@ Keto Cauliflower Rice Bowl,https://images.unsplash.com/photo-1546069901-ba9599a7
       if (!image) errors.push('Image URL is required');
       else if (!image.startsWith('http://') && !image.startsWith('https://')) errors.push('Image URL must be valid HTTP/HTTPS');
 
-      const matchedBoardObj = accountBoards.find((b) => b.board_name.toLowerCase() === board.toLowerCase());
-      const canonicalBoardName = matchedBoardObj ? matchedBoardObj.board_name : board;
+      const matchedBoardObj = accountBoards.find((b) => b.board_name.trim().toLowerCase() === board.trim().toLowerCase());
+      const canonicalBoardName = matchedBoardObj ? matchedBoardObj.board_name : board.trim();
 
-      if (!board) errors.push('Board name is required');
-      else if (!matchedBoardObj) {
-        errors.push(`Board "${board}" is not configured for account ${selectedAccount?.account_name}`);
+      if (!board || !board.trim()) {
+        errors.push('Board name is required');
+      } else if (!matchedBoardObj) {
+        errors.push(`Board "${board.trim()}" is not configured for account ${selectedAccount?.account_name}`);
       }
 
       let parsedSched: string | null = null;
@@ -647,15 +762,11 @@ Keto Cauliflower Rice Bowl,https://images.unsplash.com/photo-1546069901-ba9599a7
         scheduled_for: parsedSched,
       };
 
-      if (isValid) {
-        validPinsToCommit.push(normalizedPin);
-      }
-
-      parsedRows.push({
+      const parsedRowObj: ParsedImportRow = {
         rowNum: i,
         rawTitle: title,
         rawImage: image,
-        rawBoard: board,
+        rawBoard: board.trim(),
         rawDesc: desc,
         rawLink: link,
         rawScheduled: sched,
@@ -663,7 +774,24 @@ Keto Cauliflower Rice Bowl,https://images.unsplash.com/photo-1546069901-ba9599a7
         errors,
         warnings,
         normalizedPin,
-      });
+      };
+
+      if (isValid) {
+        validPinsToCommit.push(normalizedPin);
+      } else if (board && board.trim() && !matchedBoardObj) {
+        // Group rows affected by missing board
+        const normKey = board.trim().toLowerCase();
+        if (!missingBoardGroups.has(normKey)) {
+          missingBoardGroups.set(normKey, {
+            rawName: board.trim(),
+            normalizedName: normKey,
+            affectedRows: [],
+          });
+        }
+        missingBoardGroups.get(normKey)!.affectedRows.push(parsedRowObj);
+      }
+
+      parsedRows.push(parsedRowObj);
     }
 
     renderPreviewSection();
@@ -693,6 +821,8 @@ Keto Cauliflower Rice Bowl,https://images.unsplash.com/photo-1546069901-ba9599a7
     if (commitBtn) commitBtn.disabled = validCount === 0;
     if (commitText) commitText.textContent = `Import ${validCount} Valid Rows`;
 
+    renderMissingBoardsCard();
+
     const visibleRows = showAllRows ? parsedRows : parsedRows.slice(0, 20);
 
     if (showingLabel) {
@@ -712,7 +842,11 @@ Keto Cauliflower Rice Bowl,https://images.unsplash.com/photo-1546069901-ba9599a7
 
     if (tbody) {
       tbody.innerHTML = visibleRows
-        .map((r) => `
+        .map((r) => {
+          const isMissingBoardErr = r.errors.some((e) => e.includes('is not configured for account'));
+          const boardNameMatch = r.rawBoard ? r.rawBoard : '';
+
+          return `
           <tr class="transition-colors hover:bg-muted/40">
             <td class="px-4 py-3 font-mono font-semibold text-muted-foreground">#${r.rowNum}</td>
             <td class="px-4 py-3">
@@ -746,19 +880,172 @@ Keto Cauliflower Rice Bowl,https://images.unsplash.com/photo-1546069901-ba9599a7
                           : ''
                       }
                     </div>`
-                  : `<div class="space-y-0.5">
+                  : `<div class="space-y-1.5">
                       <span class="inline-flex items-center gap-1 rounded-full bg-rose-500/10 text-rose-500 px-2.5 py-0.5 font-bold">Invalid</span>
                       <p class="text-[11px] text-rose-500 max-w-xs">${escapeHtml(r.errors.join(', '))}</p>
+                      ${
+                        isMissingBoardErr && boardNameMatch
+                          ? `<button
+                              data-board-name="${escapeHtml(boardNameMatch)}"
+                              class="btn-inline-create-board inline-flex items-center gap-1 rounded-lg border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[11px] font-semibold text-amber-600 dark:text-amber-400 hover:bg-amber-500 hover:text-white transition-all"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                              <span>Create Board "${escapeHtml(boardNameMatch)}"</span>
+                            </button>`
+                          : ''
+                      }
                     </div>`
               }
             </td>
           </tr>
-        `)
+        `;
+        })
         .join('');
+
+      bindInlineCreateButtons();
     }
 
     previewSec?.classList.remove('hidden');
     previewSec?.scrollIntoView({ behavior: 'smooth' });
+  }
+
+  function bindInlineCreateButtons() {
+    document.querySelectorAll('.btn-inline-create-board').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        const boardName = (e.currentTarget as HTMLElement).getAttribute('data-board-name');
+        if (boardName) {
+          await handleCreateSingleMissingBoard(boardName);
+        }
+      });
+    });
+  }
+
+  function renderMissingBoardsCard() {
+    const card = document.getElementById('missing-boards-card');
+    const badge = document.getElementById('missing-boards-badge');
+    const subtext = document.getElementById('missing-boards-subtext');
+    const listElem = document.getElementById('missing-boards-list');
+    const bulkBtn = document.getElementById('btn-create-all-missing-boards') as HTMLButtonElement | null;
+    const bulkText = document.getElementById('btn-create-all-text');
+
+    const totalMissingCount = missingBoardGroups.size;
+    let totalAffectedRowsCount = 0;
+
+    missingBoardGroups.forEach((g) => {
+      totalAffectedRowsCount += g.affectedRows.length;
+    });
+
+    if (totalMissingCount === 0) {
+      card?.classList.add('hidden');
+      return;
+    }
+
+    card?.classList.remove('hidden');
+
+    if (badge) badge.textContent = String(totalMissingCount);
+    if (subtext) subtext.textContent = `${totalMissingCount} missing ${totalMissingCount === 1 ? 'board' : 'boards'} affect ${totalAffectedRowsCount} staged ${totalAffectedRowsCount === 1 ? 'row' : 'rows'} for ${selectedAccount?.account_name || 'account'}.`;
+    if (bulkText) bulkText.textContent = `Create All Missing Boards (${totalMissingCount})`;
+    if (bulkBtn) bulkBtn.disabled = false;
+
+    if (listElem) {
+      const itemsHtml: string[] = [];
+      missingBoardGroups.forEach((g) => {
+        itemsHtml.push(`
+          <div class="flex items-center justify-between rounded-xl border border-amber-500/20 bg-background/80 p-2.5 shadow-sm text-xs">
+            <div class="space-y-0.5">
+              <span class="font-bold text-foreground">"${escapeHtml(g.rawName)}"</span>
+              <span class="ml-2 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                ${g.affectedRows.length} ${g.affectedRows.length === 1 ? 'row' : 'rows'} affected
+              </span>
+            </div>
+
+            <button
+              data-board-name="${escapeHtml(g.rawName)}"
+              class="btn-create-single-board inline-flex items-center gap-1 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400 hover:bg-amber-500 hover:text-white transition-all shadow-sm"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              <span>Create via Webhook</span>
+            </button>
+          </div>
+        `);
+      });
+
+      listElem.innerHTML = itemsHtml.join('');
+
+      document.querySelectorAll('.btn-create-single-board').forEach((btn) => {
+        btn.addEventListener('click', async (e) => {
+          const name = (e.currentTarget as HTMLElement).getAttribute('data-board-name');
+          if (name) await handleCreateSingleMissingBoard(name);
+        });
+      });
+    }
+  }
+
+  async function getSelectedWebhookId(): Promise<string | undefined> {
+    const hookSelect = document.getElementById('board-creation-webhook-select') as HTMLSelectElement | null;
+    return hookSelect?.value || selectedAccount?.board_creation_webhook_id || undefined;
+  }
+
+  async function handleCreateSingleMissingBoard(boardName: string) {
+    if (!selectedAccount) return;
+    hideError();
+    hideSuccess();
+
+    const webhookId = await getSelectedWebhookId();
+    const res = await createBoardViaWebhook({
+      accountId: selectedAccount.id,
+      boardName,
+      webhookId,
+      triggerSource: 'import_manual',
+    });
+
+    if (res.success && res.board) {
+      showSuccess(`Successfully created board "${boardName}" in Pinterest via webhook! Revalidating staged rows...`);
+      // Update account boards in memory
+      accountBoards.push(res.board);
+      // Re-run validation instantly on stored CSV text
+      if (lastCsvText) {
+        await parseAndValidateCSV(lastCsvText);
+      }
+    } else {
+      const hookSelect = document.getElementById('board-creation-webhook-select') as HTMLSelectElement | null;
+      const hookLabel = hookSelect ? hookSelect.options[hookSelect.selectedIndex]?.text : 'Webhook';
+      showError(res.error || `Failed to create board "${boardName}" via webhook "${hookLabel}". Affected rows remain invalid.`);
+    }
+  }
+
+  async function handleCreateAllMissingBoards(isAuto = false) {
+    if (!selectedAccount || missingBoardGroups.size === 0) return;
+    hideError();
+    hideSuccess();
+
+    const bulkBtn = document.getElementById('btn-create-all-missing-boards') as HTMLButtonElement | null;
+    if (bulkBtn) bulkBtn.disabled = true;
+
+    const boardNames = Array.from(missingBoardGroups.values()).map((g) => g.rawName);
+    const webhookId = await getSelectedWebhookId();
+
+    const res = await bulkCreateMissingBoardsViaWebhook({
+      accountId: selectedAccount.id,
+      boardNames,
+      webhookId,
+      triggerSource: isAuto ? 'import_auto' : 'import_manual',
+    });
+
+    if (bulkBtn) bulkBtn.disabled = false;
+
+    if (res.boards.length > 0) {
+      // Add all newly created boards to memory
+      accountBoards.push(...res.boards);
+      showSuccess(`Successfully created ${res.createdCount} board(s) (reused ${res.reusedCount}) via webhook! All affected staged rows revalidated.`);
+      if (lastCsvText) {
+        await parseAndValidateCSV(lastCsvText);
+      }
+    }
+
+    if (res.errors.length > 0) {
+      showError(`Board creation warning: ${res.errors.join('; ')}`);
+    }
   }
 
   async function commitImportedPins() {

@@ -280,7 +280,13 @@ import Layout from '../../layouts/Layout.astro';
     if (!isAuth) return;
 
     const urlParams = new URLSearchParams(window.location.search);
-    accountId = urlParams.get('id') || 'acc-1';
+    const queryId = urlParams.get('id');
+    let pathId = '';
+    const matches = window.location.pathname.match(/\/accounts\/([^/]+)/);
+    if (matches && matches[1] && matches[1] !== 'pins' && matches[1] !== 'details') {
+      pathId = matches[1];
+    }
+    accountId = queryId || pathId || 'acc-1';
 
     const displayElem = document.getElementById('display-account-id');
     if (displayElem) displayElem.textContent = accountId || '---';

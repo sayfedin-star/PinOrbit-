@@ -88,6 +88,14 @@ import '../styles/global.css';
               <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
           </button>
+
+          <button
+            id="demo-access-btn"
+            type="button"
+            class="w-full flex items-center justify-center rounded-xl border border-border bg-muted/50 py-2.5 text-xs font-semibold text-foreground shadow-sm hover:bg-muted transition-all"
+          >
+            <span>Explore as Demo Admin &rarr;</span>
+          </button>
         </form>
       </div>
 
@@ -103,10 +111,18 @@ import '../styles/global.css';
       const emailInput = document.getElementById('email') as HTMLInputElement | null;
       const passwordInput = document.getElementById('password') as HTMLInputElement | null;
       const submitBtn = document.getElementById('login-submit') as HTMLButtonElement | null;
+      const demoBtn = document.getElementById('demo-access-btn');
       const submitText = document.getElementById('submit-text');
       const submitSpinner = document.getElementById('submit-spinner');
       const errorBanner = document.getElementById('error-banner');
       const errorMessage = document.getElementById('error-message');
+
+      demoBtn?.addEventListener('click', () => {
+        localStorage.setItem('pinorbit_demo_auth', 'true');
+        const params = new URLSearchParams(window.location.search);
+        const redirect = params.get('redirect') || '/dashboard';
+        window.location.href = decodeURIComponent(redirect);
+      });
 
       // Check if user is already logged in
       async function checkExistingAuth() {

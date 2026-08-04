@@ -148,7 +148,7 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
         <h3 class="text-sm font-bold text-foreground tracking-wide uppercase">Recent Account Pins Queue</h3>
         <span id="pin-queue-count-badge" class="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">0</span>
       </div>
-      <a id="view-all-pins-link" href="/pins" class="text-xs font-semibold text-primary hover:underline flex items-center gap-1">
+      <a id="view-all-pins-link" href="/accounts/pins?id=acc-1" class="text-xs font-semibold text-primary hover:underline flex items-center gap-1">
         <span>View all pins</span>
         <span>&rarr;</span>
       </a>
@@ -466,6 +466,54 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
           Done
         </button>
       </div>
+  <!-- MODAL: Create Board via Webhook (Phase 3) -->
+  <div id="create-board-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" aria-modal="true" role="dialog">
+    <div class="relative w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-5 z-10">
+      <div class="flex items-center justify-between border-b border-border pb-3">
+        <div class="flex items-center gap-2">
+          <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold text-xs">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </div>
+          <div>
+            <h3 class="text-sm font-bold text-foreground">Create Pinterest Board</h3>
+            <p class="text-xs text-muted-foreground">Provision a new target board via webhook channel</p>
+          </div>
+        </div>
+        <button id="close-create-board-modal" class="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground">&times;</button>
+      </div>
+
+      <form id="create-board-form" class="space-y-4 text-xs">
+        <div class="space-y-1.5">
+          <label for="new-board-name-input" class="block font-semibold text-foreground">Pinterest Board Name *</label>
+          <input
+            id="new-board-name-input"
+            type="text"
+            required
+            placeholder="e.g. Quick Dinner Recipes"
+            class="w-full rounded-xl border border-border bg-background py-2.5 px-3 text-xs text-foreground focus:border-primary focus:outline-none"
+          />
+        </div>
+
+        <div class="space-y-1.5">
+          <label for="new-board-webhook-select" class="block font-semibold text-foreground">Webhook Channel *</label>
+          <select
+            id="new-board-webhook-select"
+            class="w-full rounded-xl border border-border bg-background py-2.5 px-3 text-xs font-semibold text-foreground focus:border-primary focus:outline-none"
+          >
+            <!-- Populated dynamically -->
+          </select>
+        </div>
+
+        <div id="create-board-error" class="hidden rounded-xl bg-rose-500/10 border border-rose-500/30 p-3 text-rose-500 text-xs"></div>
+        <div id="create-board-success" class="hidden rounded-xl bg-emerald-500/10 border border-emerald-500/30 p-3 text-emerald-600 dark:text-emerald-400 text-xs"></div>
+
+        <div class="flex items-center justify-end gap-2 border-t border-border pt-4">
+          <button type="button" id="cancel-create-board-btn" class="rounded-xl border border-border px-4 py-2 text-xs font-semibold text-muted-foreground hover:bg-muted">Cancel</button>
+          <button type="submit" id="submit-create-board-btn" class="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 shadow">
+            <span>Create Board</span>
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 </Layout>
@@ -487,6 +535,7 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
     updateAccountScheduling,
     updateAccountDailyLimit,
     toggleAccountActive,
+    createBoardViaWebhook,
   } from '../../lib/supabase';
   import { renderStatusBadge, formatDate, formatTime, renderEmptyStateHTML, escapeHtml } from '../../lib/ui-helpers';
   import type { Account, AccountPinStats, Pin, Log, AccountWebhook, Board } from '../../lib/types';
@@ -512,13 +561,13 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
     // Extract Account ID from URL query string or path
     const urlParams = new URLSearchParams(window.location.search);
     const queryId = urlParams.get('id');
-    const parts = window.location.pathname.split('/accounts/');
     let pathId = '';
-    if (parts.length > 1) {
-      pathId = parts[1].split('/')[0].split('?')[0];
+    const matches = window.location.pathname.match(/\/accounts\/([^/]+)/);
+    if (matches && matches[1] && matches[1] !== 'pins' && matches[1] !== 'details') {
+      pathId = matches[1];
     }
 
-    accountId = queryId || (pathId && pathId !== '[id]' && pathId !== 'details' ? pathId : '');
+    accountId = queryId || pathId || 'acc-1';
 
     const displayElem = document.getElementById('display-account-id');
     if (displayElem) displayElem.textContent = accountId || '---';
@@ -527,8 +576,8 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
 
     // Update "View all pins" link to dedicated route
     const viewAllLink = document.getElementById('view-all-pins-link') as HTMLAnchorElement;
-    if (viewAllLink) {
-      viewAllLink.href = `/accounts/${accountId}/pins`;
+    if (viewAllLink && accountId) {
+      viewAllLink.href = `/accounts/pins?id=${accountId}`;
     }
 
     // Read initial filters from URL params
@@ -798,6 +847,14 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
         </div>
 
         <div class="flex flex-wrap items-center gap-2.5">
+          <button
+            id="btn-open-create-board-modal"
+            class="inline-flex items-center gap-1.5 rounded-xl border border-border bg-background px-3.5 py-2 text-xs font-semibold text-foreground hover:bg-muted transition-all shadow-sm"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span>+ Create Board</span>
+          </button>
+
           <a
             href="/imports?account=${acc.id}"
             class="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-semibold text-white shadow hover:bg-emerald-700 transition-all"
@@ -1201,6 +1258,12 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
     document.getElementById('open-add-webhook-btn')?.addEventListener('click', () => showWebhookForm());
     document.getElementById('cancel-webhook-form')?.addEventListener('click', hideWebhookForm);
 
+    // Phase 3: Create Board modal listeners
+    document.getElementById('btn-open-create-board-modal')?.addEventListener('click', openCreateBoardModal);
+    document.getElementById('close-create-board-modal')?.addEventListener('click', closeCreateBoardModal);
+    document.getElementById('cancel-create-board-btn')?.addEventListener('click', closeCreateBoardModal);
+    setupCreateBoardForm();
+
     document.getElementById('submit-webhook-form')?.addEventListener('click', async () => {
       if (!currentAccount) return;
       hideWebhooksModalFeedback();
@@ -1334,6 +1397,96 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
     modal?.classList.add('hidden');
     modal?.classList.remove('flex');
     hideWebhookForm();
+  }
+
+  async function openCreateBoardModal() {
+    const modal = document.getElementById('create-board-modal');
+    const hookSelect = document.getElementById('new-board-webhook-select') as HTMLSelectElement | null;
+    const errorBox = document.getElementById('create-board-error');
+    const successBox = document.getElementById('create-board-success');
+
+    if (errorBox) errorBox.classList.add('hidden');
+    if (successBox) successBox.classList.add('hidden');
+
+    if (currentAccount && hookSelect) {
+      const hooks = await getAccountWebhooks(currentAccount.id);
+      const activeHooks = hooks.filter((h) => h.is_active);
+      const selectedId = currentAccount.board_creation_webhook_id || (activeHooks.find((h) => h.is_primary) || activeHooks[0])?.id;
+
+      if (activeHooks.length === 0) {
+        hookSelect.innerHTML = '<option value="" disabled selected>No active webhooks configured</option>';
+      } else {
+        hookSelect.innerHTML = activeHooks
+          .map((h) => `<option value="${h.id}" ${h.id === selectedId ? 'selected' : ''}>${escapeHtml(h.label)} (${h.remaining_capacity} capacity remaining)</option>`)
+          .join('');
+      }
+    }
+
+    modal?.classList.remove('hidden');
+    modal?.classList.add('flex');
+  }
+
+  function closeCreateBoardModal() {
+    const modal = document.getElementById('create-board-modal');
+    modal?.classList.add('hidden');
+    modal?.classList.remove('flex');
+  }
+
+  function setupCreateBoardForm() {
+    const form = document.getElementById('create-board-form') as HTMLFormElement | null;
+    const errorBox = document.getElementById('create-board-error');
+    const successBox = document.getElementById('create-board-success');
+
+    form?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!currentAccount) return;
+
+      if (errorBox) errorBox.classList.add('hidden');
+      if (successBox) successBox.classList.add('hidden');
+
+      const nameInput = document.getElementById('new-board-name-input') as HTMLInputElement | null;
+      const hookSelect = document.getElementById('new-board-webhook-select') as HTMLSelectElement | null;
+      const submitBtn = document.getElementById('submit-create-board-btn') as HTMLButtonElement | null;
+
+      const boardName = nameInput?.value.trim() || '';
+      const webhookId = hookSelect?.value || undefined;
+
+      if (!boardName) {
+        if (errorBox) {
+          errorBox.textContent = 'Please enter a valid board name.';
+          errorBox.classList.remove('hidden');
+        }
+        return;
+      }
+
+      if (submitBtn) submitBtn.disabled = true;
+
+      const res = await createBoardViaWebhook({
+        accountId: currentAccount.id,
+        boardName,
+        webhookId,
+        triggerSource: 'account_details_manual',
+      });
+
+      if (submitBtn) submitBtn.disabled = false;
+
+      if (res.success && res.board) {
+        if (successBox) {
+          successBox.textContent = `Board "${boardName}" successfully created in Pinterest via webhook! (Pinterest Board ID: ${res.pinterest_board_id})`;
+          successBox.classList.remove('hidden');
+        }
+        if (nameInput) nameInput.value = '';
+        setTimeout(() => {
+          closeCreateBoardModal();
+          loadAllData();
+        }, 1200);
+      } else {
+        if (errorBox) {
+          errorBox.textContent = res.error || 'Failed to create board via webhook';
+          errorBox.classList.remove('hidden');
+        }
+      }
+    });
   }
 
   async function refreshWebhooksList() {

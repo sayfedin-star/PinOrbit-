@@ -29,8 +29,8 @@ export async function getCurrentUser(): Promise<User | null> {
 export async function requireAuth(redirectPath: string = '/login'): Promise<boolean> {
   if (typeof window === 'undefined') return true;
 
-  // If Supabase credentials are not configured at all, allow preview mode
-  if (!isSupabaseConfigured || !supabase) {
+  // If Supabase credentials are not configured at all or demo mode is active
+  if (!isSupabaseConfigured || !supabase || localStorage.getItem('pinorbit_demo_auth') === 'true') {
     return true;
   }
 

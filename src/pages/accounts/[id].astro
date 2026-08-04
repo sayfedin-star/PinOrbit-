@@ -156,7 +156,7 @@ const { id } = Astro.params;
         <h3 class="text-sm font-bold text-foreground tracking-wide uppercase">Recent Account Pins Queue</h3>
         <span id="pin-queue-count-badge" class="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">0</span>
       </div>
-      <a id="view-all-pins-link" href={`/accounts/${id}/pins`} class="text-xs font-semibold text-primary hover:underline flex items-center gap-1">
+      <a id="view-all-pins-link" href={`/accounts/pins?id=${id}`} class="text-xs font-semibold text-primary hover:underline flex items-center gap-1">
         <span>View all pins</span>
         <span>&rarr;</span>
       </a>
@@ -394,13 +394,13 @@ const { id } = Astro.params;
     // Extract Account ID from URL query string or path
     const urlParams = new URLSearchParams(window.location.search);
     const queryId = urlParams.get('id');
-    const parts = window.location.pathname.split('/accounts/');
     let pathId = '';
-    if (parts.length > 1) {
-      pathId = parts[1].split('/')[0].split('?')[0];
+    const matches = window.location.pathname.match(/\/accounts\/([^/]+)/);
+    if (matches && matches[1] && matches[1] !== 'pins' && matches[1] !== 'details') {
+      pathId = matches[1];
     }
 
-    accountId = queryId || (pathId && pathId !== '[id]' && pathId !== 'details' ? pathId : '');
+    accountId = queryId || pathId || 'acc-1';
 
     const displayElem = document.getElementById('display-account-id');
     if (displayElem) displayElem.textContent = accountId || '---';
@@ -409,8 +409,8 @@ const { id } = Astro.params;
 
     // Update "View all pins" link to dedicated route
     const viewAllLink = document.getElementById('view-all-pins-link') as HTMLAnchorElement;
-    if (viewAllLink) {
-      viewAllLink.href = `/accounts/${accountId}/pins`;
+    if (viewAllLink && accountId) {
+      viewAllLink.href = `/accounts/pins?id=${accountId}`;
     }
 
     // Read initial filters from URL params

@@ -34,6 +34,8 @@ export interface Account {
   active_webhooks_count?: number;
   primary_webhook_label?: string;
   last_published_at?: string | null;
+  auto_create_missing_boards?: boolean;
+  board_creation_webhook_id?: string | null;
 }
 
 export interface AccountPinStats {
@@ -59,6 +61,9 @@ export interface Board {
   board_id: string;
   created_at: string;
   account_name?: string;
+  pinterest_board_id?: string | null;
+  created_via?: 'manual' | 'webhook_auto_create' | string;
+  created_via_webhook_id?: string | null;
 }
 
 export interface Pin {
