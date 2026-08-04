@@ -487,6 +487,7 @@ export async function createAccount(payload: {
   account_name: string;
   webhook_url: string;
   max_pins_per_day: number;
+  posting_interval_minutes?: number;
   is_active?: boolean;
 }): Promise<{ data: Account | null; error: string | null }> {
   if (!supabase) {
@@ -495,6 +496,7 @@ export async function createAccount(payload: {
       account_name: payload.account_name,
       webhook_url: payload.webhook_url,
       max_pins_per_day: payload.max_pins_per_day,
+      posting_interval_minutes: payload.posting_interval_minutes ?? 30,
       is_active: payload.is_active ?? true,
       created_at: new Date().toISOString(),
       boards_count: 0,
@@ -512,6 +514,7 @@ export async function createAccount(payload: {
       account_name: payload.account_name,
       webhook_url: payload.webhook_url,
       max_pins_per_day: payload.max_pins_per_day,
+      posting_interval_minutes: payload.posting_interval_minutes ?? 30,
       is_active: payload.is_active ?? true,
     })
     .select('*')

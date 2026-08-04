@@ -314,6 +314,7 @@ Deno.serve(async (req: Request) => {
 
     // Process each active account (safely limited to 1 pin per eligible account per run)
     for (const account of accounts as Account[]) {
+      processedAccounts++;
       // 5. Account Eligibility Rules
 
       // Rule 5a: pinning_started_at check
@@ -358,12 +359,15 @@ Deno.serve(async (req: Request) => {
 
       // Rule 5d: Posting interval check (per-account elapsed time since last published pin)
       if (account.last_published_at) {
-        const intervalMin = account.posting_interval_minutes ?? 30;
-        const elapsedMs = now.getTime() - new Date(account.last_published_at).getTime();
-        const elapsedMinutes = Math.floor(elapsedMs / 60000);
-        if (elapsedMinutes < intervalMin) {
-          skippedDueToInterval++;
-          continue;
+        const lastPubDate = new Date(account.last_published_at);
+        if (!isNaN(lastPubDate.getTime())) {
+          const intervalMin = account.posting_interval_minutes ?? 30;
+          const elapsedMs = now.getTime() - lastPubDate.getTime();
+          const elapsedMinutes = Math.floor(elapsedMs / 60000);
+          if (elapsedMinutes < intervalMin) {
+            skippedDueToInterval++;
+            continue;
+          }
         }
       }
 
@@ -405,7 +409,6 @@ Deno.serve(async (req: Request) => {
       }
 
       const currentPin = claimedPins[0] as Pin;
-      processedAccounts++;
 
       // 8. Board Matching Validation
       const matchedBoard = await findMatchingBoard(supabase, account.id, currentPin.board_name);
