@@ -139,3 +139,85 @@ export interface DashboardKPIs {
   activeWebhooks: number;
   exhaustedWebhooks: number;
 }
+
+export interface Competitor {
+  id: string;
+  user_id?: string;
+  username: string;
+  full_name?: string | null;
+  niche?: string | null;
+  profile_reach: number;
+  profile_views: number;
+  follower_count: number;
+  pin_count: number;
+  avatar_url?: string | null;
+  notes?: string | null;
+  last_checked_at?: string | null;
+  created_at: string;
+  boards_count?: number;
+  strategy_age_days?: number;
+  oldest_board_date?: string | null;
+}
+
+export interface CompetitorSnapshot {
+  id: string;
+  competitor_id: string;
+  profile_reach: number;
+  profile_views: number;
+  follower_count: number;
+  pin_count: number;
+  recorded_at: string;
+}
+
+export interface CompetitorBoard {
+  id: string;
+  competitor_id: string;
+  board_id: string;
+  name: string;
+  description?: string | null;
+  url?: string | null;
+  pin_count: number;
+  follower_count: number;
+  board_created_at?: string | null;
+  last_pinned_at?: string | null;
+  updated_at: string;
+}
+
+export interface CompetitorDeltaStats {
+  reachChange: number;
+  reachPercent: number;
+  viewsChange: number;
+  viewsPercent: number;
+  followersChange: number;
+  followersPercent: number;
+  pinsChange: number;
+  pinsPercent: number;
+}
+
+export type PinterestPayloadType = 'user_profile' | 'user_boards' | 'unknown';
+
+export interface ParsedPinterestPayload {
+  type: PinterestPayloadType;
+  username?: string;
+  profileData?: {
+    full_name?: string;
+    profile_reach?: number;
+    profile_views?: number;
+    follower_count?: number;
+    pin_count?: number;
+    avatar_url?: string;
+    about?: string;
+  };
+  boardsData?: Array<{
+    board_id: string;
+    name: string;
+    description?: string;
+    url?: string;
+    pin_count: number;
+    follower_count: number;
+    board_created_at?: string;
+    last_pinned_at?: string;
+  }>;
+  rawJson?: any;
+}
+

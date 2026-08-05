@@ -1,0 +1,646 @@
+---
+import Layout from '../layouts/Layout.astro';
+import SectionHeader from '../components/ui/SectionHeader.astro';
+---
+
+<Layout title="Competitor Intelligence" description="Track competitor Pinterest growth, reach, views, followers, and board creation strategy over time.">
+  <!-- Header & Primary Actions -->
+  <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
+    <SectionHeader
+      title="Competitor Intelligence"
+      description="Monitor competitor profile reach, follower velocity, and Pinterest board strategy timeline."
+    />
+
+    <div class="flex flex-wrap items-center gap-2.5 self-start sm:self-auto">
+      <button
+        id="open-paste-payload-modal"
+        class="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-xs font-semibold text-foreground shadow-sm hover:bg-muted hover:text-foreground transition-all"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+          <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+        </svg>
+        <span>Paste DevTools Payload</span>
+      </button>
+
+      <button
+        id="open-add-competitor-modal"
+        class="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground shadow-md hover:bg-primary/90 transition-all"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        <span>Track Competitor</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Global Success / Status Banner -->
+  <div id="competitor-status-banner" class="hidden mb-6 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-xs text-emerald-600 dark:text-emerald-400 flex items-center justify-between shadow-sm">
+    <div class="flex items-center gap-2.5">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+      </svg>
+      <span id="competitor-status-text">Operation completed successfully.</span>
+    </div>
+    <button id="dismiss-status-banner" class="text-emerald-500 hover:text-emerald-400">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+
+  <!-- Summary KPI Cards Grid -->
+  <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6" id="kpi-cards-grid">
+    <div class="rounded-xl border border-border bg-card p-5 shadow-sm space-y-1">
+      <span class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Tracked Competitors</span>
+      <div class="text-2xl font-bold tracking-tight text-foreground" id="kpi-total-competitors">-</div>
+      <p class="text-[11px] text-muted-foreground">Active monitored accounts</p>
+    </div>
+
+    <div class="rounded-xl border border-border bg-card p-5 shadow-sm space-y-1">
+      <span class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Average Monthly Reach</span>
+      <div class="text-2xl font-bold tracking-tight text-emerald-500" id="kpi-avg-reach">-</div>
+      <p class="text-[11px] text-muted-foreground">Across all competitors</p>
+    </div>
+
+    <div class="rounded-xl border border-border bg-card p-5 shadow-sm space-y-1">
+      <span class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Top Competitor</span>
+      <div class="text-lg font-bold tracking-tight text-foreground truncate" id="kpi-top-competitor">-</div>
+      <p class="text-[11px] text-muted-foreground" id="kpi-top-reach">Highest monthly reach</p>
+    </div>
+
+    <div class="rounded-xl border border-border bg-card p-5 shadow-sm space-y-1">
+      <span class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Tracked Boards</span>
+      <div class="text-2xl font-bold tracking-tight text-primary" id="kpi-total-boards">-</div>
+      <p class="text-[11px] text-muted-foreground">Pinterest strategy boards</p>
+    </div>
+  </div>
+
+  <!-- Competitors Table Workspace -->
+  <div class="rounded-xl border border-border bg-card shadow-sm overflow-hidden mb-8">
+    <div class="flex items-center justify-between border-b border-border px-6 py-4 bg-muted/30">
+      <div>
+        <h2 class="text-sm font-bold text-foreground">Tracked Pinterest Competitors</h2>
+        <p class="text-xs text-muted-foreground">Real-time metrics, reach analytics, and profile deep-dives.</p>
+      </div>
+      <span class="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary" id="competitor-badge-count">
+        0 Profiles
+      </span>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="w-full text-left text-xs text-muted-foreground">
+        <thead class="border-b border-border bg-muted/40 text-foreground font-semibold">
+          <tr>
+            <th scope="col" class="py-3.5 px-6">Competitor Profile</th>
+            <th scope="col" class="py-3.5 px-4">Niche</th>
+            <th scope="col" class="py-3.5 px-4">Monthly Reach</th>
+            <th scope="col" class="py-3.5 px-4">Profile Views</th>
+            <th scope="col" class="py-3.5 px-4">Followers</th>
+            <th scope="col" class="py-3.5 px-4">Total Pins</th>
+            <th scope="col" class="py-3.5 px-4">Strategy Age</th>
+            <th scope="col" class="py-3.5 px-4">Last Checked</th>
+            <th scope="col" class="py-3.5 px-6 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="competitors-table-body" class="divide-y divide-border">
+          <tr>
+            <td colspan="9" class="py-12 text-center text-xs text-muted-foreground animate-pulse">
+              Loading competitor intelligence workspace...
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- MODAL 1: Track Competitor Modal -->
+  <div id="add-competitor-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" aria-modal="true" role="dialog">
+    <div id="add-competitor-backdrop" class="fixed inset-0"></div>
+    <div class="relative w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-5 z-10">
+      <div class="flex items-center justify-between border-b border-border pb-4">
+        <div class="flex items-center gap-2.5">
+          <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+            </svg>
+          </div>
+          <h3 class="text-base font-bold text-foreground">Track Pinterest Competitor</h3>
+        </div>
+        <button id="close-add-competitor-modal" class="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div id="add-competitor-error" class="hidden rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-500"></div>
+
+      <form id="add-competitor-form" class="space-y-4">
+        <div class="space-y-1.5">
+          <label for="competitor-username-input" class="block text-xs font-semibold text-foreground">Pinterest Username *</label>
+          <div class="relative">
+            <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-xs font-semibold text-muted-foreground">@</span>
+            <input
+              id="competitor-username-input"
+              type="text"
+              required
+              placeholder="e.g. tastyrecipes"
+              class="w-full rounded-xl border border-border bg-background py-2.5 pl-8 pr-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+          </div>
+        </div>
+
+        <div class="space-y-1.5">
+          <label for="competitor-niche-input" class="block text-xs font-semibold text-foreground">Niche / Category</label>
+          <input
+            id="competitor-niche-input"
+            type="text"
+            placeholder="e.g. Food & Cooking, Fitness, Travel"
+            class="w-full rounded-xl border border-border bg-background py-2.5 px-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+        </div>
+
+        <div class="space-y-1.5">
+          <label for="competitor-notes-input" class="block text-xs font-semibold text-foreground">Internal Strategy Notes</label>
+          <textarea
+            id="competitor-notes-input"
+            rows="3"
+            placeholder="e.g. Focuses on 30-minute quick dinners and keto meal prep infographics..."
+            class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          ></textarea>
+        </div>
+
+        <div class="flex items-center justify-end gap-3 border-t border-border pt-4">
+          <button
+            type="button"
+            id="cancel-add-competitor-modal"
+            class="rounded-xl border border-border px-4 py-2.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            id="submit-add-competitor-modal"
+            class="rounded-xl bg-primary px-5 py-2.5 text-xs font-semibold text-primary-foreground shadow-md hover:bg-primary/90 transition-all"
+          >
+            Start Tracking
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL 2: DevTools JSON Payload Parser Modal (Fail-Safe Feature) -->
+  <div id="paste-payload-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" aria-modal="true" role="dialog">
+    <div id="paste-payload-backdrop" class="fixed inset-0"></div>
+    <div class="relative w-full max-w-2xl rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-5 z-10">
+      <div class="flex items-center justify-between border-b border-border pb-4">
+        <div class="flex items-center gap-2.5">
+          <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-500">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+              <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+            </svg>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-foreground">Paste Pinterest DevTools JSON Payload</h3>
+            <p class="text-[11px] text-muted-foreground">Bypass rate limits by pasting raw Network tab JSON responses.</p>
+          </div>
+        </div>
+        <button id="close-paste-payload-modal" class="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div id="paste-payload-error" class="hidden rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-500"></div>
+
+      <form id="paste-payload-form" class="space-y-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="space-y-1.5">
+            <label for="payload-target-competitor-select" class="block text-xs font-semibold text-foreground">Target Competitor *</label>
+            <select
+              id="payload-target-competitor-select"
+              required
+              class="w-full rounded-xl border border-border bg-background py-2.5 px-3 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              <option value="" disabled selected>Select competitor...</option>
+            </select>
+          </div>
+
+          <div class="space-y-1.5">
+            <label class="block text-xs font-semibold text-foreground">Payload Auto-Detection</label>
+            <div id="payload-detection-badge" class="flex h-10 items-center justify-between rounded-xl border border-border bg-muted/40 px-3 text-xs font-medium text-muted-foreground">
+              <span>Detected Type:</span>
+              <span id="detected-payload-type" class="rounded bg-muted px-2 py-0.5 text-[10px] font-semibold text-foreground">Waiting for paste...</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="space-y-1.5">
+          <label for="raw-payload-textarea" class="block text-xs font-semibold text-foreground">Raw Pinterest DevTools JSON Response *</label>
+          <textarea
+            id="raw-payload-textarea"
+            rows="8"
+            required
+            placeholder='Paste response JSON here from UserResource or BoardsResource network requests...'
+            class="w-full rounded-xl border border-border bg-background py-2.5 px-3 font-mono text-[11px] text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          ></textarea>
+        </div>
+
+        <div class="flex items-center justify-between border-t border-border pt-4">
+          <span class="text-[11px] text-muted-foreground">Supports <code class="font-mono text-primary">UserResource</code> & <code class="font-mono text-primary">BoardsResource</code></span>
+          <div class="flex items-center gap-3">
+            <button
+              type="button"
+              id="cancel-paste-payload-modal"
+              class="rounded-xl border border-border px-4 py-2.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              id="submit-paste-payload-modal"
+              class="rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-semibold text-white shadow-md hover:bg-emerald-500 transition-all"
+            >
+              Parse & Ingest Payload
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</Layout>
+
+<script>
+  import {
+    getCompetitors,
+    addCompetitor,
+    deleteCompetitor,
+    parsePinterestPayload,
+    ingestDevToolsPayload,
+  } from '../lib/competitors';
+  import type { Competitor } from '../lib/types';
+
+  let competitorsList: Competitor[] = [];
+  let selectedCompetitorIdForPayload: string | null = null;
+
+  // DOM Elements
+  const competitorsTableBody = document.getElementById('competitors-table-body') as HTMLElement;
+  const competitorBadgeCount = document.getElementById('competitor-badge-count') as HTMLElement;
+  const statusBanner = document.getElementById('competitor-status-banner') as HTMLElement;
+  const statusText = document.getElementById('competitor-status-text') as HTMLElement;
+  const dismissStatusBannerBtn = document.getElementById('dismiss-status-banner') as HTMLElement;
+
+  // KPI elements
+  const kpiTotalCompetitors = document.getElementById('kpi-total-competitors') as HTMLElement;
+  const kpiAvgReach = document.getElementById('kpi-avg-reach') as HTMLElement;
+  const kpiTopCompetitor = document.getElementById('kpi-top-competitor') as HTMLElement;
+  const kpiTopReach = document.getElementById('kpi-top-reach') as HTMLElement;
+  const kpiTotalBoards = document.getElementById('kpi-total-boards') as HTMLElement;
+
+  // Modals
+  const addCompetitorModal = document.getElementById('add-competitor-modal') as HTMLElement;
+  const openAddCompetitorBtn = document.getElementById('open-add-competitor-modal') as HTMLElement;
+  const closeAddCompetitorBtn = document.getElementById('close-add-competitor-modal') as HTMLElement;
+  const cancelAddCompetitorBtn = document.getElementById('cancel-add-competitor-modal') as HTMLElement;
+  const addCompetitorForm = document.getElementById('add-competitor-form') as HTMLFormElement;
+  const addCompetitorError = document.getElementById('add-competitor-error') as HTMLElement;
+
+  const pastePayloadModal = document.getElementById('paste-payload-modal') as HTMLElement;
+  const openPastePayloadBtn = document.getElementById('open-paste-payload-modal') as HTMLElement;
+  const closePastePayloadBtn = document.getElementById('close-paste-payload-modal') as HTMLElement;
+  const cancelPastePayloadBtn = document.getElementById('cancel-paste-payload-modal') as HTMLElement;
+  const pastePayloadForm = document.getElementById('paste-payload-form') as HTMLFormElement;
+  const pastePayloadError = document.getElementById('paste-payload-error') as HTMLElement;
+  const payloadTargetSelect = document.getElementById('payload-target-competitor-select') as HTMLSelectElement;
+  const rawPayloadTextarea = document.getElementById('raw-payload-textarea') as HTMLTextAreaElement;
+  const detectedPayloadTypeSpan = document.getElementById('detected-payload-type') as HTMLElement;
+
+  function formatNumber(num: number): string {
+    if (num >= 1_000_000) {
+      return (num / 1_000_000).toFixed(1) + 'M';
+    }
+    if (num >= 1_000) {
+      return (num / 1_000).toFixed(1) + 'k';
+    }
+    return num.toLocaleString();
+  }
+
+  function formatRelativeDate(isoStr?: string | null): string {
+    if (!isoStr) return 'Never';
+    const date = new Date(isoStr);
+    if (isNaN(date.getTime())) return 'Never';
+    const diffHours = Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60));
+    if (diffHours < 1) return 'Just now';
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    return `${diffDays}d ago`;
+  }
+
+  function showStatus(message: string, isError = false) {
+    if (!statusBanner || !statusText) return;
+    statusText.textContent = message;
+    statusBanner.classList.remove('hidden');
+    if (isError) {
+      statusBanner.className = 'mb-6 rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-xs text-rose-600 dark:text-rose-400 flex items-center justify-between shadow-sm';
+    } else {
+      statusBanner.className = 'mb-6 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-xs text-emerald-600 dark:text-emerald-400 flex items-center justify-between shadow-sm';
+    }
+  }
+
+  if (dismissStatusBannerBtn) {
+    dismissStatusBannerBtn.addEventListener('click', () => {
+      statusBanner.classList.add('hidden');
+    });
+  }
+
+  async function loadWorkspaceData() {
+    competitorsList = await getCompetitors();
+    renderKPIs();
+    renderCompetitorsTable();
+    populatePayloadSelect();
+  }
+
+  function renderKPIs() {
+    const count = competitorsList.length;
+    if (kpiTotalCompetitors) kpiTotalCompetitors.textContent = String(count);
+    if (competitorBadgeCount) competitorBadgeCount.textContent = `${count} ${count === 1 ? 'Profile' : 'Profiles'}`;
+
+    if (count === 0) {
+      if (kpiAvgReach) kpiAvgReach.textContent = '0';
+      if (kpiTopCompetitor) kpiTopCompetitor.textContent = 'None';
+      if (kpiTopReach) kpiTopReach.textContent = '0 reach';
+      if (kpiTotalBoards) kpiTotalBoards.textContent = '0';
+      return;
+    }
+
+    const totalReach = competitorsList.reduce((acc, c) => acc + (c.profile_reach || 0), 0);
+    const avgReach = Math.round(totalReach / count);
+    if (kpiAvgReach) kpiAvgReach.textContent = formatNumber(avgReach);
+
+    const sortedByReach = [...competitorsList].sort((a, b) => (b.profile_reach || 0) - (a.profile_reach || 0));
+    const topComp = sortedByReach[0];
+    if (kpiTopCompetitor) kpiTopCompetitor.textContent = topComp.full_name || `@${topComp.username}`;
+    if (kpiTopReach) kpiTopReach.textContent = `${formatNumber(topComp.profile_reach || 0)} monthly reach`;
+
+    const totalBoardsCount = competitorsList.reduce((acc, c) => acc + (c.boards_count || 0), 0);
+    if (kpiTotalBoards) kpiTotalBoards.textContent = String(totalBoardsCount);
+  }
+
+  function renderCompetitorsTable() {
+    if (!competitorsTableBody) return;
+
+    if (competitorsList.length === 0) {
+      competitorsTableBody.innerHTML = `
+        <tr>
+          <td colspan="9" class="py-12 text-center text-xs text-muted-foreground">
+            No competitors tracked yet. Click <span class="font-semibold text-foreground">Track Competitor</span> above to start monitoring!
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    competitorsTableBody.innerHTML = competitorsList
+      .map((c) => {
+        const avatar = c.avatar_url || `https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&h=200&q=80`;
+        const strategyAgeText = c.strategy_age_days ? `${c.strategy_age_days}d active` : 'Unknown';
+
+        return `
+          <tr class="hover:bg-muted/30 transition-colors">
+            <td class="py-4 px-6">
+              <div class="flex items-center gap-3">
+                <img src="${avatar}" alt="${c.username}" class="h-10 w-10 rounded-full object-cover border border-border shadow-sm flex-shrink-0" />
+                <div class="flex flex-col min-w-0">
+                  <a href="/competitors/${c.id}" class="text-xs font-bold text-foreground hover:text-primary transition-colors truncate">
+                    ${c.full_name || c.username}
+                  </a>
+                  <div class="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                    <span>@${c.username}</span>
+                    <a href="https://www.pinterest.com/${c.username}/" target="_blank" rel="noopener noreferrer" class="text-muted-foreground/70 hover:text-primary" title="View Pinterest Profile">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </td>
+            <td class="py-4 px-4">
+              <span class="inline-flex items-center rounded-md bg-muted px-2 py-1 text-[11px] font-medium text-foreground">
+                ${c.niche || 'General'}
+              </span>
+            </td>
+            <td class="py-4 px-4 font-bold text-emerald-500">
+              ${formatNumber(c.profile_reach || 0)}
+            </td>
+            <td class="py-4 px-4 font-semibold text-foreground">
+              ${formatNumber(c.profile_views || 0)}
+            </td>
+            <td class="py-4 px-4 font-semibold text-foreground">
+              ${formatNumber(c.follower_count || 0)}
+            </td>
+            <td class="py-4 px-4 text-foreground">
+              ${formatNumber(c.pin_count || 0)}
+            </td>
+            <td class="py-4 px-4">
+              <span class="rounded bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                ${strategyAgeText}
+              </span>
+            </td>
+            <td class="py-4 px-4 text-muted-foreground text-[11px]">
+              ${formatRelativeDate(c.last_checked_at)}
+            </td>
+            <td class="py-4 px-6 text-right">
+              <div class="flex items-center justify-end gap-2">
+                <button
+                  data-paste-id="${c.id}"
+                  class="paste-payload-btn rounded-lg border border-border p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  title="Paste DevTools Payload for this competitor"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
+                </button>
+
+                <a
+                  href="/competitors/${c.id}"
+                  class="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2.5 py-1.5 text-[11px] font-semibold text-foreground hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all shadow-sm"
+                >
+                  <span>Deep-Dive</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                </a>
+
+                <button
+                  data-delete-id="${c.id}"
+                  class="delete-competitor-btn rounded-lg p-1.5 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors"
+                  title="Delete competitor"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                </button>
+              </div>
+            </td>
+          </tr>
+        `;
+      })
+      .join('');
+
+    // Attach row button listeners
+    document.querySelectorAll('.paste-payload-btn').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        const id = (e.currentTarget as HTMLElement).getAttribute('data-paste-id');
+        if (id) openPasteModal(id);
+      });
+    });
+
+    document.querySelectorAll('.delete-competitor-btn').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        const id = (e.currentTarget as HTMLElement).getAttribute('data-delete-id');
+        if (id && confirm('Are you sure you want to remove this competitor from tracking?')) {
+          try {
+            await deleteCompetitor(id);
+            showStatus('Competitor removed successfully.');
+            await loadWorkspaceData();
+          } catch (err: any) {
+            showStatus(`Failed to delete: ${err.message}`, true);
+          }
+        }
+      });
+    });
+  }
+
+  function populatePayloadSelect() {
+    if (!payloadTargetSelect) return;
+    payloadTargetSelect.innerHTML = `
+      <option value="" disabled selected>Select competitor...</option>
+      ${competitorsList
+        .map(
+          (c) => `<option value="${c.id}" ${selectedCompetitorIdForPayload === c.id ? 'selected' : ''}>${c.full_name || c.username} (@${c.username})</option>`
+        )
+        .join('')}
+    `;
+  }
+
+  // Track Competitor Modal
+  function openAddModal() {
+    if (addCompetitorError) addCompetitorError.classList.add('hidden');
+    if (addCompetitorForm) addCompetitorForm.reset();
+    if (addCompetitorModal) addCompetitorModal.classList.remove('hidden');
+    if (addCompetitorModal) addCompetitorModal.classList.add('flex');
+  }
+
+  function closeAddModal() {
+    if (addCompetitorModal) addCompetitorModal.classList.add('hidden');
+    if (addCompetitorModal) addCompetitorModal.classList.remove('flex');
+  }
+
+  if (openAddCompetitorBtn) openAddCompetitorBtn.addEventListener('click', openAddModal);
+  if (closeAddCompetitorBtn) closeAddCompetitorBtn.addEventListener('click', closeAddModal);
+  if (cancelAddCompetitorBtn) cancelAddCompetitorBtn.addEventListener('click', closeAddModal);
+
+  if (addCompetitorForm) {
+    addCompetitorForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const usernameInput = (document.getElementById('competitor-username-input') as HTMLInputElement).value;
+      const nicheInput = (document.getElementById('competitor-niche-input') as HTMLInputElement).value;
+      const notesInput = (document.getElementById('competitor-notes-input') as HTMLTextAreaElement).value;
+
+      try {
+        await addCompetitor({
+          username: usernameInput,
+          niche: nicheInput,
+          notes: notesInput,
+        });
+        closeAddModal();
+        showStatus(`Competitor @${usernameInput.replace(/^@/, '')} added to monitoring workspace!`);
+        await loadWorkspaceData();
+      } catch (err: any) {
+        if (addCompetitorError) {
+          addCompetitorError.textContent = err.message || 'Failed to add competitor.';
+          addCompetitorError.classList.remove('hidden');
+        }
+      }
+    });
+  }
+
+  // Paste Payload Modal
+  function openPasteModal(competitorId?: string) {
+    selectedCompetitorIdForPayload = competitorId || null;
+    populatePayloadSelect();
+    if (pastePayloadError) pastePayloadError.classList.add('hidden');
+    if (pastePayloadForm) pastePayloadForm.reset();
+    if (detectedPayloadTypeSpan) {
+      detectedPayloadTypeSpan.textContent = 'Waiting for paste...';
+      detectedPayloadTypeSpan.className = 'rounded bg-muted px-2 py-0.5 text-[10px] font-semibold text-foreground';
+    }
+    if (pastePayloadModal) pastePayloadModal.classList.remove('hidden');
+    if (pastePayloadModal) pastePayloadModal.classList.add('flex');
+  }
+
+  function closePasteModal() {
+    if (pastePayloadModal) pastePayloadModal.classList.add('hidden');
+    if (pastePayloadModal) pastePayloadModal.classList.remove('flex');
+  }
+
+  if (openPastePayloadBtn) openPastePayloadBtn.addEventListener('click', () => openPasteModal());
+  if (closePastePayloadBtn) closePastePayloadBtn.addEventListener('click', closePasteModal);
+  if (cancelPastePayloadBtn) cancelPastePayloadBtn.addEventListener('click', closePasteModal);
+
+  // Auto-detection badge on paste / type
+  if (rawPayloadTextarea) {
+    rawPayloadTextarea.addEventListener('input', () => {
+      const text = rawPayloadTextarea.value.trim();
+      if (!text) {
+        if (detectedPayloadTypeSpan) {
+          detectedPayloadTypeSpan.textContent = 'Waiting for paste...';
+          detectedPayloadTypeSpan.className = 'rounded bg-muted px-2 py-0.5 text-[10px] font-semibold text-foreground';
+        }
+        return;
+      }
+
+      const parsed = parsePinterestPayload(text);
+      if (parsed.type === 'user_profile') {
+        if (detectedPayloadTypeSpan) {
+          detectedPayloadTypeSpan.textContent = '✓ User Profile (UserResource)';
+          detectedPayloadTypeSpan.className = 'rounded bg-emerald-500/20 text-emerald-500 px-2 py-0.5 text-[10px] font-bold';
+        }
+      } else if (parsed.type === 'user_boards') {
+        if (detectedPayloadTypeSpan) {
+          detectedPayloadTypeSpan.textContent = '✓ User Boards (BoardsResource)';
+          detectedPayloadTypeSpan.className = 'rounded bg-primary/20 text-primary px-2 py-0.5 text-[10px] font-bold';
+        }
+      } else {
+        if (detectedPayloadTypeSpan) {
+          detectedPayloadTypeSpan.textContent = '✕ Unknown Payload';
+          detectedPayloadTypeSpan.className = 'rounded bg-rose-500/20 text-rose-500 px-2 py-0.5 text-[10px] font-bold';
+        }
+      }
+    });
+  }
+
+  if (pastePayloadForm) {
+    pastePayloadForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const targetId = payloadTargetSelect.value;
+      const payloadText = rawPayloadTextarea.value.trim();
+
+      if (!targetId) {
+        if (pastePayloadError) {
+          pastePayloadError.textContent = 'Please select a target competitor.';
+          pastePayloadError.classList.remove('hidden');
+        }
+        return;
+      }
+
+      const res = await ingestDevToolsPayload(targetId, payloadText);
+
+      if (res.success) {
+        closePasteModal();
+        showStatus(res.message);
+        await loadWorkspaceData();
+      } else {
+        if (pastePayloadError) {
+          pastePayloadError.textContent = res.message;
+          pastePayloadError.classList.remove('hidden');
+        }
+      }
+    });
+  }
+
+  // Load initial data
+  loadWorkspaceData();
+</script>

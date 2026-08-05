@@ -1,0 +1,522 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import SectionHeader from '../../components/ui/SectionHeader.astro';
+import { getCompetitors } from '../../lib/competitors';
+
+export async function getStaticPaths() {
+  const competitors = await getCompetitors();
+  const fallbackIds = ['comp-1', 'comp-2', 'comp-3'];
+  const fetchedIds = (competitors || []).map((c) => c.id);
+  const allIds = Array.from(new Set([...fallbackIds, ...fetchedIds]));
+
+  return allIds.map((id) => ({
+    params: { id },
+  }));
+}
+---
+
+<Layout title="Competitor Deep-Dive" description="Detailed board history timeline, strategy age, and snapshot growth tracking for Pinterest competitor.">
+  <!-- Back Button & Breadcrumbs -->
+  <div class="mb-4 flex items-center justify-between">
+    <a href="/competitors" class="inline-flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+      <span>Back to Competitors Workspace</span>
+    </a>
+
+    <button
+      id="open-deepdive-paste-modal"
+      class="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-500 transition-all"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+        <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+      </svg>
+      <span>Paste DevTools Payload</span>
+    </button>
+  </div>
+
+  <!-- Status Notification Banner -->
+  <div id="deepdive-status-banner" class="hidden mb-6 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-xs text-emerald-600 dark:text-emerald-400 flex items-center justify-between shadow-sm">
+    <div class="flex items-center gap-2.5">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+      </svg>
+      <span id="deepdive-status-text">Competitor data updated successfully.</span>
+    </div>
+    <button id="dismiss-deepdive-status" class="text-emerald-500 hover:text-emerald-400">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+
+  <!-- Profile Header Card -->
+  <div class="rounded-2xl border border-border bg-card p-6 shadow-sm mb-6 relative overflow-hidden" id="profile-header-card">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div class="flex items-start gap-4">
+        <img
+          id="competitor-avatar"
+          src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&h=200&q=80"
+          alt="Avatar"
+          class="h-16 w-16 rounded-2xl object-cover border-2 border-border shadow-md flex-shrink-0"
+        />
+        <div class="space-y-1">
+          <div class="flex flex-wrap items-center gap-3">
+            <h1 class="text-xl font-bold tracking-tight text-foreground" id="competitor-fullname">Loading...</h1>
+            <span class="rounded-full bg-primary/10 px-3 py-0.5 text-xs font-semibold text-primary" id="competitor-niche-badge">General</span>
+          </div>
+          <div class="flex items-center gap-2 text-xs text-muted-foreground">
+            <span id="competitor-handle">@username</span>
+            <span>•</span>
+            <a
+              id="competitor-pinterest-link"
+              href="#"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+            >
+              <span>View on Pinterest</span>
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            </a>
+          </div>
+          <p class="text-xs text-muted-foreground pt-1 max-w-2xl" id="competitor-notes">No notes provided.</p>
+        </div>
+      </div>
+
+      <!-- Strategy Age Metric Badge -->
+      <div class="flex items-center gap-4 bg-muted/30 rounded-xl p-4 border border-border/50 self-start md:self-auto">
+        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/>
+            <line x1="16" y1="2" x2="16" y2="6"/>
+            <line x1="8" y1="2" x2="8" y2="6"/>
+            <line x1="3" y1="10" x2="21" y2="10"/>
+          </svg>
+        </div>
+        <div>
+          <span class="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Strategy Age (Oldest Board)</span>
+          <div class="text-base font-bold text-foreground" id="strategy-age-val">0 Days</div>
+          <span class="text-[10px] text-muted-foreground" id="oldest-board-date-str">Oldest board date</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Historical Growth Delta Cards Grid -->
+  <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
+    <div class="rounded-xl border border-border bg-card p-5 shadow-sm space-y-2">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Monthly Reach</span>
+        <span id="delta-reach-badge" class="rounded px-2 py-0.5 text-[11px] font-bold">0%</span>
+      </div>
+      <div class="text-2xl font-bold tracking-tight text-foreground" id="current-reach">0</div>
+      <p class="text-[11px] text-muted-foreground" id="delta-reach-sub">vs previous snapshot</p>
+    </div>
+
+    <div class="rounded-xl border border-border bg-card p-5 shadow-sm space-y-2">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Profile Views</span>
+        <span id="delta-views-badge" class="rounded px-2 py-0.5 text-[11px] font-bold">0%</span>
+      </div>
+      <div class="text-2xl font-bold tracking-tight text-foreground" id="current-views">0</div>
+      <p class="text-[11px] text-muted-foreground" id="delta-views-sub">vs previous snapshot</p>
+    </div>
+
+    <div class="rounded-xl border border-border bg-card p-5 shadow-sm space-y-2">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Followers</span>
+        <span id="delta-followers-badge" class="rounded px-2 py-0.5 text-[11px] font-bold">0%</span>
+      </div>
+      <div class="text-2xl font-bold tracking-tight text-foreground" id="current-followers">0</div>
+      <p class="text-[11px] text-muted-foreground" id="delta-followers-sub">vs previous snapshot</p>
+    </div>
+
+    <div class="rounded-xl border border-border bg-card p-5 shadow-sm space-y-2">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Total Pins</span>
+        <span id="delta-pins-badge" class="rounded px-2 py-0.5 text-[11px] font-bold">0%</span>
+      </div>
+      <div class="text-2xl font-bold tracking-tight text-foreground" id="current-pins">0</div>
+      <p class="text-[11px] text-muted-foreground" id="delta-pins-sub">vs previous snapshot</p>
+    </div>
+  </div>
+
+  <!-- Board Strategy History Table -->
+  <div class="rounded-xl border border-border bg-card shadow-sm overflow-hidden mb-8">
+    <div class="flex items-center justify-between border-b border-border px-6 py-4 bg-muted/30">
+      <div>
+        <h2 class="text-sm font-bold text-foreground">Pinterest Board Strategy & Timeline</h2>
+        <p class="text-xs text-muted-foreground">Board creation dates, SEO descriptions, pin counts, and last activity timestamps.</p>
+      </div>
+      <span class="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary" id="boards-count-badge">
+        0 Boards
+      </span>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="w-full text-left text-xs text-muted-foreground">
+        <thead class="border-b border-border bg-muted/40 text-foreground font-semibold">
+          <tr>
+            <th scope="col" class="py-3.5 px-6">Board Name & Description</th>
+            <th scope="col" class="py-3.5 px-4">Creation Date (`created_at`)</th>
+            <th scope="col" class="py-3.5 px-4">Last Activity (`last_pinned_at`)</th>
+            <th scope="col" class="py-3.5 px-4">Pin Count</th>
+            <th scope="col" class="py-3.5 px-4">Followers</th>
+            <th scope="col" class="py-3.5 px-6 text-right">Link</th>
+          </tr>
+        </thead>
+        <tbody id="boards-table-body" class="divide-y divide-border">
+          <tr>
+            <td colspan="6" class="py-12 text-center text-xs text-muted-foreground animate-pulse">
+              Loading board strategy timeline...
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- DevTools JSON Payload Modal Integration -->
+  <div id="deepdive-payload-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" aria-modal="true" role="dialog">
+    <div id="deepdive-payload-backdrop" class="fixed inset-0"></div>
+    <div class="relative w-full max-w-2xl rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-5 z-10">
+      <div class="flex items-center justify-between border-b border-border pb-4">
+        <div class="flex items-center gap-2.5">
+          <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-500">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+              <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+            </svg>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-foreground">Paste DevTools Payload for Competitor</h3>
+            <p class="text-[11px] text-muted-foreground">Auto-parse User Profile or Boards data for this competitor.</p>
+          </div>
+        </div>
+        <button id="close-deepdive-modal" class="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div id="deepdive-modal-error" class="hidden rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-500"></div>
+
+      <form id="deepdive-payload-form" class="space-y-4">
+        <div class="space-y-1.5">
+          <label class="block text-xs font-semibold text-foreground">Payload Detection Badge</label>
+          <div class="flex h-10 items-center justify-between rounded-xl border border-border bg-muted/40 px-3 text-xs font-medium text-muted-foreground">
+            <span>Detected Endpoint:</span>
+            <span id="deepdive-detected-type" class="rounded bg-muted px-2 py-0.5 text-[10px] font-semibold text-foreground">Waiting for paste...</span>
+          </div>
+        </div>
+
+        <div class="space-y-1.5">
+          <label for="deepdive-payload-textarea" class="block text-xs font-semibold text-foreground">Raw Pinterest DevTools JSON Response *</label>
+          <textarea
+            id="deepdive-payload-textarea"
+            rows="8"
+            required
+            placeholder='Paste JSON response from UserResource or BoardsResource network requests...'
+            class="w-full rounded-xl border border-border bg-background py-2.5 px-3 font-mono text-[11px] text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          ></textarea>
+        </div>
+
+        <div class="flex items-center justify-end gap-3 border-t border-border pt-4">
+          <button
+            type="button"
+            id="cancel-deepdive-modal"
+            class="rounded-xl border border-border px-4 py-2.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            class="rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-semibold text-white shadow-md hover:bg-emerald-500 transition-all"
+          >
+            Parse & Ingest Payload
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</Layout>
+
+<script>
+  import {
+    getCompetitorDetails,
+    parsePinterestPayload,
+    ingestDevToolsPayload,
+  } from '../../lib/competitors';
+  import type { Competitor, CompetitorBoard, CompetitorDeltaStats } from '../../lib/types';
+
+  // Get Competitor ID from URL pathname
+  const pathname = window.location.pathname;
+  const pathParts = pathname.split('/');
+  const competitorId = pathParts[pathParts.length - 1] || pathParts[pathParts.length - 2];
+
+  let competitorData: Competitor | null = null;
+  let boardsList: CompetitorBoard[] = [];
+  let deltasData: CompetitorDeltaStats | null = null;
+
+  // DOM Elements
+  const competitorAvatar = document.getElementById('competitor-avatar') as HTMLImageElement;
+  const competitorFullname = document.getElementById('competitor-fullname') as HTMLElement;
+  const competitorHandle = document.getElementById('competitor-handle') as HTMLElement;
+  const competitorNicheBadge = document.getElementById('competitor-niche-badge') as HTMLElement;
+  const competitorPinterestLink = document.getElementById('competitor-pinterest-link') as HTMLAnchorElement;
+  const competitorNotes = document.getElementById('competitor-notes') as HTMLElement;
+  const strategyAgeVal = document.getElementById('strategy-age-val') as HTMLElement;
+  const oldestBoardDateStr = document.getElementById('oldest-board-date-str') as HTMLElement;
+
+  // Deltas
+  const currentReach = document.getElementById('current-reach') as HTMLElement;
+  const currentViews = document.getElementById('current-views') as HTMLElement;
+  const currentFollowers = document.getElementById('current-followers') as HTMLElement;
+  const currentPins = document.getElementById('current-pins') as HTMLElement;
+
+  const deltaReachBadge = document.getElementById('delta-reach-badge') as HTMLElement;
+  const deltaViewsBadge = document.getElementById('delta-views-badge') as HTMLElement;
+  const deltaFollowersBadge = document.getElementById('delta-followers-badge') as HTMLElement;
+  const deltaPinsBadge = document.getElementById('delta-pins-badge') as HTMLElement;
+
+  const deltaReachSub = document.getElementById('delta-reach-sub') as HTMLElement;
+  const deltaViewsSub = document.getElementById('delta-views-sub') as HTMLElement;
+  const deltaFollowersSub = document.getElementById('delta-followers-sub') as HTMLElement;
+  const deltaPinsSub = document.getElementById('delta-pins-sub') as HTMLElement;
+
+  // Boards table
+  const boardsTableBody = document.getElementById('boards-table-body') as HTMLElement;
+  const boardsCountBadge = document.getElementById('boards-count-badge') as HTMLElement;
+
+  // Status banner
+  const statusBanner = document.getElementById('deepdive-status-banner') as HTMLElement;
+  const statusText = document.getElementById('deepdive-status-text') as HTMLElement;
+  const dismissStatusBtn = document.getElementById('dismiss-deepdive-status') as HTMLElement;
+
+  // Modal
+  const modal = document.getElementById('deepdive-payload-modal') as HTMLElement;
+  const openModalBtn = document.getElementById('open-deepdive-paste-modal') as HTMLElement;
+  const closeModalBtn = document.getElementById('close-deepdive-modal') as HTMLElement;
+  const cancelModalBtn = document.getElementById('cancel-deepdive-modal') as HTMLElement;
+  const modalForm = document.getElementById('deepdive-payload-form') as HTMLFormElement;
+  const modalError = document.getElementById('deepdive-modal-error') as HTMLElement;
+  const modalTextarea = document.getElementById('deepdive-payload-textarea') as HTMLTextAreaElement;
+  const modalDetectedSpan = document.getElementById('deepdive-detected-type') as HTMLElement;
+
+  function formatNumber(num: number): string {
+    if (num >= 1_000_000) return (num / 1_000_000).toFixed(1) + 'M';
+    if (num >= 1_000) return (num / 1_000).toFixed(1) + 'k';
+    return num.toLocaleString();
+  }
+
+  function formatDate(isoStr?: string | null): string {
+    if (!isoStr) return 'N/A';
+    const date = new Date(isoStr);
+    if (isNaN(date.getTime())) return 'N/A';
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  }
+
+  function renderDeltaBadge(element: HTMLElement, subElement: HTMLElement, change: number, percent: number) {
+    if (!element || !subElement) return;
+    const sign = change > 0 ? '+' : '';
+    element.textContent = `${sign}${percent}%`;
+
+    if (change > 0) {
+      element.className = 'rounded bg-emerald-500/15 text-emerald-500 px-2 py-0.5 text-[11px] font-bold';
+      subElement.textContent = `+${formatNumber(change)} vs previous snapshot`;
+    } else if (change < 0) {
+      element.className = 'rounded bg-rose-500/15 text-rose-500 px-2 py-0.5 text-[11px] font-bold';
+      subElement.textContent = `${formatNumber(change)} vs previous snapshot`;
+    } else {
+      element.className = 'rounded bg-muted text-muted-foreground px-2 py-0.5 text-[11px] font-bold';
+      subElement.textContent = `No change vs previous snapshot`;
+    }
+  }
+
+  function showStatus(msg: string, isError = false) {
+    if (!statusBanner || !statusText) return;
+    statusText.textContent = msg;
+    statusBanner.classList.remove('hidden');
+    if (isError) {
+      statusBanner.className = 'mb-6 rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-xs text-rose-600 flex items-center justify-between shadow-sm';
+    } else {
+      statusBanner.className = 'mb-6 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-xs text-emerald-600 flex items-center justify-between shadow-sm';
+    }
+  }
+
+  if (dismissStatusBtn) {
+    dismissStatusBtn.addEventListener('click', () => statusBanner.classList.add('hidden'));
+  }
+
+  async function loadDetails() {
+    const details = await getCompetitorDetails(competitorId);
+    competitorData = details.competitor;
+    boardsList = details.boards;
+    deltasData = details.deltas;
+
+    if (!competitorData) {
+      if (competitorFullname) competitorFullname.textContent = 'Competitor Not Found';
+      return;
+    }
+
+    // Populate header
+    if (competitorAvatar) competitorAvatar.src = competitorData.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&h=200&q=80';
+    if (competitorFullname) competitorFullname.textContent = competitorData.full_name || competitorData.username;
+    if (competitorHandle) competitorHandle.textContent = `@${competitorData.username}`;
+    if (competitorNicheBadge) competitorNicheBadge.textContent = competitorData.niche || 'General';
+    if (competitorNotes) competitorNotes.textContent = competitorData.notes || 'No internal notes set for this competitor.';
+
+    if (competitorPinterestLink) {
+      competitorPinterestLink.href = `https://www.pinterest.com/${competitorData.username}/`;
+    }
+
+    // Strategy Age
+    if (strategyAgeVal) strategyAgeVal.textContent = competitorData.strategy_age_days ? `${competitorData.strategy_age_days} Days` : 'Unknown';
+    if (oldestBoardDateStr) oldestBoardDateStr.textContent = competitorData.oldest_board_date ? `Oldest board: ${formatDate(competitorData.oldest_board_date)}` : 'No boards recorded yet';
+
+    // Metrics & Deltas
+    if (currentReach) currentReach.textContent = formatNumber(competitorData.profile_reach || 0);
+    if (currentViews) currentViews.textContent = formatNumber(competitorData.profile_views || 0);
+    if (currentFollowers) currentFollowers.textContent = formatNumber(competitorData.follower_count || 0);
+    if (currentPins) currentPins.textContent = formatNumber(competitorData.pin_count || 0);
+
+    if (deltasData) {
+      renderDeltaBadge(deltaReachBadge, deltaReachSub, deltasData.reachChange, deltasData.reachPercent);
+      renderDeltaBadge(deltaViewsBadge, deltaViewsSub, deltasData.viewsChange, deltasData.viewsPercent);
+      renderDeltaBadge(deltaFollowersBadge, deltaFollowersSub, deltasData.followersChange, deltasData.followersPercent);
+      renderDeltaBadge(deltaPinsBadge, deltaPinsSub, deltasData.pinsChange, deltasData.pinsPercent);
+    }
+
+    // Render Boards Table
+    renderBoardsTable();
+  }
+
+  function renderBoardsTable() {
+    if (!boardsTableBody) return;
+    if (boardsCountBadge) boardsCountBadge.textContent = `${boardsList.length} ${boardsList.length === 1 ? 'Board' : 'Boards'}`;
+
+    if (boardsList.length === 0) {
+      boardsTableBody.innerHTML = `
+        <tr>
+          <td colspan="6" class="py-12 text-center text-xs text-muted-foreground">
+            No Pinterest boards recorded yet for this competitor. Click <span class="font-semibold text-foreground">Paste DevTools Payload</span> to ingest boards from Pinterest DevTools!
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    boardsTableBody.innerHTML = boardsList
+      .map((b) => {
+        const boardUrl = b.url ? (b.url.startsWith('http') ? b.url : `https://www.pinterest.com${b.url}`) : `https://www.pinterest.com/${competitorData?.username}/`;
+        return `
+          <tr class="hover:bg-muted/30 transition-colors">
+            <td class="py-4 px-6">
+              <div class="flex flex-col min-w-0">
+                <span class="text-xs font-bold text-foreground truncate">${b.name}</span>
+                <p class="text-[11px] text-muted-foreground line-clamp-2 max-w-md">${b.description || 'No description'}</p>
+              </div>
+            </td>
+            <td class="py-4 px-4 font-semibold text-foreground">
+              ${formatDate(b.board_created_at)}
+            </td>
+            <td class="py-4 px-4 text-muted-foreground">
+              ${formatDate(b.last_pinned_at)}
+            </td>
+            <td class="py-4 px-4 font-bold text-primary">
+              ${formatNumber(b.pin_count || 0)}
+            </td>
+            <td class="py-4 px-4 font-semibold text-foreground">
+              ${formatNumber(b.follower_count || 0)}
+            </td>
+            <td class="py-4 px-6 text-right">
+              <a
+                href="${boardUrl}"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-semibold text-foreground hover:bg-muted hover:text-primary transition-all"
+              >
+                <span>Board</span>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              </a>
+            </td>
+          </tr>
+        `;
+      })
+      .join('');
+  }
+
+  // Modal Handlers
+  function openModal() {
+    if (modalError) modalError.classList.add('hidden');
+    if (modalForm) modalForm.reset();
+    if (modalDetectedSpan) {
+      modalDetectedSpan.textContent = 'Waiting for paste...';
+      modalDetectedSpan.className = 'rounded bg-muted px-2 py-0.5 text-[10px] font-semibold text-foreground';
+    }
+    if (modal) {
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+  }
+
+  function closeModal() {
+    if (modal) {
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+  }
+
+  if (openModalBtn) openModalBtn.addEventListener('click', openModal);
+  if (closeModalBtn) closeModalBtn.addEventListener('click', closeModal);
+  if (cancelModalBtn) cancelModalBtn.addEventListener('click', closeModal);
+
+  if (modalTextarea) {
+    modalTextarea.addEventListener('input', () => {
+      const text = modalTextarea.value.trim();
+      if (!text) {
+        if (modalDetectedSpan) {
+          modalDetectedSpan.textContent = 'Waiting for paste...';
+          modalDetectedSpan.className = 'rounded bg-muted px-2 py-0.5 text-[10px] font-semibold text-foreground';
+        }
+        return;
+      }
+
+      const parsed = parsePinterestPayload(text);
+      if (parsed.type === 'user_profile') {
+        if (modalDetectedSpan) {
+          modalDetectedSpan.textContent = '✓ User Profile (UserResource)';
+          modalDetectedSpan.className = 'rounded bg-emerald-500/20 text-emerald-500 px-2 py-0.5 text-[10px] font-bold';
+        }
+      } else if (parsed.type === 'user_boards') {
+        if (modalDetectedSpan) {
+          modalDetectedSpan.textContent = '✓ User Boards (BoardsResource)';
+          modalDetectedSpan.className = 'rounded bg-primary/20 text-primary px-2 py-0.5 text-[10px] font-bold';
+        }
+      } else {
+        if (modalDetectedSpan) {
+          modalDetectedSpan.textContent = '✕ Unknown Payload';
+          modalDetectedSpan.className = 'rounded bg-rose-500/20 text-rose-500 px-2 py-0.5 text-[10px] font-bold';
+        }
+      }
+    });
+  }
+
+  if (modalForm) {
+    modalForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const payloadText = modalTextarea.value.trim();
+      const res = await ingestDevToolsPayload(competitorId, payloadText);
+
+      if (res.success) {
+        closeModal();
+        showStatus(res.message);
+        await loadDetails();
+      } else {
+        if (modalError) {
+          modalError.textContent = res.message;
+          modalError.classList.remove('hidden');
+        }
+      }
+    });
+  }
+
+  loadDetails();
+</script>
