@@ -1,8 +1,18 @@
 ---
-export const prerender = false;
-
 import Layout from '../../layouts/Layout.astro';
 import SectionHeader from '../../components/ui/SectionHeader.astro';
+import { getCompetitors } from '../../lib/competitors';
+
+export async function getStaticPaths() {
+  const competitors = await getCompetitors();
+  const fallbackIds = ['comp-1', 'comp-2', 'comp-3'];
+  const fetchedIds = (competitors || []).map((c) => c.id);
+  const allIds = Array.from(new Set([...fallbackIds, ...fetchedIds]));
+
+  return allIds.map((id) => ({
+    params: { id },
+  }));
+}
 ---
 
 <Layout title="Competitor Deep-Dive" description="Detailed board history timeline, strategy age, and snapshot growth tracking for Pinterest competitor.">
