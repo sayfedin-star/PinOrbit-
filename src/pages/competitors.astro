@@ -410,7 +410,7 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
               <div class="flex items-center gap-3">
                 <img src="${avatar}" alt="${c.username}" class="h-10 w-10 rounded-full object-cover border border-border shadow-sm flex-shrink-0" />
                 <div class="flex flex-col min-w-0">
-                  <a href="/competitors/${c.id}" class="text-xs font-bold text-foreground hover:text-primary transition-colors truncate">
+                  <a href="/competitors/details?id=${c.id}" class="text-xs font-bold text-foreground hover:text-primary transition-colors truncate">
                     ${c.full_name || c.username}
                   </a>
                   <div class="flex items-center gap-1.5 text-[11px] text-muted-foreground">
@@ -458,7 +458,7 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
                 </button>
 
                 <a
-                  href="/competitors/${c.id}"
+                  href="/competitors/details?id=${c.id}"
                   class="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2.5 py-1.5 text-[11px] font-semibold text-foreground hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all shadow-sm"
                 >
                   <span>Deep-Dive</span>

@@ -3,8 +3,10 @@
   "name": "pinorbit",
   "compatibility_date": "2026-08-03",
   "assets": {
-    "directory": "./dist",
-    "html_handling": "drop-trailing-slash",
-    "not_found_handling": "single-page-application"
+    "directory": "./dist"
+  },
+  "vars": {
+    "PUBLIC_SUPABASE_URL": "https://zeryyrmhdueezzwyodhq.supabase.co",
+    "PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inplcnl5cm1oZHVlZXp6d3lvZGhxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU3MTA0MTQsImV4cCI6MjEwMTI4NjQxNH0.5erFNHK-KOc-cNVmz8VdTPPUs8B4IkObOt0NToRH-Q4"
   }
 }

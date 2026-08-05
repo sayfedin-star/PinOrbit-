@@ -8,5 +8,5 @@ export default defineConfig({
   adapter: cloudflare({
     imageService: 'passthrough',
   }),
-  output: 'hybrid',
+  output: 'server',
 });
