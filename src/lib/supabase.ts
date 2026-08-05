@@ -404,6 +404,91 @@ export async function getBoardsForAccount(accountId: string): Promise<Board[]> {
   }
 }
 
+/**
+ * Bulk fetch webhooks for a list of account IDs in a single query.
+ * Returns a Map of accountId -> AccountWebhook[] for O(1) memory lookup.
+ */
+export async function getBulkAccountWebhooks(accountIds: string[]): Promise<Map<string, AccountWebhook[]>> {
+  const map = new Map<string, AccountWebhook[]>();
+  if (!accountIds || accountIds.length === 0) return map;
+
+  if (!supabase) {
+    mockWebhooks.forEach((w) => {
+      if (accountIds.includes(w.account_id)) {
+        const list = map.get(w.account_id) || [];
+        list.push(w);
+        map.set(w.account_id, list);
+      }
+    });
+    return map;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('account_webhooks')
+      .select('*')
+      .in('account_id', accountIds)
+      .order('priority', { ascending: true })
+      .order('created_at', { ascending: true });
+
+    if (error || !data) return map;
+
+    (data as AccountWebhook[]).forEach((w) => {
+      const list = map.get(w.account_id) || [];
+      list.push(w);
+      map.set(w.account_id, list);
+    });
+    return map;
+  } catch (err) {
+    console.warn('Supabase getBulkAccountWebhooks error:', err);
+    return map;
+  }
+}
+
+/**
+ * Bulk fetch boards for a list of account IDs in a single query.
+ * Returns a Map of accountId -> Board[] for O(1) memory lookup.
+ */
+export async function getBulkAccountBoards(accountIds: string[]): Promise<Map<string, Board[]>> {
+  const map = new Map<string, Board[]>();
+  if (!accountIds || accountIds.length === 0) return map;
+
+  if (!supabase) {
+    mockBoards.forEach((b) => {
+      if (accountIds.includes(b.account_id)) {
+        const list = map.get(b.account_id) || [];
+        list.push(b);
+        map.set(b.account_id, list);
+      }
+    });
+    return map;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('boards')
+      .select('*, accounts(account_name)')
+      .in('account_id', accountIds)
+      .order('created_at', { ascending: false });
+
+    if (error || !data) return map;
+
+    (data as RawBoard[]).forEach((raw) => {
+      const b: Board = {
+        ...raw,
+        account_name: raw.accounts?.account_name || 'Account #' + raw.account_id.slice(0, 6),
+      };
+      const list = map.get(b.account_id) || [];
+      list.push(b);
+      map.set(b.account_id, list);
+    });
+    return map;
+  } catch (err) {
+    console.warn('Supabase getBulkAccountBoards error:', err);
+    return map;
+  }
+}
+
 // 4. Fetch Pins
 export async function getPins(statusFilter?: string, accountIdFilter?: string): Promise<Pin[]> {
   if (!supabase) {
@@ -1153,6 +1238,82 @@ export async function getAccountPinStats(accountId: string): Promise<AccountPinS
   } catch (err) {
     console.warn(`Supabase getAccountPinStats error for ${accountId}:`, err);
     return getMockAccountPinStats(accountId);
+  }
+}
+
+/**
+ * Bulk fetch pin statistics for multiple accounts in a single aggregated DB roundtrip.
+ */
+export async function getBulkAccountPinStats(accountIds: string[]): Promise<Record<string, AccountPinStats>> {
+  const result: Record<string, AccountPinStats> = {};
+  if (!accountIds || accountIds.length === 0) return result;
+
+  accountIds.forEach((id) => {
+    result[id] = { total: 0, pending: 0, posted: 0, failed: 0, retrying: 0, remainingToday: 20 };
+  });
+
+  if (!supabase) {
+    accountIds.forEach((id) => {
+      result[id] = getMockAccountPinStats(id);
+    });
+    return result;
+  }
+
+  try {
+    const todayStart = new Date();
+    todayStart.setUTCHours(0, 0, 0, 0);
+    const todayStr = todayStart.toISOString();
+
+    const [pinsRes, accsRes] = await Promise.all([
+      supabase.from('pins').select('id, account_id, status, retry_count, posted_at').in('account_id', accountIds),
+      supabase.from('accounts').select('id, max_pins_per_day').in('id', accountIds),
+    ]);
+
+    const maxDailyMap = new Map((accsRes.data || []).map((a) => [a.id, a.max_pins_per_day || 20]));
+
+    accountIds.forEach((id) => {
+      result[id].remainingToday = maxDailyMap.get(id) || 20;
+    });
+
+    if (pinsRes.error || !pinsRes.data) return result;
+
+    const postedTodayMap = new Map<string, number>();
+
+    for (const pin of pinsRes.data) {
+      const stats = result[pin.account_id];
+      if (!stats) continue;
+
+      stats.total++;
+      if (pin.status === 'pending' || pin.status === 'processing') {
+        if ((pin.retry_count || 0) > 0) {
+          stats.retrying++;
+        } else {
+          stats.pending++;
+        }
+      } else if (pin.status === 'posted') {
+        stats.posted++;
+        if (pin.posted_at && pin.posted_at >= todayStr) {
+          const count = (postedTodayMap.get(pin.account_id) || 0) + 1;
+          postedTodayMap.set(pin.account_id, count);
+        }
+      } else if (pin.status === 'failed') {
+        stats.failed++;
+      }
+    }
+
+    accountIds.forEach((id) => {
+      const maxDaily = maxDailyMap.get(id) || 20;
+      const postedToday = postedTodayMap.get(id) || 0;
+      result[id].remainingToday = Math.max(0, maxDaily - postedToday);
+    });
+
+    return result;
+  } catch (err) {
+    console.warn('Supabase getBulkAccountPinStats error:', err);
+    accountIds.forEach((id) => {
+      result[id] = getMockAccountPinStats(id);
+    });
+    return result;
   }
 }
 
@@ -2333,22 +2494,31 @@ export async function bulkCreateMissingBoardsViaWebhook(params: {
   const createdBoards: Board[] = [];
   const errors: string[] = [];
 
-  for (const name of uniqueNames) {
-    const res = await createBoardViaWebhook({
-      accountId,
-      boardName: name,
-      webhookId,
-      triggerSource,
-    });
+  // Batch process board creation in chunks of 5 to avoid HTTP socket exhaustion
+  const BATCH_SIZE = 5;
+  for (let i = 0; i < uniqueNames.length; i += BATCH_SIZE) {
+    const chunk = uniqueNames.slice(i, i + BATCH_SIZE);
+    const results = await Promise.all(
+      chunk.map((name) =>
+        createBoardViaWebhook({
+          accountId,
+          boardName: name,
+          webhookId,
+          triggerSource,
+        })
+      )
+    );
 
-    if (res.success && res.board) {
-      createdBoards.push(res.board);
-      if (res.reused) reusedCount++;
-      else createdCount++;
-    } else {
-      failedCount++;
-      if (res.error) errors.push(res.error);
-    }
+    results.forEach((res) => {
+      if (res.success && res.board) {
+        createdBoards.push(res.board);
+        if (res.reused) reusedCount++;
+        else createdCount++;
+      } else {
+        failedCount++;
+        if (res.error) errors.push(res.error);
+      }
+    });
   }
 
   return {

@@ -217,16 +217,37 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
         return;
       }
 
-      // Group boards by account
+      // ⚡ Optimization: Pre-build Hash Map dictionary and Sets for O(1) account board mapping
+      const boardsByAccountId = new Map<string, typeof currentBoards>();
+      const boardsByAccountName = new Map<string, typeof currentBoards>();
+      const knownAccountIds = new Set(currentAccounts.map((a) => a.id));
+      const knownAccountNames = new Set(currentAccounts.map((a) => a.account_name));
+
+      currentBoards.forEach((b) => {
+        if (b.account_id) {
+          const list = boardsByAccountId.get(b.account_id) || [];
+          list.push(b);
+          boardsByAccountId.set(b.account_id, list);
+        }
+        if (b.account_name) {
+          const list = boardsByAccountName.get(b.account_name) || [];
+          list.push(b);
+          boardsByAccountName.set(b.account_name, list);
+        }
+      });
+
       const groupedBoards = currentAccounts.map((acc) => {
+        const idBoards = boardsByAccountId.get(acc.id) || [];
+        const nameBoards = boardsByAccountName.get(acc.account_name) || [];
+        const combined = Array.from(new Set([...idBoards, ...nameBoards]));
         return {
           account: acc,
-          boards: currentBoards.filter((b) => b.account_id === acc.id || b.account_name === acc.account_name),
+          boards: combined,
         };
       });
 
       const orphanBoards = currentBoards.filter(
-        (b) => !currentAccounts.some((acc) => acc.id === b.account_id || acc.account_name === b.account_name)
+        (b) => !knownAccountIds.has(b.account_id) && (!b.account_name || !knownAccountNames.has(b.account_name))
       );
 
       let contentHtml = '<div class="space-y-8">';

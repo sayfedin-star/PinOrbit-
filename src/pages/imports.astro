@@ -695,6 +695,19 @@ Keto Cauliflower Rice Bowl,https://images.unsplash.com/photo-1546069901-ba9599a7
     missingBoardGroups = new Map();
     const seenBatchKeys = new Set<string>();
 
+    // ⚡ Optimization: Pre-build Hash Map and Set for O(1) lookups inside the row loop
+    const boardsMap = new Map<string, typeof accountBoards[0]>();
+    accountBoards.forEach((b) => {
+      boardsMap.set(b.board_name.trim().toLowerCase(), b);
+    });
+
+    const existingPinsSet = new Set<string>();
+    existingAccountPins.forEach((p) => {
+      if (p.title && p.board_name) {
+        existingPinsSet.add(`${p.title.trim().toLowerCase()}|${p.board_name.trim().toLowerCase()}`);
+      }
+    });
+
     for (let i = 1; i < rows.length; i++) {
       const r = rows[i];
       const title = r[titleIdx] || '';
@@ -711,7 +724,7 @@ Keto Cauliflower Rice Bowl,https://images.unsplash.com/photo-1546069901-ba9599a7
       if (!image) errors.push('Image URL is required');
       else if (!image.startsWith('http://') && !image.startsWith('https://')) errors.push('Image URL must be valid HTTP/HTTPS');
 
-      const matchedBoardObj = accountBoards.find((b) => b.board_name.trim().toLowerCase() === board.trim().toLowerCase());
+      const matchedBoardObj = boardsMap.get(board.trim().toLowerCase());
       const canonicalBoardName = matchedBoardObj ? matchedBoardObj.board_name : board.trim();
 
       if (!board || !board.trim()) {
@@ -738,12 +751,10 @@ Keto Cauliflower Rice Bowl,https://images.unsplash.com/photo-1546069901-ba9599a7
         seenBatchKeys.add(batchKey);
       }
 
-      // Warning check against existing DB pins for this account
+      // Warning check against existing DB pins for this account (O(1) Set lookup)
       if (title && matchedBoardObj) {
-        const existingPin = existingAccountPins.find(
-          (p) => p.title.toLowerCase() === title.toLowerCase() && p.board_name?.toLowerCase() === canonicalBoardName.toLowerCase()
-        );
-        if (existingPin) {
+        const lookupKey = `${title.trim().toLowerCase()}|${canonicalBoardName.trim().toLowerCase()}`;
+        if (existingPinsSet.has(lookupKey)) {
           warnings.push(`A pin titled "${title}" already exists in queue/history for this account.`);
         }
       }
