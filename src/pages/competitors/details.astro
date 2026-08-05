@@ -1,6 +1,4 @@
 ---
-export const prerender = false;
-
 import Layout from '../../layouts/Layout.astro';
 import SectionHeader from '../../components/ui/SectionHeader.astro';
 ---
@@ -248,10 +246,13 @@ import SectionHeader from '../../components/ui/SectionHeader.astro';
   } from '../../lib/competitors';
   import type { Competitor, CompetitorBoard, CompetitorDeltaStats } from '../../lib/types';
 
-  // Get Competitor ID from URL pathname
+  // Support both URL search param ?id=... and pathname extraction
+  const urlParams = new URLSearchParams(window.location.search);
+  const paramId = urlParams.get('id');
   const pathname = window.location.pathname;
-  const pathParts = pathname.split('/');
-  const competitorId = pathParts[pathParts.length - 1] || pathParts[pathParts.length - 2];
+  const pathParts = pathname.split('/').filter(Boolean);
+  const pathId = pathParts.length > 1 ? pathParts[pathParts.length - 1] : null;
+  const competitorId = paramId || pathId || 'comp-1';
 
   const deleteDeepdiveBtn = document.getElementById('delete-competitor-deepdive-btn');
   if (deleteDeepdiveBtn) {

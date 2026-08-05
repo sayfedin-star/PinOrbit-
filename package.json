@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@astrojs/cloudflare": "^11.1.0",
     "@astrojs/tailwind": "^5.1.0",
     "@supabase/supabase-js": "^2.45.0",
     "astro": "^4.15.0",

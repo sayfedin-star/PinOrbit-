@@ -1,17 +1,7 @@
 ---
+export const prerender = false;
+
 import Layout from '../../../layouts/Layout.astro';
-import { getAccounts } from '../../../lib/supabase';
-
-export async function getStaticPaths() {
-  const accounts = await getAccounts();
-  const fallbackIds = ['acc-1', 'acc-2', 'acc-3'];
-  const fetchedIds = (accounts || []).map((a) => a.id);
-  const allIds = Array.from(new Set([...fallbackIds, ...fetchedIds]));
-
-  return allIds.map((id) => ({
-    params: { id },
-  }));
-}
 
 const { id } = Astro.params;
 ---
