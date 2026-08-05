@@ -23,16 +23,27 @@ export async function getStaticPaths() {
       <span>Back to Competitors Workspace</span>
     </a>
 
-    <button
-      id="open-deepdive-paste-modal"
-      class="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-500 transition-all"
-    >
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
-        <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
-      </svg>
-      <span>Paste DevTools Payload</span>
-    </button>
+    <div class="flex items-center gap-2.5">
+      <button
+        id="delete-competitor-deepdive-btn"
+        class="inline-flex items-center justify-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3.5 py-2 text-xs font-semibold text-rose-500 hover:bg-rose-500/20 transition-all"
+        title="Delete Competitor"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+        <span>Delete Competitor</span>
+      </button>
+
+      <button
+        id="open-deepdive-paste-modal"
+        class="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-500 transition-all"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+          <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+        </svg>
+        <span>Paste DevTools Payload</span>
+      </button>
+    </div>
   </div>
 
   <!-- Status Notification Banner -->
@@ -241,6 +252,7 @@ export async function getStaticPaths() {
 <script>
   import {
     getCompetitorDetails,
+    deleteCompetitor,
     parsePinterestPayload,
     ingestDevToolsPayload,
   } from '../../lib/competitors';
@@ -250,6 +262,20 @@ export async function getStaticPaths() {
   const pathname = window.location.pathname;
   const pathParts = pathname.split('/');
   const competitorId = pathParts[pathParts.length - 1] || pathParts[pathParts.length - 2];
+
+  const deleteDeepdiveBtn = document.getElementById('delete-competitor-deepdive-btn');
+  if (deleteDeepdiveBtn) {
+    deleteDeepdiveBtn.addEventListener('click', async () => {
+      if (confirm('Are you sure you want to remove this competitor from tracking? This will delete all snapshots and board history.')) {
+        try {
+          await deleteCompetitor(competitorId);
+          window.location.href = '/competitors';
+        } catch (err: any) {
+          showStatus(`Failed to delete: ${err.message}`, true);
+        }
+      }
+    });
+  }
 
   let competitorData: Competitor | null = null;
   let boardsList: CompetitorBoard[] = [];

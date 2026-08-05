@@ -55,7 +55,7 @@ serve(async (req) => {
       let pins = comp.pin_count || 0;
 
       try {
-        const userRes = await fetch(userProfileUrl, { headers });
+        const userRes = await fetch(userProfileUrl, { headers, signal: AbortSignal.timeout(8000) });
         if (userRes.ok) {
           const userJson = await userRes.json();
           const userData = userJson.resource_response?.data || {};
@@ -105,7 +105,7 @@ serve(async (req) => {
       let boardsUpdatedCount = 0;
 
       try {
-        const boardsRes = await fetch(boardsUrl, { headers });
+        const boardsRes = await fetch(boardsUrl, { headers, signal: AbortSignal.timeout(8000) });
         if (boardsRes.ok) {
           const boardsJson = await boardsRes.json();
           const items = boardsJson.resource_response?.data || [];

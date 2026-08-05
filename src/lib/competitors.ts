@@ -276,6 +276,12 @@ export function parsePinterestPayload(input: string | object): ParsedPinterestPa
         const boardCreatedAt = item.created_at || item.board_created_at || null;
         const lastPinnedAt = item.board_order_modified_at || item.last_pinned_at || item.updated_at || null;
 
+        const safeIsoDate = (val: any): string | undefined => {
+          if (!val) return undefined;
+          const d = new Date(val);
+          return isNaN(d.getTime()) ? undefined : d.toISOString();
+        };
+
         boardsData.push({
           board_id: boardId,
           name,
@@ -283,8 +289,8 @@ export function parsePinterestPayload(input: string | object): ParsedPinterestPa
           url,
           pin_count: pinCount,
           follower_count: followerCount,
-          board_created_at: boardCreatedAt ? new Date(boardCreatedAt).toISOString() : undefined,
-          last_pinned_at: lastPinnedAt ? new Date(lastPinnedAt).toISOString() : undefined,
+          board_created_at: safeIsoDate(boardCreatedAt),
+          last_pinned_at: safeIsoDate(lastPinnedAt),
         });
       }
     }
