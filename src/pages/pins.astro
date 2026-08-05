@@ -235,9 +235,7 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
         <td class="px-6 py-4">
           ${renderStatusBadge(pin.status)}
         </td>
-        <td class="px-6 py-4 text-xs text-muted-foreground whitespace-nowrap">
-          ${pin.scheduled_for ? formatDate(pin.scheduled_for) : 'Immediate'}
-        </td>
+        <td class="px-5 py-3 text-muted-foreground whitespace-nowrap">${pin.scheduled_for ? formatDate(pin.scheduled_for) : '-'}</td>
         <td class="px-6 py-4 text-xs text-muted-foreground whitespace-nowrap">
           ${pin.posted_at ? formatDate(pin.posted_at) : '-'}
         </td>

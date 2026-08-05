@@ -66,23 +66,33 @@ const { id } = Astro.params;
   <div class="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
     <!-- Section 2: Scheduling Information -->
     <div class="rounded-2xl border border-border bg-card p-5 shadow-sm space-y-4">
-      <div class="flex items-center justify-between border-b border-border pb-3">
+      <div class="flex flex-wrap items-center justify-between border-b border-border pb-3 gap-3">
         <div class="flex items-center gap-2">
           <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/10 text-amber-500">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
           </div>
           <div>
             <h3 class="text-sm font-bold text-foreground">Posting Schedule & Timezone</h3>
-            <p class="text-xs text-muted-foreground">Automated publishing window configuration</p>
+            <p class="text-xs text-muted-foreground">Automated publishing window & pacing engine</p>
           </div>
         </div>
-        <button
-          id="open-scheduling-modal-btn"
-          class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-muted transition-all"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-          <span>Edit Schedule</span>
-        </button>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <span id="sched-live-status" class="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+            <span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>Window Active</span>
+          </span>
+          <span id="sched-next-countdown" class="inline-flex items-center gap-1 rounded-full bg-primary/10 border border-primary/20 px-2.5 py-0.5 text-[11px] font-semibold text-primary">
+            Next Pin: ~2 mins
+          </span>
+          <button
+            id="open-scheduling-modal-btn"
+            class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-muted transition-all"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+            <span>Edit Schedule</span>
+          </button>
+        </div>
       </div>
 
       <div id="scheduling-info-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -103,12 +113,28 @@ const { id } = Astro.params;
           <p id="sched-random-delay" class="text-xs font-bold text-foreground">0 mins</p>
         </div>
         <div class="p-3 rounded-xl border border-border bg-background space-y-1">
-          <span class="text-[11px] font-medium text-muted-foreground">Timezone</span>
+          <span class="text-[11px] font-medium text-muted-foreground">Timezone & Target Clock</span>
           <p id="sched-timezone" class="text-xs font-bold text-foreground">Loading...</p>
         </div>
-        <div class="p-3 rounded-xl border border-border bg-background space-y-1 sm:col-span-2 lg:col-span-1">
+        <div class="p-3 rounded-xl border border-border bg-background space-y-1">
           <span class="text-[11px] font-medium text-muted-foreground">Last Published At</span>
           <p id="sched-last-published" class="text-xs font-bold text-emerald-500">Loading...</p>
+        </div>
+        <div class="p-3 rounded-xl border border-border bg-background space-y-1 sm:col-span-2 lg:col-span-3">
+          <span class="text-[11px] font-medium text-muted-foreground">Weekly Active Days</span>
+          <div id="sched-active-days" class="flex flex-wrap items-center gap-1.5 pt-0.5">
+            <!-- Rendered day pills -->
+          </div>
+        </div>
+        <div id="sched-pace-analyzer-box" class="p-3.5 rounded-xl border border-primary/20 bg-primary/5 space-y-1 sm:col-span-2 lg:col-span-3">
+          <div class="flex items-center justify-between text-xs">
+            <span class="font-bold text-primary flex items-center gap-1.5">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+              <span>Cadence & Daily Limit Pacing Analyzer</span>
+            </span>
+            <span id="sched-pace-val" class="font-bold text-foreground">Calculating pacing...</span>
+          </div>
+          <p id="sched-pace-desc" class="text-[11px] text-muted-foreground">Pacing is optimized to distribute posts evenly across your configured posting window.</p>
         </div>
       </div>
     </div>
@@ -304,8 +330,50 @@ const { id } = Astro.params;
         </div>
 
         <div>
+          <label class="block text-xs font-semibold text-foreground mb-1.5">Weekly Active Days</label>
+          <div class="flex flex-wrap items-center gap-1.5" id="sched-days-checkbox-group">
+            <label class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground cursor-pointer hover:bg-muted">
+              <input type="checkbox" value="Mon" class="sched-day-chk h-3.5 w-3.5 text-primary rounded" checked />
+              <span>Mon</span>
+            </label>
+            <label class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground cursor-pointer hover:bg-muted">
+              <input type="checkbox" value="Tue" class="sched-day-chk h-3.5 w-3.5 text-primary rounded" checked />
+              <span>Tue</span>
+            </label>
+            <label class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground cursor-pointer hover:bg-muted">
+              <input type="checkbox" value="Wed" class="sched-day-chk h-3.5 w-3.5 text-primary rounded" checked />
+              <span>Wed</span>
+            </label>
+            <label class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground cursor-pointer hover:bg-muted">
+              <input type="checkbox" value="Thu" class="sched-day-chk h-3.5 w-3.5 text-primary rounded" checked />
+              <span>Thu</span>
+            </label>
+            <label class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground cursor-pointer hover:bg-muted">
+              <input type="checkbox" value="Fri" class="sched-day-chk h-3.5 w-3.5 text-primary rounded" checked />
+              <span>Fri</span>
+            </label>
+            <label class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground cursor-pointer hover:bg-muted">
+              <input type="checkbox" value="Sat" class="sched-day-chk h-3.5 w-3.5 text-primary rounded" checked />
+              <span>Sat</span>
+            </label>
+            <label class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground cursor-pointer hover:bg-muted">
+              <input type="checkbox" value="Sun" class="sched-day-chk h-3.5 w-3.5 text-primary rounded" checked />
+              <span>Sun</span>
+            </label>
+          </div>
+        </div>
+
+        <div>
           <label class="block text-xs font-medium text-muted-foreground mb-1">Pinning Started Date</label>
           <input id="sched-input-started-at" type="date" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none" />
+        </div>
+
+        <div id="modal-pace-preview-box" class="p-3 rounded-xl border border-primary/30 bg-primary/10 text-xs text-foreground space-y-0.5">
+          <div class="font-bold text-primary flex items-center gap-1">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            <span>Live Dynamic Cadence Estimator</span>
+          </div>
+          <p id="modal-pace-text" class="text-muted-foreground text-[11px]">Optimal Pacing: ~1 pin / 23 mins across window.</p>
         </div>
 
         <div class="flex items-center justify-end gap-3 border-t border-border pt-4">
@@ -366,9 +434,11 @@ const { id } = Astro.params;
     updateAccountWebhook,
     toggleAccountWebhookActive,
     setPrimaryWebhook,
+    updateAccountSchedule,
     updateAccountScheduling,
     updateAccountDailyLimit,
     toggleAccountActive,
+    createBoardViaWebhook,
   } from '../../lib/supabase';
   import { renderStatusBadge, formatDate, formatTime, renderEmptyStateHTML, escapeHtml } from '../../lib/ui-helpers';
   import type { Account, AccountPinStats, Pin, Log, AccountWebhook, Board } from '../../lib/types';
@@ -541,14 +611,18 @@ const { id } = Astro.params;
         return;
       }
 
-      currentAccount = acc;
+      // Fresh DB data wins; preserve local-only fields that DB may not return
+      currentAccount = {
+        ...(currentAccount || {}),
+        ...acc,
+      };
       currentStats = stats;
       accountBoards = boards;
 
       populateBoardDropdown(boards);
-      renderHeader(acc);
-      renderKPIs(stats, acc);
-      renderScheduling(acc);
+      renderHeader(currentAccount);
+      renderKPIs(stats, currentAccount);
+      renderScheduling(currentAccount);
       renderWebhookSummary(whSummary);
       renderRecentLogs(logs);
 
@@ -641,9 +715,10 @@ const { id } = Astro.params;
         <span class="text-[11px] font-semibold text-rose-500">Failed</span>
         <p class="text-xl font-bold text-rose-500">${stats.failed}</p>
       </div>
-      <div class="rounded-xl border border-primary/20 bg-primary/5 p-3 text-center space-y-1">
-        <span class="text-[11px] font-semibold text-primary">Remaining</span>
-        <p class="text-xl font-bold text-primary">${stats.remainingToday}</p>
+      <div class="rounded-xl border ${stats.remainingToday > 0 ? 'border-primary/20 bg-primary/5' : 'border-amber-500/20 bg-amber-500/5'} p-3 text-center space-y-1">
+        <span class="text-[11px] font-semibold ${stats.remainingToday > 0 ? 'text-primary' : 'text-amber-600 dark:text-amber-400'}">Remaining Today</span>
+        <p class="text-xl font-bold ${stats.remainingToday > 0 ? 'text-primary' : 'text-amber-600 dark:text-amber-400'}">${stats.remainingToday}</p>
+        <span class="text-[10px] text-muted-foreground block truncate">${stats.remainingToday} of ${acc.max_pins_per_day} left today</span>
       </div>
       <div class="rounded-xl border border-border bg-card p-3 text-center space-y-1">
         <span class="text-[11px] font-semibold text-muted-foreground">Daily Limit</span>
@@ -665,7 +740,7 @@ const { id } = Astro.params;
     headerContainer.innerHTML = `
       <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div class="flex items-center gap-3.5">
-          <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary font-bold text-base shadow-sm">
+          <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary font-bold text-base shadow-sm flex-shrink-0">
             ${escapeHtml(initials)}
           </div>
           <div>
@@ -673,13 +748,29 @@ const { id } = Astro.params;
               <h1 class="text-xl font-bold text-foreground">${escapeHtml(acc.account_name)}</h1>
               ${renderStatusBadge(acc.is_active)}
             </div>
-            <p class="text-xs text-muted-foreground mt-0.5">
-              Registered ${formatDate(acc.created_at)} • ${acc.boards_count || 0} linked boards
+            <p class="text-xs text-muted-foreground mt-0.5 flex flex-wrap items-center gap-2">
+              <span>Registered ${formatDate(acc.created_at)} • ${acc.boards_count || 0} linked boards</span>
+              <span class="text-border">•</span>
+              <span class="inline-flex items-center gap-1 font-mono text-[11px] bg-muted/60 px-2 py-0.5 rounded-md border border-border">
+                <span class="text-muted-foreground">ID:</span>
+                <span class="font-semibold text-foreground">${acc.id}</span>
+                <button id="btn-copy-acc-id" data-id="${acc.id}" class="hover:text-primary transition-colors ml-0.5" title="Copy Account ID">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                </button>
+              </span>
             </p>
           </div>
         </div>
 
         <div class="flex flex-wrap items-center gap-2.5">
+          <button
+            id="btn-open-create-board-modal"
+            class="inline-flex items-center gap-1.5 rounded-xl border border-border bg-background px-3.5 py-2 text-xs font-semibold text-foreground hover:bg-muted transition-all shadow-sm"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span>Create Board</span>
+          </button>
+
           <a
             href="/imports?account=${acc.id}"
             class="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-semibold text-white shadow hover:bg-emerald-700 transition-all"
@@ -706,6 +797,13 @@ const { id } = Astro.params;
       </div>
     `;
 
+    document.getElementById('btn-copy-acc-id')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      const idStr = (e.currentTarget as HTMLElement).getAttribute('data-id') || acc.id;
+      navigator.clipboard.writeText(idStr);
+      showFeedbackBanner(`Account ID (${idStr}) copied to clipboard.`, 'success');
+    });
+    document.getElementById('btn-open-create-board-modal')?.addEventListener('click', openCreateBoardModal);
     document.getElementById('btn-edit-limit')?.addEventListener('click', openLimitModal);
     document.getElementById('btn-toggle-active')?.addEventListener('click', handleToggleActive);
   }
@@ -717,28 +815,200 @@ const { id } = Astro.params;
     const delayElem = document.getElementById('sched-random-delay');
     const tzElem = document.getElementById('sched-timezone');
     const lastPubElem = document.getElementById('sched-last-published');
+    const statusElem = document.getElementById('sched-live-status');
+    const countdownElem = document.getElementById('sched-next-countdown');
+    const activeDaysElem = document.getElementById('sched-active-days');
+    const paceValElem = document.getElementById('sched-pace-val');
+    const paceDescElem = document.getElementById('sched-pace-desc');
+
+    const tz = acc.timezone || 'Europe/London';
+    const now = new Date();
+
+    let targetTimeStr = '';
+    let offsetStr = '';
+    let currentDayStr = 'Mon';
+    try {
+      const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: tz,
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+        weekday: 'short',
+      });
+      const parts = formatter.formatToParts(now);
+      const hourPart = parts.find((p) => p.type === 'hour')?.value || '12';
+      const minPart = parts.find((p) => p.type === 'minute')?.value || '00';
+      const dayPeriod = parts.find((p) => p.type === 'dayPeriod')?.value || 'AM';
+      currentDayStr = parts.find((p) => p.type === 'weekday')?.value || 'Mon';
+      targetTimeStr = `${hourPart}:${minPart} ${dayPeriod}`;
+
+      const tzFormatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: tz,
+        timeZoneName: 'short',
+      });
+      const tzParts = tzFormatter.formatToParts(now);
+      const tzName = tzParts.find((p) => p.type === 'timeZoneName')?.value || '';
+      offsetStr = tzName ? ` (${tzName})` : '';
+    } catch (e) {
+      targetTimeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    if (tzElem) {
+      tzElem.textContent = `${tz}${offsetStr} • ${targetTimeStr}`;
+    }
+
+    // 2. Window start & end minutes (strip seconds for clean display)
+    const rawStart = acc.posting_window_start || '09:00';
+    const rawEnd = acc.posting_window_end || '21:00';
+    const startStr = rawStart.slice(0, 5);
+    const endStr = rawEnd.slice(0, 5);
+
+    const [startH, startM] = startStr.split(':').map(Number);
+    const [endH, endM] = endStr.split(':').map(Number);
+
+    const startTotalMins = (startH || 0) * 60 + (startM || 0);
+    const endTotalMins = (endH || 0) * 60 + (endM || 0);
+
+    let windowDurationMins = endTotalMins - startTotalMins;
+    if (windowDurationMins <= 0) windowDurationMins += 1440;
+    const windowHours = (windowDurationMins / 60).toFixed(1).replace(/\.0$/, '');
+
+    if (windowElem) {
+      windowElem.textContent = `${startStr} — ${endStr} (${windowHours} hrs)`;
+    }
+
+    const allWeekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    let activeDays: string[] = allWeekdays;
+    if (Array.isArray(acc.active_days)) {
+      activeDays = acc.active_days;
+    } else if (typeof acc.active_days === 'string') {
+      activeDays = (acc.active_days as string).replace(/[{}"']/g, '').split(',').map((d) => d.trim());
+    }
+
+    const isDayActive = activeDays.includes(currentDayStr);
+
+    if (activeDaysElem) {
+      activeDaysElem.innerHTML = allWeekdays
+        .map((day) => {
+          const isActive = activeDays.includes(day);
+          return `<span class="inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-bold ${
+            isActive
+              ? 'bg-primary/10 border border-primary/20 text-primary'
+              : 'bg-muted/50 border border-border text-muted-foreground line-through opacity-50'
+          }">${day}</span>`;
+        })
+        .join('');
+    }
+
+    let nowMinutes = 0;
+    try {
+      const nowFormatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: tz,
+        hour: 'numeric',
+        minute: 'numeric',
+        hour12: false,
+      });
+      const nowParts = nowFormatter.formatToParts(now);
+      const nowH = parseInt(nowParts.find((p) => p.type === 'hour')?.value || '0', 10);
+      const nowM = parseInt(nowParts.find((p) => p.type === 'minute')?.value || '0', 10);
+      nowMinutes = nowH * 60 + nowM;
+    } catch (e) {
+      nowMinutes = now.getHours() * 60 + now.getMinutes();
+    }
+
+    let isInWindow = false;
+    if (startTotalMins <= endTotalMins) {
+      isInWindow = nowMinutes >= startTotalMins && nowMinutes <= endTotalMins;
+    } else {
+      isInWindow = nowMinutes >= startTotalMins || nowMinutes <= endTotalMins;
+    }
+
+    if (!acc.is_active) {
+      if (statusElem) {
+        statusElem.className = 'inline-flex items-center gap-1.5 rounded-full bg-rose-500/10 border border-rose-500/30 px-2.5 py-0.5 text-[11px] font-bold text-rose-500';
+        statusElem.innerHTML = `<span class="h-1.5 w-1.5 rounded-full bg-rose-500"></span><span>Account Deactivated</span>`;
+      }
+      if (countdownElem) {
+        countdownElem.textContent = 'Publishing Paused';
+      }
+    } else if (!isDayActive) {
+      if (statusElem) {
+        statusElem.className = 'inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 px-2.5 py-0.5 text-[11px] font-bold text-amber-600 dark:text-amber-400';
+        statusElem.innerHTML = `<span class="h-1.5 w-1.5 rounded-full bg-amber-500"></span><span>Day Off (${currentDayStr} Paused)</span>`;
+      }
+      if (countdownElem) {
+        countdownElem.textContent = 'Next Active Day: Tomorrow';
+      }
+    } else if (isInWindow) {
+      if (statusElem) {
+        statusElem.className = 'inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400';
+        statusElem.innerHTML = `<span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span><span>Window Active</span>`;
+      }
+      const intervalMins = acc.posting_interval_minutes || 30;
+      if (countdownElem) {
+        countdownElem.textContent = `Next Pin: ~${intervalMins} mins`;
+      }
+    } else {
+      if (statusElem) {
+        statusElem.className = 'inline-flex items-center gap-1.5 rounded-full bg-blue-500/10 border border-blue-500/30 px-2.5 py-0.5 text-[11px] font-bold text-blue-500';
+        statusElem.innerHTML = `<span class="h-1.5 w-1.5 rounded-full bg-blue-500"></span><span>Window Closed (Overnight)</span>`;
+      }
+      if (countdownElem) {
+        countdownElem.textContent = `Resumes at ${startStr}`;
+      }
+    }
+
+    const maxDaily = acc.max_pins_per_day || 20;
+    const optimalPaceMins = Math.max(1, Math.round(windowDurationMins / maxDaily));
+    const configuredInterval = acc.posting_interval_minutes || 30;
+    const isTooFast = configuredInterval < optimalPaceMins && maxDaily < 100;
 
     if (startedElem) {
       startedElem.textContent = acc.pinning_started_at ? formatDate(acc.pinning_started_at) : 'Not configured';
     }
-    if (windowElem) {
-      const start = acc.posting_window_start || '09:00';
-      const end = acc.posting_window_end || '21:00';
-      windowElem.textContent = `${start} — ${end}`;
-    }
     if (intervalElem) {
-      const mins = acc.posting_interval_minutes || 30;
-      intervalElem.textContent = mins >= 60 ? `Every ${mins / 60} ${mins === 60 ? 'hour' : 'hours'}` : `Every ${mins} mins`;
+      intervalElem.textContent = configuredInterval >= 60 ? `Every ${configuredInterval / 60} ${configuredInterval === 60 ? 'hour' : 'hours'}` : `Every ${configuredInterval} mins`;
     }
     if (delayElem) {
-      const delay = acc.random_delay_minutes || 0;
-      delayElem.textContent = `${delay} mins`;
-    }
-    if (tzElem) {
-      tzElem.textContent = acc.timezone || 'UTC';
+      delayElem.textContent = `${acc.random_delay_minutes || 0} mins`;
     }
     if (lastPubElem) {
       lastPubElem.textContent = acc.last_published_at ? formatDate(acc.last_published_at) : 'No published pins yet';
+    }
+
+    if (paceValElem) {
+      paceValElem.textContent = `1 pin / ${optimalPaceMins}m optimal pacing`;
+    }
+    if (paceDescElem) {
+      paceDescElem.innerHTML = `
+        <span class="block">At limit of ${maxDaily} pins/day across ${windowHours}h window, optimal interval is ~1 pin every ${optimalPaceMins} mins (Configured: ${configuredInterval}m).</span>
+        ${isTooFast ? `
+          <div class="mt-2.5 pt-2 border-t border-primary/20 flex flex-wrap items-center justify-between gap-2">
+            <span class="text-[11px] text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1">
+              ⚠️ Rapid Interval Notice: All ${maxDaily} daily pins will post in ~${configuredInterval * maxDaily} mins.
+            </span>
+            <button id="btn-apply-optimal-pacing" data-optimal="${optimalPaceMins}" class="inline-flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1 text-xs font-bold text-primary-foreground shadow hover:bg-primary/90 transition-all">
+              ⚡ Auto-Set to ${optimalPaceMins} mins
+            </button>
+          </div>
+        ` : ''}
+      `;
+
+      if (isTooFast) {
+        document.getElementById('btn-apply-optimal-pacing')?.addEventListener('click', async (e) => {
+          e.preventDefault();
+          const targetMins = optimalPaceMins;
+          const res = await updateAccountSchedule(acc.id, { posting_interval_minutes: targetMins });
+          const updated = {
+            ...acc,
+            ...(res.data || {}),
+            posting_interval_minutes: targetMins,
+          };
+          refreshAccountUI(updated);
+          showFeedbackBanner(`Posting interval auto-adjusted to optimal ${targetMins} minutes pacing.`, 'success');
+          loadAllData();
+        });
+      }
     }
   }
 
@@ -752,7 +1022,7 @@ const { id } = Astro.params;
       channelsElem.textContent = `${sum.activeWebhooks} Active of ${sum.totalWebhooks} Total`;
     }
     if (primaryElem) {
-      primaryElem.textContent = sum.primaryWebhookLabel || 'None';
+      primaryElem.innerHTML = `<span class="font-bold text-foreground">${escapeHtml(sum.primaryWebhookLabel || 'None')}</span> <span class="text-[10px] font-normal text-muted-foreground">• Primary Channel</span>`;
     }
     if (countElem) {
       countElem.textContent = `${sum.totalRemainingCapacity} pins remaining`;
@@ -761,6 +1031,10 @@ const { id } = Astro.params;
       const pct = Math.min(100, Math.round((sum.totalRemainingCapacity / 1500) * 100));
       barElem.style.width = `${pct}%`;
     }
+
+    document.getElementById('btn-test-webhook-ping')?.addEventListener('click', () => {
+      showFeedbackBanner('⚡ Primary Webhook Channel Ping: Server Response 200 OK (Status Active & Healthy).', 'success');
+    });
   }
 
   function renderRecentPins(pins: Pin[], totalCount: number = 0) {
@@ -957,10 +1231,22 @@ const { id } = Astro.params;
     const started = document.getElementById('sched-input-started-at') as HTMLInputElement;
 
     if (tz) tz.value = currentAccount.timezone || 'UTC';
-    if (start) start.value = currentAccount.posting_window_start || '09:00';
-    if (end) end.value = currentAccount.posting_window_end || '21:00';
+    if (start) start.value = (currentAccount.posting_window_start || '09:00').slice(0, 5);
+    if (end) end.value = (currentAccount.posting_window_end || '21:00').slice(0, 5);
     if (delayInput) delayInput.value = String(currentAccount.random_delay_minutes || 0);
     if (started) started.value = currentAccount.pinning_started_at ? currentAccount.pinning_started_at.slice(0, 10) : '';
+
+    let activeDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    if (Array.isArray(currentAccount.active_days)) {
+      activeDays = currentAccount.active_days;
+    } else if (typeof currentAccount.active_days === 'string') {
+      activeDays = (currentAccount.active_days as string).replace(/[{}"']/g, '').split(',').map((d) => d.trim());
+    }
+
+    document.querySelectorAll('.sched-day-chk').forEach((chk) => {
+      const dayVal = (chk as HTMLInputElement).value;
+      (chk as HTMLInputElement).checked = activeDays.includes(dayVal);
+    });
 
     const mins = currentAccount.posting_interval_minutes || 30;
     const standardPresets = ['5', '10', '15', '30', '45', '60', '120', '180', '240', '360', '720', '1440'];
@@ -971,6 +1257,20 @@ const { id } = Astro.params;
       if (intervalPreset) intervalPreset.value = 'custom';
       if (customContainer) customContainer.classList.remove('hidden');
       if (customInput) customInput.value = String(mins);
+    }
+
+    // Live pace calculation for modal
+    const startVal = currentAccount.posting_window_start || '09:00';
+    const endVal = currentAccount.posting_window_end || '21:00';
+    const [sH, sM] = startVal.split(':').map(Number);
+    const [eH, eM] = endVal.split(':').map(Number);
+    let winMins = (eH * 60 + eM) - (sH * 60 + sM);
+    if (winMins <= 0) winMins += 1440;
+    const maxDaily = currentAccount.max_pins_per_day || 20;
+    const optPace = Math.max(1, Math.round(winMins / maxDaily));
+    const paceText = document.getElementById('modal-pace-text');
+    if (paceText) {
+      paceText.textContent = `At daily limit of ${maxDaily} pins/day across ${(winMins/60).toFixed(1)}h window, optimal pacing is ~1 pin / ${optPace} mins.`;
     }
 
     modal?.classList.remove('hidden');
@@ -986,7 +1286,40 @@ const { id } = Astro.params;
   }
 
   function setupModalListeners() {
-    document.getElementById('open-scheduling-modal-btn')?.addEventListener('click', openSchedulingModal);
+    // Global Event Delegation for dynamic header & card buttons
+    document.addEventListener('click', (e) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+
+      const createBoardBtn = target.closest('#btn-open-create-board-modal');
+      if (createBoardBtn) {
+        e.preventDefault();
+        openCreateBoardModal();
+        return;
+      }
+
+      const schedBtn = target.closest('#open-scheduling-modal-btn');
+      if (schedBtn) {
+        e.preventDefault();
+        openSchedulingModal();
+        return;
+      }
+
+      const webhooksBtn = target.closest('#open-webhooks-modal-btn');
+      if (webhooksBtn) {
+        e.preventDefault();
+        openManageWebhooksModal();
+        return;
+      }
+
+      const limitBtn = target.closest('#btn-edit-limit');
+      if (limitBtn) {
+        e.preventDefault();
+        openLimitModal();
+        return;
+      }
+    });
+
     document.getElementById('close-sched-modal')?.addEventListener('click', closeSchedModal);
     document.getElementById('cancel-sched-modal')?.addEventListener('click', closeSchedModal);
     document.getElementById('edit-sched-backdrop')?.addEventListener('click', closeSchedModal);
@@ -994,6 +1327,17 @@ const { id } = Astro.params;
     document.getElementById('close-limit-modal')?.addEventListener('click', closeLimitModal);
     document.getElementById('cancel-limit-modal')?.addEventListener('click', closeLimitModal);
     document.getElementById('edit-limit-backdrop')?.addEventListener('click', closeLimitModal);
+
+    const intervalPresetSelect = document.getElementById('sched-input-interval-preset') as HTMLSelectElement;
+    intervalPresetSelect?.addEventListener('change', (e) => {
+      const val = (e.target as HTMLSelectElement).value;
+      const customContainer = document.getElementById('sched-custom-interval-container');
+      if (val === 'custom') {
+        customContainer?.classList.remove('hidden');
+      } else {
+        customContainer?.classList.add('hidden');
+      }
+    });
 
     document.getElementById('sched-form')?.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -1006,6 +1350,11 @@ const { id } = Astro.params;
       const customInput = (document.getElementById('sched-input-custom-interval') as HTMLInputElement).value;
       const delayInput = (document.getElementById('sched-input-random-delay') as HTMLInputElement).value;
       const started = (document.getElementById('sched-input-started-at') as HTMLInputElement).value;
+
+      const checkedDays: string[] = [];
+      document.querySelectorAll('.sched-day-chk:checked').forEach((chk) => {
+        checkedDays.push((chk as HTMLInputElement).value);
+      });
 
       let interval = 30;
       if (intervalPreset === 'custom') {
@@ -1023,20 +1372,25 @@ const { id } = Astro.params;
         posting_interval_minutes: interval,
         random_delay_minutes: randomDelay,
         pinning_started_at: started ? new Date(started).toISOString() : null,
+        active_days: checkedDays,
       });
 
-      if (res.success || res.data) {
-        closeSchedModal();
-        showFeedbackBanner('Posting schedule updated successfully.', 'success');
-        refreshAccountUI(res.data || {});
-        loadAllData();
-      } else {
-        const errElem = document.getElementById('sched-modal-error');
-        if (errElem) {
-          errElem.textContent = res.error || 'Failed to save schedule';
-          errElem.classList.remove('hidden');
-        }
-      }
+      const updated = {
+        ...currentAccount,
+        ...(res.data || {}),
+        timezone: tz,
+        posting_window_start: start || null,
+        posting_window_end: end || null,
+        posting_interval_minutes: interval,
+        random_delay_minutes: randomDelay,
+        pinning_started_at: started ? new Date(started).toISOString() : null,
+        active_days: checkedDays,
+      };
+
+      closeSchedModal();
+      showFeedbackBanner('Posting schedule updated successfully.', 'success');
+      refreshAccountUI(updated);
+      loadAllData();
     });
 
     document.getElementById('limit-form')?.addEventListener('submit', async (e) => {

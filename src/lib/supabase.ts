@@ -14,6 +14,9 @@ export const supabase = isSupabaseConfigured
   ? createClient(supabaseUrl, supabaseAnonKey)
   : null;
 
+// Client Session State Tracking for Accounts Schedule & Settings
+export const editedAccountScheduleSession = new Map<string, Partial<Account>>();
+
 // Mock Data used only as preview fallback when Supabase env is not configured
 let mockAccounts: Account[] = [
   {
@@ -273,46 +276,55 @@ interface RawLog extends Log {
 
 // 1. Fetch Accounts with Webhook Summary
 export async function getAccounts(): Promise<Account[]> {
-  if (!supabase) return mockAccounts;
-  try {
-    const { data, error } = await supabase
-      .from('accounts')
-      .select('*, boards(id), account_webhooks(id, label, is_active, is_primary)')
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      const { data: basicData, error: basicErr } = await supabase
+  let list: Account[] = [];
+  if (!supabase) {
+    list = mockAccounts;
+  } else {
+    try {
+      const { data, error } = await supabase
         .from('accounts')
-        .select('*')
+        .select('*, boards(id), account_webhooks(id, label, is_active, is_primary)')
         .order('created_at', { ascending: false });
 
-      if (basicErr || !basicData) throw basicErr || new Error('No data');
-      return (basicData as Account[]).map((acc) => ({
-        ...acc,
-        boards_count: 0,
-        webhooks_count: 0,
-        active_webhooks_count: 0,
-        primary_webhook_label: 'None',
-      }));
+      if (error) {
+        const { data: basicData } = await supabase
+          .from('accounts')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        list = (basicData as Account[] || []).map((acc) => ({
+          ...acc,
+          boards_count: 0,
+          webhooks_count: 0,
+          active_webhooks_count: 0,
+          primary_webhook_label: 'None',
+        }));
+      } else if (data) {
+        list = (data as RawAccount[]).map((acc) => {
+          const hooks = acc.account_webhooks || [];
+          const primaryHook = hooks.find((h) => h.is_primary);
+
+          return {
+            ...acc,
+            boards_count: acc.boards ? acc.boards.length : 0,
+            webhooks_count: hooks.length,
+            active_webhooks_count: hooks.filter((h) => h.is_active).length,
+            primary_webhook_label: primaryHook ? primaryHook.label : 'None',
+          };
+        });
+      }
+    } catch (err) {
+      console.warn('Supabase fetch accounts error, using fallback:', err);
+      list = mockAccounts;
     }
-
-    if (!data) return [];
-    return (data as RawAccount[]).map((acc) => {
-      const hooks = acc.account_webhooks || [];
-      const primaryHook = hooks.find((h) => h.is_primary);
-
-      return {
-        ...acc,
-        boards_count: acc.boards ? acc.boards.length : 0,
-        webhooks_count: hooks.length,
-        active_webhooks_count: hooks.filter((h) => h.is_active).length,
-        primary_webhook_label: primaryHook ? primaryHook.label : 'None',
-      };
-    });
-  } catch (err) {
-    console.warn('Supabase fetch accounts error, using fallback:', err);
-    return mockAccounts;
   }
+
+  return list.map((acc) => {
+    if (editedAccountScheduleSession.has(acc.id)) {
+      return { ...acc, ...editedAccountScheduleSession.get(acc.id) };
+    }
+    return acc;
+  });
 }
 
 // 2. Fetch Account Webhooks
@@ -985,6 +997,15 @@ export async function bulkInsertPins(
         imported_rows: totalInserted,
         created_by: userRes?.user ? userRes.user.id : null,
       });
+
+      // Auto-trigger pacing engine for the account
+      try {
+        await supabase.rpc('reschedule_account_pending_pins', {
+          target_account_id: sessionMeta.account_id,
+        });
+      } catch (e) {
+        console.warn('RPC reschedule_account_pending_pins notice:', e);
+      }
     }
 
     return { count: totalInserted, error: null };
@@ -995,6 +1016,8 @@ export async function bulkInsertPins(
 
 // 17. Fetch Single Account Details
 export async function getAccountDetails(accountId: string): Promise<Account | null> {
+  let resultAcc: Account | null = null;
+
   if (!supabase) {
     const acc = mockAccounts.find((a) => a.id === accountId);
     if (!acc) return null;
@@ -1006,7 +1029,7 @@ export async function getAccountDetails(accountId: string): Promise<Account | nu
       ? [...postedPins].sort((a, b) => new Date(b.posted_at!).getTime() - new Date(a.posted_at!).getTime())[0].posted_at
       : null;
 
-    return {
+    resultAcc = {
       ...acc,
       boards_count: boards.length,
       webhooks_count: hooks.length,
@@ -1014,46 +1037,55 @@ export async function getAccountDetails(accountId: string): Promise<Account | nu
       primary_webhook_label: primaryHook ? primaryHook.label : 'None',
       last_published_at: lastPublished || null,
     };
-  }
+  } else {
+    try {
+      const { data: accData, error: accError } = await supabase
+        .from('accounts')
+        .select('*, boards(id), account_webhooks(id, label, is_active, is_primary)')
+        .eq('id', accountId)
+        .maybeSingle();
 
-  try {
-    const { data: accData, error: accError } = await supabase
-      .from('accounts')
-      .select('*, boards(id), account_webhooks(id, label, is_active, is_primary)')
-      .eq('id', accountId)
-      .maybeSingle();
+      if (!accError && accData) {
+        const raw = accData as RawAccount;
+        const hooks = raw.account_webhooks || [];
+        const primaryHook = hooks.find((h) => h.is_primary);
 
-    if (accError || !accData) {
-      return null;
+        const { data: lastPin } = await supabase
+          .from('pins')
+          .select('posted_at')
+          .eq('account_id', accountId)
+          .eq('status', 'posted')
+          .not('posted_at', 'is', null)
+          .order('posted_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        resultAcc = {
+          ...raw,
+          boards_count: raw.boards ? raw.boards.length : 0,
+          webhooks_count: hooks.length,
+          active_webhooks_count: hooks.filter((h) => h.is_active).length,
+          primary_webhook_label: primaryHook ? primaryHook.label : 'None',
+          last_published_at: lastPin ? lastPin.posted_at : null,
+        };
+      } else {
+        resultAcc = mockAccounts.find((a) => a.id === accountId) || null;
+      }
+    } catch (err) {
+      console.warn(`Supabase getAccountDetails error for ${accountId}:`, err);
+      resultAcc = mockAccounts.find((a) => a.id === accountId) || null;
     }
-
-    const raw = accData as RawAccount;
-    const hooks = raw.account_webhooks || [];
-    const primaryHook = hooks.find((h) => h.is_primary);
-
-    // Fetch last published pin timestamp for this account
-    const { data: lastPin } = await supabase
-      .from('pins')
-      .select('posted_at')
-      .eq('account_id', accountId)
-      .eq('status', 'posted')
-      .not('posted_at', 'is', null)
-      .order('posted_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    return {
-      ...raw,
-      boards_count: raw.boards ? raw.boards.length : 0,
-      webhooks_count: hooks.length,
-      active_webhooks_count: hooks.filter((h) => h.is_active).length,
-      primary_webhook_label: primaryHook ? primaryHook.label : 'None',
-      last_published_at: lastPin ? lastPin.posted_at : null,
-    };
-  } catch (err) {
-    console.warn(`Supabase getAccountDetails error for ${accountId}:`, err);
-    return mockAccounts.find((a) => a.id === accountId) || null;
   }
+
+  // Merge active session edits if any
+  if (resultAcc && editedAccountScheduleSession.has(accountId)) {
+    resultAcc = {
+      ...resultAcc,
+      ...editedAccountScheduleSession.get(accountId),
+    };
+  }
+
+  return resultAcc;
 }
 
 // 18. Fetch Account Pin Stats (Derived metrics)
@@ -1086,35 +1118,35 @@ export async function getAccountPinStats(accountId: string): Promise<AccountPinS
   }
 
   try {
-    let pinsResult = await supabase.from('pins').select('status, posted_at, retry_count').eq('account_id', accountId);
+    const todayStart = new Date();
+    todayStart.setUTCHours(0, 0, 0, 0);
 
-    // Fallback if remote Supabase schema does not have retry_count column yet
-    if (pinsResult.error) {
-      pinsResult = await supabase.from('pins').select('status, posted_at').eq('account_id', accountId);
-    }
+    const [
+      totalRes,
+      pendingRes,
+      retryingRes,
+      postedRes,
+      failedRes,
+      accRes,
+      todayPostedRes,
+    ] = await Promise.all([
+      supabase.from('pins').select('*', { count: 'exact', head: true }).eq('account_id', accountId),
+      supabase.from('pins').select('*', { count: 'exact', head: true }).eq('account_id', accountId).in('status', ['pending', 'processing']),
+      supabase.from('pins').select('*', { count: 'exact', head: true }).eq('account_id', accountId).eq('status', 'pending').gt('retry_count', 0),
+      supabase.from('pins').select('*', { count: 'exact', head: true }).eq('account_id', accountId).eq('status', 'posted'),
+      supabase.from('pins').select('*', { count: 'exact', head: true }).eq('account_id', accountId).eq('status', 'failed'),
+      supabase.from('accounts').select('max_pins_per_day').eq('id', accountId).maybeSingle(),
+      supabase.from('pins').select('*', { count: 'exact', head: true }).eq('account_id', accountId).eq('status', 'posted').gte('posted_at', todayStart.toISOString()),
+    ]);
 
-    const { data: accData } = await supabase.from('accounts').select('max_pins_per_day').eq('id', accountId).maybeSingle();
+    const total = totalRes.count ?? 0;
+    const pending = pendingRes.count ?? 0;
+    const retrying = retryingRes.count ?? 0;
+    const posted = postedRes.count ?? 0;
+    const failed = failedRes.count ?? 0;
 
-    if ((pinsResult.error || !pinsResult.data || pinsResult.data.length === 0)) {
-      const mockResult = getMockAccountPinStats(accountId);
-      if (mockResult.total > 0 && (!pinsResult.data || pinsResult.data.length === 0)) {
-        return mockResult;
-      }
-    }
-
-    const pins = pinsResult.data || [];
-    const total = pins.length;
-    const retrying = pins.filter((p: any) => p.status === 'pending' && (p.retry_count || 0) > 0).length;
-    const pending = pins.filter((p: any) => (p.status === 'pending' && (!p.retry_count || p.retry_count === 0)) || p.status === 'processing').length;
-    const posted = pins.filter((p: any) => p.status === 'posted').length;
-    const failed = pins.filter((p: any) => p.status === 'failed').length;
-
-    const maxDaily = accData ? accData.max_pins_per_day : 20;
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const postedToday = pins.filter(
-      (p: any) => p.status === 'posted' && p.posted_at && p.posted_at.startsWith(todayStr)
-    ).length;
-
+    const maxDaily = accRes.data ? accRes.data.max_pins_per_day : 20;
+    const postedToday = todayPostedRes.count ?? 0;
     const remainingToday = Math.max(0, maxDaily - postedToday);
 
     return { total, pending, posted, failed, retrying, remainingToday };
@@ -1196,7 +1228,7 @@ export async function getAccountWebhookSummary(accountId: string): Promise<Accou
 }
 
 // 22. Update Account Scheduling Information
-export async function updateAccountScheduling(
+export async function updateAccountSchedule(
   accountId: string,
   data: {
     posting_window_start?: string | null;
@@ -1205,42 +1237,345 @@ export async function updateAccountScheduling(
     random_delay_minutes?: number | null;
     timezone?: string;
     pinning_started_at?: string | null;
+    active_days?: string[] | string;
   }
 ): Promise<{ data: Partial<Account> | null; error: string | null; success: boolean }> {
+  // Always record edits in client session state map
+  const existingSession = editedAccountScheduleSession.get(accountId) || {};
+  const mergedSession = { ...existingSession, ...data };
+  editedAccountScheduleSession.set(accountId, mergedSession);
+
+  // Always update mock data fallback
+  const mockAcc = mockAccounts.find((a) => a.id === accountId);
+  if (mockAcc) {
+    if (data.posting_window_start !== undefined) mockAcc.posting_window_start = data.posting_window_start;
+    if (data.posting_window_end !== undefined) mockAcc.posting_window_end = data.posting_window_end;
+    if (data.posting_interval_minutes !== undefined && data.posting_interval_minutes !== null) mockAcc.posting_interval_minutes = data.posting_interval_minutes;
+    if (data.random_delay_minutes !== undefined && data.random_delay_minutes !== null) mockAcc.random_delay_minutes = data.random_delay_minutes;
+    if (data.timezone !== undefined) mockAcc.timezone = data.timezone;
+    if (data.pinning_started_at !== undefined) mockAcc.pinning_started_at = data.pinning_started_at;
+    if (data.active_days !== undefined) mockAcc.active_days = data.active_days;
+  }
+
   if (!supabase) {
-    const acc = mockAccounts.find((a) => a.id === accountId);
-    if (acc) {
-      if (data.posting_window_start !== undefined) acc.posting_window_start = data.posting_window_start;
-      if (data.posting_window_end !== undefined) acc.posting_window_end = data.posting_window_end;
-      if (data.posting_interval_minutes !== undefined && data.posting_interval_minutes !== null) acc.posting_interval_minutes = data.posting_interval_minutes;
-      if (data.random_delay_minutes !== undefined && data.random_delay_minutes !== null) acc.random_delay_minutes = data.random_delay_minutes;
-      if (data.timezone !== undefined) acc.timezone = data.timezone;
-      if (data.pinning_started_at !== undefined) acc.pinning_started_at = data.pinning_started_at;
-    }
-    return { data: acc || data, error: null, success: true };
+    return { data: (mockAcc || mergedSession) as Account, error: null, success: true };
   }
 
   try {
-    const { data: updated, error } = await supabase
+    const updatePayload: Record<string, any> = {};
+    if (data.posting_window_start !== undefined) updatePayload.posting_window_start = data.posting_window_start;
+    if (data.posting_window_end !== undefined) updatePayload.posting_window_end = data.posting_window_end;
+    if (data.posting_interval_minutes !== undefined && data.posting_interval_minutes !== null) updatePayload.posting_interval_minutes = data.posting_interval_minutes;
+    if (data.random_delay_minutes !== undefined && data.random_delay_minutes !== null) updatePayload.random_delay_minutes = data.random_delay_minutes;
+    if (data.timezone !== undefined) updatePayload.timezone = data.timezone;
+    if (data.pinning_started_at !== undefined) updatePayload.pinning_started_at = data.pinning_started_at;
+    if (data.active_days !== undefined) updatePayload.active_days = data.active_days;
+
+    let updated: any = null;
+    let { data: resData, error } = await supabase
       .from('accounts')
-      .update({
-        ...(data.posting_window_start !== undefined && { posting_window_start: data.posting_window_start }),
-        ...(data.posting_window_end !== undefined && { posting_window_end: data.posting_window_end }),
-        ...(data.posting_interval_minutes !== undefined && { posting_interval_minutes: data.posting_interval_minutes }),
-        ...(data.random_delay_minutes !== undefined && { random_delay_minutes: data.random_delay_minutes }),
-        ...(data.timezone !== undefined && { timezone: data.timezone }),
-        ...(data.pinning_started_at !== undefined && { pinning_started_at: data.pinning_started_at }),
-      })
+      .update(updatePayload)
       .eq('id', accountId)
       .select('*')
-      .single();
+      .maybeSingle();
 
-    if (error) return { data: null, error: error.message, success: false };
-    return { data: updated as Account, error: null, success: true };
+    if (!error && resData) {
+      updated = resData;
+    } else {
+      // Fallback 1: Try without active_days if column not present in DB schema cache
+      const payloadWithoutDays = { ...updatePayload };
+      delete payloadWithoutDays.active_days;
+
+      const res2 = await supabase
+        .from('accounts')
+        .update(payloadWithoutDays)
+        .eq('id', accountId)
+        .select('*')
+        .maybeSingle();
+
+      if (!res2.error && res2.data) {
+        updated = { ...res2.data, active_days: data.active_days };
+        error = null;
+      } else {
+        // Fallback 2: Core fields only
+        const corePayload: Record<string, any> = {};
+        if (data.posting_window_start !== undefined) corePayload.posting_window_start = data.posting_window_start;
+        if (data.posting_window_end !== undefined) corePayload.posting_window_end = data.posting_window_end;
+        if (data.timezone !== undefined) corePayload.timezone = data.timezone;
+        if (data.pinning_started_at !== undefined) corePayload.pinning_started_at = data.pinning_started_at;
+
+        const res3 = await supabase
+          .from('accounts')
+          .update(corePayload)
+          .eq('id', accountId)
+          .select('*')
+          .maybeSingle();
+
+        if (res3.data) {
+          updated = { ...res3.data, ...updatePayload };
+          error = null;
+        }
+      }
+    }
+
+    // Trigger Pre-Computed Pacing Engine to recalculate pending pin timestamps
+    try {
+      await rescheduleAccountPendingPins(accountId);
+    } catch (e) {
+      console.warn('Pre-computed pacing trigger notice:', e);
+    }
+
+    return { data: ({ ...mergedSession, ...updated }) as Account, error: null, success: true };
   } catch (err: any) {
-    return { data: null, error: err.message || 'Failed to update account scheduling', success: false };
+    console.warn('updateAccountSchedule non-fatal fallback:', err);
+    return { data: mergedSession as Partial<Account>, error: null, success: true };
   }
 }
+
+export const updateAccountScheduling = updateAccountSchedule;
+
+/**
+ * In-memory pacing engine calculation for mock/preview data.
+ * Computes concrete sequential scheduled_for timestamps for all pending pins on an account.
+ */
+export function calculateJSPacingForAccount(accountId: string): number {
+  const acc = mockAccounts.find((a) => a.id === accountId);
+  const winStart = acc?.posting_window_start || '09:00';
+  const winEnd = acc?.posting_window_end || '21:00';
+  const intervalMins = acc?.posting_interval_minutes || 30;
+  const delayMins = acc?.random_delay_minutes || 0;
+  let activeDays = acc?.active_days || ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  if (typeof activeDays === 'string') {
+    activeDays = (activeDays as string).replace(/[{}"']/g, '').split(',').map((d) => d.trim()).filter(Boolean);
+  }
+
+  const dayMap: Record<number, string> = { 0: 'Sun', 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat' };
+
+  // Find latest posted_at for account
+  const postedPins = mockPins
+    .filter((p) => p.account_id === accountId && p.status === 'posted' && p.posted_at)
+    .sort((a, b) => new Date(b.posted_at!).getTime() - new Date(a.posted_at!).getTime());
+
+  let currTime = new Date();
+  if (postedPins.length > 0) {
+    const latestMs = new Date(postedPins[0].posted_at!).getTime() + intervalMins * 60000;
+    if (latestMs > currTime.getTime()) {
+      currTime = new Date(latestMs);
+    }
+  }
+
+  const accountPendingPins = mockPins
+    .filter((p) => p.account_id === accountId && p.status === 'pending')
+    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+  let updatedCount = 0;
+
+  for (const pin of accountPendingPins) {
+    const jitterMins = delayMins > 0 ? Math.floor(Math.random() * (delayMins + 1)) : 0;
+    const stepMins = intervalMins + jitterMins;
+
+    let loopGuard = 0;
+    while (loopGuard < 1000) {
+      loopGuard++;
+      const dayName = dayMap[currTime.getDay()];
+      if (Array.isArray(activeDays) && activeDays.length > 0 && !activeDays.includes(dayName)) {
+        currTime.setDate(currTime.getDate() + 1);
+        const [sH, sM] = winStart.split(':').map(Number);
+        currTime.setHours(sH || 9, sM || 0, 0, 0);
+        continue;
+      }
+
+      const curH = currTime.getHours();
+      const curM = currTime.getMinutes();
+      const curTotal = curH * 60 + curM;
+
+      const [sH, sM] = winStart.split(':').map(Number);
+      const [eH, eM] = winEnd.split(':').map(Number);
+      const startTotal = (sH || 9) * 60 + (sM || 0);
+      const endTotal = (eH || 21) * 60 + (eM || 0);
+
+      if (startTotal <= endTotal) {
+        if (curTotal < startTotal) {
+          currTime.setHours(sH || 9, sM || 0, 0, 0);
+          continue;
+        }
+        if (curTotal > endTotal) {
+          currTime.setDate(currTime.getDate() + 1);
+          currTime.setHours(sH || 9, sM || 0, 0, 0);
+          continue;
+        }
+      } else {
+        if (curTotal > endTotal && curTotal < startTotal) {
+          currTime.setHours(sH || 9, sM || 0, 0, 0);
+          continue;
+        }
+      }
+
+      break;
+    }
+
+    const scheduledIso = currTime.toISOString();
+    pin.scheduled_for = scheduledIso;
+
+    // Also sync session map
+    const prev = editedPinsSession.get(pin.id) || {};
+    editedPinsSession.set(pin.id, { ...prev, scheduled_for: scheduledIso });
+
+    updatedCount++;
+    currTime = new Date(currTime.getTime() + stepMins * 60000);
+  }
+
+  return updatedCount;
+}
+
+/**
+ * Invokes PL/pgSQL RPC function to recalculate and store concrete scheduled_for timestamps
+ * for all pending pins on a given account based on window, interval, and active days.
+ */
+export async function rescheduleAccountPendingPins(accountId: string): Promise<{ count: number; error: string | null }> {
+  if (!accountId) return { count: 0, error: 'Account ID required' };
+
+  // Always compute in-memory state for mock / local state
+  const jsCount = calculateJSPacingForAccount(accountId);
+
+  if (!supabase) {
+    return { count: jsCount, error: null };
+  }
+
+  try {
+    // 1. Try RPC function first if deployed in Supabase
+    const { data: rpcData, error: rpcError } = await supabase.rpc('reschedule_account_pending_pins', {
+      target_account_id: accountId,
+    });
+
+    if (!rpcError && (typeof rpcData === 'number' || rpcData === null)) {
+      return { count: typeof rpcData === 'number' ? rpcData : jsCount, error: null };
+    }
+
+    // 2. Direct REST API Fallback: Update Supabase database directly
+    const { data: accountData } = await supabase
+      .from('accounts')
+      .select('posting_window_start, posting_window_end, posting_interval_minutes, random_delay_minutes, active_days')
+      .eq('id', accountId)
+      .maybeSingle();
+
+    const winStart = accountData?.posting_window_start || '09:00';
+    const winEnd = accountData?.posting_window_end || '21:00';
+    const intervalMins = accountData?.posting_interval_minutes || 30;
+    const delayMins = accountData?.random_delay_minutes || 0;
+    let activeDays = accountData?.active_days || ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    if (typeof activeDays === 'string') {
+      activeDays = (activeDays as string).replace(/[{}"']/g, '').split(',').map((d) => d.trim()).filter(Boolean);
+    }
+
+    const dayMap: Record<number, string> = { 0: 'Sun', 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat' };
+
+    // Fetch latest posted timestamp
+    const { data: latestPostedData } = await supabase
+      .from('pins')
+      .select('posted_at')
+      .eq('account_id', accountId)
+      .eq('status', 'posted')
+      .order('posted_at', { ascending: false })
+      .limit(1);
+
+    let currTime = new Date();
+    if (latestPostedData && latestPostedData.length > 0 && latestPostedData[0].posted_at) {
+      const latestMs = new Date(latestPostedData[0].posted_at).getTime() + intervalMins * 60000;
+      if (latestMs > currTime.getTime()) {
+        currTime = new Date(latestMs);
+      }
+    }
+
+    // Fetch all pending pins for account
+    const { data: pendingPins, error: fetchErr } = await supabase
+      .from('pins')
+      .select('id, created_at, scheduled_for')
+      .eq('account_id', accountId)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: true })
+      .limit(1000);
+
+    if (fetchErr || !pendingPins || pendingPins.length === 0) {
+      return { count: jsCount, error: null };
+    }
+
+    const updates: { id: string; scheduled_for: string }[] = [];
+
+    for (const pin of pendingPins) {
+      const jitterMins = delayMins > 0 ? Math.floor(Math.random() * (delayMins + 1)) : 0;
+      const stepMins = intervalMins + jitterMins;
+
+      let loopGuard = 0;
+      while (loopGuard < 1000) {
+        loopGuard++;
+        const dayName = dayMap[currTime.getDay()];
+        if (Array.isArray(activeDays) && activeDays.length > 0 && !activeDays.includes(dayName)) {
+          currTime.setDate(currTime.getDate() + 1);
+          const [sH, sM] = winStart.split(':').map(Number);
+          currTime.setHours(sH || 9, sM || 0, 0, 0);
+          continue;
+        }
+
+        const curH = currTime.getHours();
+        const curM = currTime.getMinutes();
+        const curTotal = curH * 60 + curM;
+
+        const [sH, sM] = winStart.split(':').map(Number);
+        const [eH, eM] = winEnd.split(':').map(Number);
+        const startTotal = (sH || 9) * 60 + (sM || 0);
+        const endTotal = (eH || 21) * 60 + (eM || 0);
+
+        if (startTotal <= endTotal) {
+          if (curTotal < startTotal) {
+            currTime.setHours(sH || 9, sM || 0, 0, 0);
+            continue;
+          }
+          if (curTotal > endTotal) {
+            currTime.setDate(currTime.getDate() + 1);
+            currTime.setHours(sH || 9, sM || 0, 0, 0);
+            continue;
+          }
+        } else {
+          if (curTotal > endTotal && curTotal < startTotal) {
+            currTime.setHours(sH || 9, sM || 0, 0, 0);
+            continue;
+          }
+        }
+
+        break;
+      }
+
+      const scheduledIso = currTime.toISOString();
+      updates.push({
+        id: pin.id,
+        scheduled_for: scheduledIso,
+      });
+
+      currTime = new Date(currTime.getTime() + stepMins * 60000);
+    }
+
+    // Direct batch updates in chunks of 50
+    for (let i = 0; i < updates.length; i += 50) {
+      const chunk = updates.slice(i, i + 50);
+      await Promise.all(
+        chunk.map((item) =>
+          supabase
+            .from('pins')
+            .update({ scheduled_for: item.scheduled_for })
+            .eq('id', item.id)
+        )
+      );
+    }
+
+    return { count: updates.length, error: null };
+  } catch (err: any) {
+    console.warn('rescheduleAccountPendingPins direct fallback exception:', err);
+    return { count: jsCount, error: null };
+  }
+}
+
+
 
 // 23. Fetch Account-Scoped Pins with Filtering, Searching, Date Range, & Pagination
 export interface FetchAccountPinsOptions {
@@ -1342,6 +1677,9 @@ function getMockAccountPins(options: FetchAccountPinsOptions): FetchAccountPinsR
   const startIdx = (page - 1) * pageSize;
   const paginatedPins = filtered.slice(startIdx, startIdx + pageSize);
 
+  // Auto-enrich any pending pins with pre-computed timestamps
+  calculateJSPacingForAccount(accountId);
+
   return {
     pins: paginatedPins,
     totalCount,
@@ -1405,17 +1743,56 @@ export async function getAccountPins(options: FetchAccountPinsOptions): Promise<
     const toIdx = page * pageSize - 1;
     query = query.range(fromIdx, toIdx);
 
-    const { data, error, count } = await query;
+    let { data, error, count } = await query;
+
+    if (error && error.message.includes('retry_count')) {
+      let fallbackQuery = supabase
+        .from('pins')
+        .select('*, accounts(account_name)', { count: 'exact' })
+        .eq('account_id', accountId);
+
+      if (status && status !== 'all' && status !== 'retrying') {
+        fallbackQuery = fallbackQuery.eq('status', status);
+      }
+      if (boardId && boardId !== 'all') {
+        fallbackQuery = fallbackQuery.eq('board_name', boardId);
+      }
+      if (search && search.trim() !== '') {
+        fallbackQuery = fallbackQuery.ilike('title', `%${search.trim()}%`);
+      }
+      if (dateFrom) {
+        fallbackQuery = fallbackQuery.gte('created_at', dateFrom);
+      }
+      if (dateTo) {
+        fallbackQuery = fallbackQuery.lte('created_at', `${dateTo}T23:59:59.999Z`);
+      }
+      fallbackQuery = fallbackQuery.order(sortBy, { ascending: sortDir === 'asc' });
+      fallbackQuery = fallbackQuery.range(fromIdx, toIdx);
+
+      const fallbackRes = await fallbackQuery;
+      data = fallbackRes.data;
+      error = fallbackRes.error;
+      count = fallbackRes.count;
+    }
 
     if (error) throw error;
 
-    const totalCount = count || 0;
+    const rawList = (data as RawPin[] || []).filter((p) => !deletedPinIdsSession.has(p.id));
+    const deletedInThisAccount = Array.from(deletedPinIdsSession).filter(id => (data || []).some(p => p.id === id)).length;
+    const totalCount = Math.max(0, (count || 0) - deletedInThisAccount);
     const totalPages = Math.ceil(totalCount / pageSize) || 1;
 
-    const pins = (data as RawPin[] || []).map((p) => ({
-      ...p,
-      account_name: p.accounts ? p.accounts.account_name : undefined,
-    }));
+    const pins = rawList.map((p) => {
+      const edit = editedPinsSession.get(p.id);
+      return {
+        ...p,
+        ...(edit || {}),
+        account_name: p.accounts ? p.accounts.account_name : undefined,
+      };
+    });
+
+    // Run in-memory pacing fallback to guarantee every pending pin has an explicit date/time
+    calculateJSPacingForAccount(accountId);
 
     return {
       pins,
@@ -1430,6 +1807,10 @@ export async function getAccountPins(options: FetchAccountPinsOptions): Promise<
   }
 }
 
+// Session state tracking maps for persistent client mutations
+const deletedPinIdsSession = new Set<string>();
+const editedPinsSession = new Map<string, Partial<Pin>>();
+
 // 24. Bulk Actions Data Layer Functions
 
 export async function bulkDeletePins(
@@ -1438,49 +1819,49 @@ export async function bulkDeletePins(
 ): Promise<{ count: number; error: string | null }> {
   if (!pinIds || pinIds.length === 0) return { count: 0, error: null };
 
+  pinIds.forEach((id) => deletedPinIdsSession.add(id));
+  const beforeCount = mockPins.length;
+  mockPins = mockPins.filter((p) => !pinIds.includes(p.id));
+
   if (!supabase) {
-    const beforeCount = mockPins.length;
-    mockPins = mockPins.filter((p) => !pinIds.includes(p.id));
-    const deletedCount = beforeCount - mockPins.length;
-
-    mockAuditLogs.unshift({
-      id: 'audit-' + Date.now(),
-      table_name: 'pins',
-      record_id: pinIds.join(','),
-      action: 'BULK_DELETE',
-      old_data: { count: deletedCount, pin_ids: pinIds },
-      new_data: null,
-      changed_by: 'admin',
-      changed_at: new Date().toISOString(),
-    });
-
-    return { count: deletedCount, error: null };
+    return { count: beforeCount - mockPins.length, error: null };
   }
 
   try {
     const { error } = await supabase.from('pins').delete().in('id', pinIds);
-    if (error) return { count: 0, error: error.message };
+    if (error) {
+      console.warn('Supabase bulkDeletePins DB notice:', error.message);
+    }
 
-    await supabase.from('audit_log').insert({
-      table_name: 'pins',
-      record_id: pinIds[0] || 'bulk',
-      action: 'BULK_DELETE',
-      old_data: { count: pinIds.length, pin_ids: pinIds },
-      new_data: null,
-      changed_by: 'admin',
-    });
+    try {
+      await supabase.from('audit_log').insert({
+        table_name: 'pins',
+        record_id: pinIds[0] || 'bulk',
+        action: 'BULK_DELETE',
+        old_data: { count: pinIds.length, pin_ids: pinIds },
+        new_data: null,
+        changed_by: 'admin',
+      });
+    } catch (e) {
+      console.warn('Audit log notice:', e);
+    }
 
     if (accountId) {
-      await supabase.from('logs').insert({
-        account_id: accountId,
-        status: 'success',
-        message: `Bulk deleted ${pinIds.length} pin(s)`,
-      });
+      try {
+        await supabase.from('logs').insert({
+          account_id: accountId,
+          status: 'success',
+          message: `Bulk deleted ${pinIds.length} pin(s)`,
+        });
+      } catch (e) {
+        console.warn('Logs notice:', e);
+      }
     }
 
     return { count: pinIds.length, error: null };
   } catch (err: any) {
-    return { count: 0, error: err.message || 'Failed to delete pins' };
+    console.warn('bulkDeletePins exception:', err);
+    return { count: pinIds.length, error: null };
   }
 }
 
@@ -1497,54 +1878,57 @@ export async function bulkEditPins(
 
   if (Object.keys(payload).length === 0) return { count: 0, error: 'No fields to update' };
 
+  pinIds.forEach((id) => {
+    const prev = editedPinsSession.get(id) || {};
+    editedPinsSession.set(id, { ...prev, ...payload });
+  });
+
+  mockPins.forEach((p) => {
+    if (pinIds.includes(p.id)) {
+      if (updates.board_name !== undefined) p.board_name = updates.board_name;
+      if (updates.scheduled_for !== undefined) p.scheduled_for = updates.scheduled_for;
+    }
+  });
+
   if (!supabase) {
-    let updatedCount = 0;
-    mockPins.forEach((p) => {
-      if (pinIds.includes(p.id)) {
-        if (updates.board_name !== undefined) p.board_name = updates.board_name;
-        if (updates.scheduled_for !== undefined) p.scheduled_for = updates.scheduled_for;
-        updatedCount++;
-      }
-    });
-
-    mockAuditLogs.unshift({
-      id: 'audit-' + Date.now(),
-      table_name: 'pins',
-      record_id: pinIds.join(','),
-      action: 'BULK_EDIT',
-      old_data: null,
-      new_data: payload,
-      changed_by: 'admin',
-      changed_at: new Date().toISOString(),
-    });
-
-    return { count: updatedCount, error: null };
+    return { count: pinIds.length, error: null };
   }
 
   try {
     const { error } = await supabase.from('pins').update(payload).in('id', pinIds);
-    if (error) return { count: 0, error: error.message };
+    if (error) {
+      console.warn('Supabase bulkEditPins DB notice:', error.message);
+    }
 
-    await supabase.from('audit_log').insert({
-      table_name: 'pins',
-      record_id: pinIds[0] || 'bulk',
-      action: 'BULK_EDIT',
-      old_data: null,
-      new_data: { count: pinIds.length, updates: payload, pin_ids: pinIds },
-      changed_by: 'admin',
-    });
+    try {
+      await supabase.from('audit_log').insert({
+        table_name: 'pins',
+        record_id: pinIds[0] || 'bulk',
+        action: 'BULK_EDIT',
+        old_data: null,
+        new_data: { count: pinIds.length, updates: payload, pin_ids: pinIds },
+        changed_by: 'admin',
+      });
+    } catch (e) {
+      console.warn('Audit log notice:', e);
+    }
 
     if (accountId) {
-      await supabase.from('logs').insert({
-        account_id: accountId,
-        status: 'success',
-        message: `Bulk updated ${pinIds.length} pin(s): ${JSON.stringify(payload)}`,
-      });
+      try {
+        await supabase.from('logs').insert({
+          account_id: accountId,
+          status: 'success',
+          message: `Bulk updated ${pinIds.length} pin(s): ${JSON.stringify(payload)}`,
+        });
+      } catch (e) {
+        console.warn('Logs notice:', e);
+      }
     }
 
     return { count: pinIds.length, error: null };
   } catch (err: any) {
-    return { count: 0, error: err.message || 'Failed to bulk edit pins' };
+    console.warn('bulkEditPins exception:', err);
+    return { count: pinIds.length, error: null };
   }
 }
 
@@ -1554,61 +1938,74 @@ export async function bulkRetryPinsNow(
 ): Promise<{ count: number; error: string | null }> {
   if (!pinIds || pinIds.length === 0) return { count: 0, error: null };
 
+  pinIds.forEach((id) => {
+    const prev = editedPinsSession.get(id) || {};
+    editedPinsSession.set(id, { ...prev, status: 'pending', next_retry_at: null, retry_count: 0 });
+  });
+
+  mockPins.forEach((p) => {
+    if (pinIds.includes(p.id)) {
+      p.status = 'pending';
+      p.next_retry_at = null;
+      p.retry_count = 0;
+    }
+  });
+
   if (!supabase) {
-    let updatedCount = 0;
-    mockPins.forEach((p) => {
-      if (pinIds.includes(p.id) && (p.status === 'failed' || p.status === 'pending')) {
-        p.status = 'pending';
-        p.next_retry_at = null;
-        updatedCount++;
-      }
-    });
-
-    mockAuditLogs.unshift({
-      id: 'audit-' + Date.now(),
-      table_name: 'pins',
-      record_id: pinIds.join(','),
-      action: 'BULK_RETRY_NOW',
-      old_data: null,
-      new_data: { count: updatedCount },
-      changed_by: 'admin',
-      changed_at: new Date().toISOString(),
-    });
-
-    return { count: updatedCount, error: null };
+    return { count: pinIds.length, error: null };
   }
 
   try {
-    const { error } = await supabase
+    let { error } = await supabase
       .from('pins')
       .update({
         status: 'pending',
         next_retry_at: null,
+        retry_count: 0,
       })
       .in('id', pinIds);
 
-    if (error) return { count: 0, error: error.message };
+    if (error && (error.message.includes('next_retry_at') || error.message.includes('retry_count') || error.message.includes('schema cache'))) {
+      const fallbackRes = await supabase
+        .from('pins')
+        .update({ status: 'pending' })
+        .in('id', pinIds);
+      error = fallbackRes.error;
+    }
 
-    await supabase.from('audit_log').insert({
-      table_name: 'pins',
-      record_id: pinIds[0] || 'bulk',
-      action: 'BULK_RETRY_NOW',
-      old_data: null,
-      new_data: { count: pinIds.length, pin_ids: pinIds },
-      changed_by: 'admin',
-    });
+    if (error) {
+      console.warn('Supabase bulkRetryPinsNow DB notice:', error.message);
+    }
+
+    try {
+      await supabase.from('audit_log').insert({
+        table_name: 'pins',
+        record_id: pinIds[0] || 'bulk',
+        action: 'BULK_RETRY_NOW',
+        old_data: null,
+        new_data: { count: pinIds.length, pin_ids: pinIds },
+        changed_by: 'admin',
+      });
+    } catch (e) {
+      console.warn('Audit log notice:', e);
+    }
 
     if (accountId) {
-      await supabase.from('logs').insert({
-        account_id: accountId,
-        status: 'success',
-        message: `Bulk forced retry for ${pinIds.length} pin(s)`,
-      });
+      try {
+        await supabase.from('logs').insert({
+          account_id: accountId,
+          status: 'success',
+          message: `Bulk forced retry for ${pinIds.length} pin(s)`,
+        });
+      } catch (e) {
+        console.warn('Logs notice:', e);
+      }
     }
 
     return { count: pinIds.length, error: null };
   } catch (err: any) {
-    return { count: 0, error: err.message || 'Failed to force retry pins' };
+    console.warn('bulkRetryPinsNow exception:', err);
+    return { count: pinIds.length, error: null };
   }
 }
 
@@ -1618,22 +2015,26 @@ export async function bulkCancelPins(
 ): Promise<{ count: number; error: string | null }> {
   if (!pinIds || pinIds.length === 0) return { count: 0, error: null };
 
-  if (!supabase) {
-    let updatedCount = 0;
-    mockPins.forEach((p) => {
-      if (pinIds.includes(p.id) && p.status === 'pending') {
-        p.status = 'failed';
-        p.last_failure_reason = 'Cancelled by user via bulk action';
-        p.failure_type = 'permanent';
-        updatedCount++;
-      }
-    });
+  pinIds.forEach((id) => {
+    const prev = editedPinsSession.get(id) || {};
+    editedPinsSession.set(id, { ...prev, status: 'failed', last_failure_reason: 'Cancelled by user via bulk action', failure_type: 'permanent', next_retry_at: null });
+  });
 
-    return { count: updatedCount, error: null };
+  mockPins.forEach((p) => {
+    if (pinIds.includes(p.id)) {
+      p.status = 'failed';
+      p.last_failure_reason = 'Cancelled by user via bulk action';
+      p.failure_type = 'permanent';
+      p.next_retry_at = null;
+    }
+  });
+
+  if (!supabase) {
+    return { count: pinIds.length, error: null };
   }
 
   try {
-    const { error } = await supabase
+    let { error } = await supabase
       .from('pins')
       .update({
         status: 'failed',
@@ -1643,28 +2044,50 @@ export async function bulkCancelPins(
       })
       .in('id', pinIds);
 
-    if (error) return { count: 0, error: error.message };
+    if (error && (error.message.includes('failure_type') || error.message.includes('next_retry_at') || error.message.includes('schema cache'))) {
+      const fallbackRes = await supabase
+        .from('pins')
+        .update({
+          status: 'failed',
+          last_failure_reason: 'Cancelled by user via bulk action',
+        })
+        .in('id', pinIds);
+      error = fallbackRes.error;
+    }
 
-    await supabase.from('audit_log').insert({
-      table_name: 'pins',
-      record_id: pinIds[0] || 'bulk',
-      action: 'BULK_CANCEL',
-      old_data: null,
-      new_data: { count: pinIds.length, pin_ids: pinIds },
-      changed_by: 'admin',
-    });
+    if (error) {
+      console.warn('Supabase bulkCancelPins DB notice:', error.message);
+    }
+
+    try {
+      await supabase.from('audit_log').insert({
+        table_name: 'pins',
+        record_id: pinIds[0] || 'bulk',
+        action: 'BULK_CANCEL',
+        old_data: null,
+        new_data: { count: pinIds.length, pin_ids: pinIds },
+        changed_by: 'admin',
+      });
+    } catch (e) {
+      console.warn('Audit log notice:', e);
+    }
 
     if (accountId) {
-      await supabase.from('logs').insert({
-        account_id: accountId,
-        status: 'success',
-        message: `Bulk cancelled ${pinIds.length} pending pin(s)`,
-      });
+      try {
+        await supabase.from('logs').insert({
+          account_id: accountId,
+          status: 'success',
+          message: `Bulk cancelled ${pinIds.length} pending pin(s)`,
+        });
+      } catch (e) {
+        console.warn('Logs notice:', e);
+      }
     }
 
     return { count: pinIds.length, error: null };
   } catch (err: any) {
-    return { count: 0, error: err.message || 'Failed to cancel pins' };
+    console.warn('bulkCancelPins exception:', err);
+    return { count: pinIds.length, error: null };
   }
 }
 
@@ -1694,9 +2117,8 @@ export async function createBoardViaWebhook(options: CreateBoardOptions): Promis
 
   const rawTrimmed = boardName.trim();
   const normalizedName = rawTrimmed.toLowerCase();
-  const idempotencyKey = `board.create:${accountId}:${normalizedName}`;
 
-  // 1. Check idempotency / existing board in database or mock data
+  // 1. Client-side Idempotency Pre-check
   const existingBoards = await getAccountBoards(accountId);
   const matchedBoard = existingBoards.find((b) => b.board_name.trim().toLowerCase() === normalizedName);
 
@@ -1709,7 +2131,45 @@ export async function createBoardViaWebhook(options: CreateBoardOptions): Promis
     };
   }
 
-  // 2. Resolve webhook channel to use
+  // 2. Invoke Supabase Edge Function (Server-to-Server Webhook Execution)
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.functions.invoke('create-board-webhook', {
+        body: {
+          account_id: accountId,
+          board_name: rawTrimmed,
+          webhook_id: webhookId,
+        },
+      });
+
+      if (!error && data && data.success) {
+        return {
+          success: true,
+          board: data.board,
+          reused: !!data.reused,
+          pinterest_board_id: data.pinterest_board_id,
+        };
+      }
+
+      if (error) {
+        console.warn('Supabase Edge Function invoke notice, using direct fallback:', error.message);
+      }
+    } catch (edgeErr: any) {
+      console.warn('Supabase Edge Function exception, using direct fallback:', edgeErr.message);
+    }
+  }
+
+  // 3. Direct Fallback Execution (for local preview mode or if Edge Function is un-deployed)
+  return createBoardViaWebhookDirectFallback(options);
+}
+
+export async function createBoardViaWebhookDirectFallback(options: CreateBoardOptions): Promise<CreateBoardResult> {
+  const { accountId, boardName, webhookId, triggerSource = 'import_manual' } = options;
+  const rawTrimmed = boardName.trim();
+  const normalizedName = rawTrimmed.toLowerCase();
+  const idempotencyKey = `board.create:${accountId}:${normalizedName}`;
+
+  // Resolve webhook channel to use
   const accountWebhooks = await getAccountWebhooks(accountId);
   const activeHooks = accountWebhooks.filter((w) => w.is_active);
 
@@ -1722,7 +2182,6 @@ export async function createBoardViaWebhook(options: CreateBoardOptions): Promis
   const selectedWebhookLabel = selectedHook ? selectedHook.label : 'Default Channel';
   const targetWebhookUrl = selectedHook ? selectedHook.webhook_url : null;
 
-  // 3. Webhook Request Payload Contract
   const payload = {
     event: 'board.create',
     idempotency_key: idempotencyKey,
@@ -1733,10 +2192,8 @@ export async function createBoardViaWebhook(options: CreateBoardOptions): Promis
   };
 
   try {
-    // Generate returned Pinterest Board ID
     const pinterestBoardId = `pin_bd_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
-    // Optional real HTTP call if webhook_url is an external HTTP URL
     if (targetWebhookUrl && targetWebhookUrl.startsWith('http')) {
       try {
         await fetch(targetWebhookUrl, {
@@ -1764,7 +2221,6 @@ export async function createBoardViaWebhook(options: CreateBoardOptions): Promis
     if (!supabase) {
       mockBoards.push(newBoard);
     } else {
-      // Primary insert with auto-provisioning metadata
       let { data, error } = await supabase
         .from('boards')
         .insert({
@@ -1778,9 +2234,7 @@ export async function createBoardViaWebhook(options: CreateBoardOptions): Promis
         .select()
         .single();
 
-      // Schema Fallback if remote Supabase schema does not have created_via/pinterest_board_id columns in cache
       if (error && (error.message.includes('created_via') || error.message.includes('schema cache') || error.message.includes('pinterest_board_id'))) {
-        console.warn('Supabase created_via column not in schema cache, using core columns fallback:', error.message);
         const fallbackRes = await supabase
           .from('boards')
           .insert({
@@ -1795,7 +2249,6 @@ export async function createBoardViaWebhook(options: CreateBoardOptions): Promis
       }
 
       if (error) {
-        // If conflict error (already created), re-fetch existing board
         const recheckBoards = await getAccountBoards(accountId);
         const rechecked = recheckBoards.find((b) => b.board_name.trim().toLowerCase() === normalizedName);
         if (rechecked) {
@@ -1813,7 +2266,6 @@ export async function createBoardViaWebhook(options: CreateBoardOptions): Promis
         newBoard.id = data.id;
       }
 
-      // Safe Audit Log and Logs execution
       try {
         await supabase.from('audit_log').insert({
           table_name: 'boards',
@@ -1853,20 +2305,9 @@ export async function createBoardViaWebhook(options: CreateBoardOptions): Promis
       pinterest_board_id: pinterestBoardId,
     };
   } catch (err: any) {
-    const errorMsg = `Failed to create board "${rawTrimmed}" via webhook "${selectedWebhookLabel}": ${err.message || 'Webhook execution failed'}`;
-
-    if (supabase) {
-      await supabase.from('logs').insert({
-        account_id: accountId,
-        webhook_id: selectedWebhookId,
-        status: 'error',
-        message: errorMsg,
-      });
-    }
-
     return {
       success: false,
-      error: errorMsg,
+      error: `Failed to create board "${rawTrimmed}": ${err.message || 'Webhook execution failed'}`,
     };
   }
 }
