@@ -2324,24 +2324,88 @@ export async function createBoardViaWebhook(options: CreateBoardOptions): Promis
   return createBoardViaWebhookDirectFallback(options);
 }
 
+async function resolveWebhookChannel(accountId: string, preferredWebhookId?: string | null) {
+  const accountWebhooks = await getAccountWebhooks(accountId);
+  const activeHooks = accountWebhooks.filter((w) => w.is_active);
+
+  let selectedHook = activeHooks.find((h) => h.id === preferredWebhookId);
+  if (!selectedHook) {
+    selectedHook = activeHooks.find((h) => h.is_primary) || activeHooks[0];
+  }
+
+  return {
+    selectedWebhookId: selectedHook ? selectedHook.id : (preferredWebhookId || null),
+    selectedWebhookLabel: selectedHook ? selectedHook.label : 'Default Channel',
+    targetWebhookUrl: selectedHook ? selectedHook.webhook_url : null,
+  };
+}
+
+async function dispatchExternalWebhookPayload(url: string | null, payload: any) {
+  if (url && url.startsWith('http')) {
+    try {
+      await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(payload),
+        mode: 'no-cors',
+      });
+    } catch (e) {
+      console.warn('External webhook HTTP notice:', e);
+    }
+  }
+}
+
+async function recordBoardCreationLogs(params: {
+  accountId: string;
+  boardId: string;
+  boardName: string;
+  idempotencyKey: string;
+  selectedWebhookId: string | null;
+  selectedWebhookLabel: string;
+  pinterestBoardId: string;
+  triggerSource: string;
+}) {
+  if (!supabase) return;
+
+  try {
+    await supabase.from('audit_log').insert({
+      table_name: 'boards',
+      record_id: params.boardId,
+      action: 'BOARD_AUTO_CREATE',
+      old_data: null,
+      new_data: {
+        account_id: params.accountId,
+        board_name: params.boardName,
+        idempotency_key: params.idempotencyKey,
+        webhook_id: params.selectedWebhookId,
+        pinterest_board_id: params.pinterestBoardId,
+        trigger_source: params.triggerSource,
+      },
+      changed_by: 'admin',
+    });
+  } catch (auditErr) {
+    console.warn('Audit log notice:', auditErr);
+  }
+
+  try {
+    await supabase.from('logs').insert({
+      account_id: params.accountId,
+      webhook_id: params.selectedWebhookId,
+      status: 'success',
+      message: `Created board "${params.boardName}" in Pinterest via webhook "${params.selectedWebhookLabel}" (Pinterest ID: ${params.pinterestBoardId})`,
+    });
+  } catch (logErr) {
+    console.warn('Logs notice:', logErr);
+  }
+}
+
 export async function createBoardViaWebhookDirectFallback(options: CreateBoardOptions): Promise<CreateBoardResult> {
   const { accountId, boardName, webhookId, triggerSource = 'import_manual' } = options;
   const rawTrimmed = boardName.trim();
   const normalizedName = rawTrimmed.toLowerCase();
   const idempotencyKey = `board.create:${accountId}:${normalizedName}`;
 
-  // Resolve webhook channel to use
-  const accountWebhooks = await getAccountWebhooks(accountId);
-  const activeHooks = accountWebhooks.filter((w) => w.is_active);
-
-  let selectedHook = activeHooks.find((h) => h.id === webhookId);
-  if (!selectedHook) {
-    selectedHook = activeHooks.find((h) => h.is_primary) || activeHooks[0];
-  }
-
-  const selectedWebhookId = selectedHook ? selectedHook.id : (webhookId || null);
-  const selectedWebhookLabel = selectedHook ? selectedHook.label : 'Default Channel';
-  const targetWebhookUrl = selectedHook ? selectedHook.webhook_url : null;
+  const { selectedWebhookId, selectedWebhookLabel, targetWebhookUrl } = await resolveWebhookChannel(accountId, webhookId);
 
   const payload = {
     event: 'board.create',
@@ -2354,19 +2418,7 @@ export async function createBoardViaWebhookDirectFallback(options: CreateBoardOp
 
   try {
     const pinterestBoardId = `pin_bd_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-
-    if (targetWebhookUrl && targetWebhookUrl.startsWith('http')) {
-      try {
-        await fetch(targetWebhookUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain' },
-          body: JSON.stringify(payload),
-          mode: 'no-cors',
-        });
-      } catch (e) {
-        console.warn('External webhook HTTP notice:', e);
-      }
-    }
+    await dispatchExternalWebhookPayload(targetWebhookUrl, payload);
 
     const newBoard: Board = {
       id: `board-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
@@ -2427,36 +2479,16 @@ export async function createBoardViaWebhookDirectFallback(options: CreateBoardOp
         newBoard.id = data.id;
       }
 
-      try {
-        await supabase.from('audit_log').insert({
-          table_name: 'boards',
-          record_id: newBoard.id,
-          action: 'BOARD_AUTO_CREATE',
-          old_data: null,
-          new_data: {
-            account_id: accountId,
-            board_name: rawTrimmed,
-            idempotency_key: idempotencyKey,
-            webhook_id: selectedWebhookId,
-            pinterest_board_id: pinterestBoardId,
-            trigger_source: triggerSource,
-          },
-          changed_by: 'admin',
-        });
-      } catch (auditErr) {
-        console.warn('Audit log notice:', auditErr);
-      }
-
-      try {
-        await supabase.from('logs').insert({
-          account_id: accountId,
-          webhook_id: selectedWebhookId,
-          status: 'success',
-          message: `Created board "${rawTrimmed}" in Pinterest via webhook "${selectedWebhookLabel}" (Pinterest ID: ${pinterestBoardId})`,
-        });
-      } catch (logErr) {
-        console.warn('Logs notice:', logErr);
-      }
+      await recordBoardCreationLogs({
+        accountId,
+        boardId: newBoard.id,
+        boardName: rawTrimmed,
+        idempotencyKey,
+        selectedWebhookId,
+        selectedWebhookLabel,
+        pinterestBoardId,
+        triggerSource,
+      });
     }
 
     return {

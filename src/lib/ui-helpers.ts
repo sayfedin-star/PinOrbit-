@@ -90,25 +90,7 @@ export function escapeHtml(str: string): string {
     .replace(/'/g, '&#039;');
 }
 
-export function renderSkeletonRows(count = 3, cols = 5): string {
-  return Array.from({ length: count })
-    .map(
-      () => `
-      <tr class="animate-pulse">
-        ${Array.from({ length: cols })
-          .map(
-            () => `
-            <td class="px-6 py-4">
-              <div class="h-4 w-3/4 rounded bg-muted/80"></div>
-            </td>
-          `
-          )
-          .join('')}
-      </tr>
-    `
-    )
-    .join('');
-}
+
 
 export function renderEmptyStateHTML(title: string, description: string, icon: 'folder' | 'inbox' | 'alert-circle' = 'inbox'): string {
   let iconSvg = '';

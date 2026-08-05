@@ -16,21 +16,14 @@ export async function getCurrentSession(): Promise<Session | null> {
   }
 }
 
-export async function getCurrentUser(): Promise<User | null> {
-  const session = await getCurrentSession();
-  return session?.user ?? null;
-}
-
 /**
  * Checks authentication client-side.
  * If Supabase is configured and user is not authenticated, redirects to /login.
- * Returns true if authenticated or if running in mock/demo preview mode.
  */
 export async function requireAuth(redirectPath: string = '/login'): Promise<boolean> {
   if (typeof window === 'undefined') return true;
 
-  // If Supabase credentials are not configured at all or demo mode is active
-  if (!isSupabaseConfigured || !supabase || localStorage.getItem('pinorbit_demo_auth') === 'true') {
+  if (!isSupabaseConfigured || !supabase) {
     return true;
   }
 
