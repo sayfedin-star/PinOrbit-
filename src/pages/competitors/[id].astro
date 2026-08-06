@@ -502,7 +502,8 @@ export async function getStaticPaths() {
 
   let competitorData: Competitor | null = null;
   let boardsList: CompetitorBoard[] = [];
-  let snapshotsList: CompetitorSnapshot[] = [];
+  let snapshotsList: CompetitorSnapshot[] = []; // raw snapshots (DESC) — drives history log table
+  let chartSnapshotsList: CompetitorSnapshot[] = []; // daily rollup (ASC) — drives growth chart
   let deltasData: CompetitorDeltaStats | null = null;
 
   // Analytics Engine State
@@ -637,11 +638,16 @@ export async function getStaticPaths() {
 
   // --- Core Analytics Logic ---
 
+
   function getFilteredSnapshots(): CompetitorSnapshot[] {
-    if (!snapshotsList || snapshotsList.length === 0) return [];
-    
-    // Sort chronologically
-    const sorted = [...snapshotsList].sort((a, b) => new Date(a.recorded_at).getTime() - new Date(b.recorded_at).getTime());
+    // Chart renders from daily rollup data (chartSnapshotsList).
+    // Falls back to raw snapshotsList when chartSnapshotsList is empty
+    // (e.g. in mock/unconfigured mode where only snapshotsList is populated).
+    const source = chartSnapshotsList.length > 0 ? chartSnapshotsList : snapshotsList;
+    if (!source || source.length === 0) return [];
+
+    // Daily rollup is already ASC from the server; sort here is a safety guard
+    const sorted = [...source].sort((a, b) => new Date(a.recorded_at).getTime() - new Date(b.recorded_at).getTime());
     const now = Date.now();
 
     let filtered = sorted;
@@ -667,6 +673,7 @@ export async function getStaticPaths() {
 
     return filtered.length > 0 ? filtered : sorted;
   }
+
 
   function renderVisualGrowthChart(snapshots: CompetitorSnapshot[]) {
     if (!growthChartSvg) return;
@@ -1158,7 +1165,10 @@ export async function getStaticPaths() {
     const details = await getCompetitorDetails(competitorId);
     competitorData = details.competitor;
     boardsList = details.boards;
+    // Raw snapshots (DESC) — history log table keeps reading snapshotsList
     snapshotsList = details.snapshots || [];
+    // Chart data: daily rollup primary; falls back to raw snapshots when daily table is empty
+    chartSnapshotsList = (details as any).chartSnapshots || details.snapshots || [];
     deltasData = details.deltas;
 
     if (!competitorData) {
@@ -1239,6 +1249,7 @@ export async function getStaticPaths() {
     }
 
     // Populate Dropdowns & Render Analytics Engine Cards
+    // Chart uses daily rollup data (chartSnapshotsList); filter is applied over it
     populateMonthDropdowns();
     const filteredSnapshots = getFilteredSnapshots();
     renderVisualGrowthChart(filteredSnapshots);

@@ -4,6 +4,7 @@ import type {
   CompetitorSnapshot,
   CompetitorBoard,
   CompetitorDeltaStats,
+  CompetitorDailySnapshot,
   ParsedPinterestPayload,
   PinterestPayloadType,
 } from './types';
@@ -469,15 +470,33 @@ export async function getCompetitorDetails(competitorId: string): Promise<{
   }
 
   try {
-    const [compRes, snapRes, boardRes] = await Promise.all([
+    // Fetch competitor profile, raw snapshots (for history log), and boards in parallel.
+    // Daily rollup is fetched separately so we can apply the fallback logic cleanly.
+    const [compRes, rawSnapRes, boardRes, dailySnapRes] = await Promise.all([
       supabase.from('competitors').select('*').eq('id', competitorId).single(),
-      supabase.from('competitor_snapshots').select('*').eq('competitor_id', competitorId).order('recorded_at', { ascending: true }),
-      supabase.from('competitor_boards').select('*').eq('competitor_id', competitorId).order('last_pinned_at', { ascending: false }),
+      // Raw snapshots — always fetched; used for the intraday history log table (recorded_at DESC)
+      supabase
+        .from('competitor_snapshots')
+        .select('*')
+        .eq('competitor_id', competitorId)
+        .order('recorded_at', { ascending: false }),
+      supabase
+        .from('competitor_boards')
+        .select('*')
+        .eq('competitor_id', competitorId)
+        .order('last_pinned_at', { ascending: false }),
+      // Daily rollup — primary source for growth chart and trend indicators
+      supabase
+        .from('competitor_daily_snapshots')
+        .select('*')
+        .eq('competitor_id', competitorId)
+        .order('snapshot_date', { ascending: true }),
     ]);
 
     const competitor = compRes.data as Competitor | null;
-    const snapshots = (snapRes.data || []) as CompetitorSnapshot[];
+    const rawSnapshots = (rawSnapRes.data || []) as CompetitorSnapshot[];
     const boards = (boardRes.data || []) as CompetitorBoard[];
+    const dailyRows = (dailySnapRes.data || []) as CompetitorDailySnapshot[];
 
     if (competitor) {
       competitor.profile_reach = Number(competitor.profile_reach) || 0;
@@ -488,17 +507,82 @@ export async function getCompetitorDetails(competitorId: string): Promise<{
       competitor.boards_count = boards.length;
     }
 
-    const prevSnap = snapshots.length > 1 ? snapshots[snapshots.length - 2] : undefined;
-    const deltas = competitor ? calculateCompetitorDeltas(competitor, prevSnap) : calculateCompetitorDeltas({ profile_reach: 0, profile_views: 0, follower_count: 0, pin_count: 0 });
+    // --- Chart data strategy ---
+    // Primary: competitor_daily_snapshots (one canonical row per day, ordered ASC)
+    // Fallback: competitor_snapshots grouped ascending (when daily table is empty)
+    let chartSnapshots: CompetitorSnapshot[];
 
-    return { competitor, snapshots, boards, deltas };
+    if (dailyRows.length > 0) {
+      // Normalise daily rows into CompetitorSnapshot shape so chart rendering requires no changes
+      chartSnapshots = dailyRows.map((d) => ({
+        id: d.id,
+        competitor_id: d.competitor_id,
+        profile_reach: Number(d.profile_reach) || 0,
+        profile_views: Number(d.profile_views) || 0,
+        follower_count: Number(d.follower_count) || 0,
+        pin_count: Number(d.pin_count) || 0,
+        // Map snapshot_date (DATE) to recorded_at (TIMESTAMPTZ) expected by chart logic
+        recorded_at: d.snapshot_date + 'T00:00:00.000Z',
+      }));
+    } else {
+      // Fallback: use raw snapshots in chronological order for chart rendering
+      chartSnapshots = [...rawSnapshots].sort(
+        (a, b) => new Date(a.recorded_at).getTime() - new Date(b.recorded_at).getTime()
+      );
+    }
+
+    // Deltas are computed from chart snapshots (most recent two data points)
+    const prevSnap =
+      chartSnapshots.length > 1 ? chartSnapshots[chartSnapshots.length - 2] : undefined;
+    const deltas = competitor
+      ? calculateCompetitorDeltas(competitor, prevSnap)
+      : calculateCompetitorDeltas({
+          profile_reach: 0,
+          profile_views: 0,
+          follower_count: 0,
+          pin_count: 0,
+        });
+
+    // Return:
+    //   snapshots → chart data (daily rollup primary, raw fallback)
+    //   rawSnapshots are not in the return shape but the page's history log
+    //   table already re-fetches them via renderSnapshotsLogTable() which reads
+    //   from snapshotsList (populated from this same snapshots field).
+    //   To keep the raw history log working correctly we return raw snapshots
+    //   DESC so the table renders newest-first.
+    return {
+      competitor,
+      snapshots: rawSnapshots, // raw snapshots (DESC) for history log table
+      boards,
+      deltas,
+      // Expose chart data separately via the extended shape below
+      chartSnapshots,
+    } as {
+      competitor: Competitor | null;
+      snapshots: CompetitorSnapshot[];
+      boards: CompetitorBoard[];
+      deltas: CompetitorDeltaStats;
+      chartSnapshots: CompetitorSnapshot[];
+    };
   } catch (err) {
     console.error('Error fetching competitor details:', err);
     return {
       competitor: null,
       snapshots: [],
       boards: [],
-      deltas: calculateCompetitorDeltas({ profile_reach: 0, profile_views: 0, follower_count: 0, pin_count: 0 }),
+      deltas: calculateCompetitorDeltas({
+        profile_reach: 0,
+        profile_views: 0,
+        follower_count: 0,
+        pin_count: 0,
+      }),
+      chartSnapshots: [],
+    } as {
+      competitor: Competitor | null;
+      snapshots: CompetitorSnapshot[];
+      boards: CompetitorBoard[];
+      deltas: CompetitorDeltaStats;
+      chartSnapshots: CompetitorSnapshot[];
     };
   }
 }

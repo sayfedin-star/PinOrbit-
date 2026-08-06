@@ -174,6 +174,20 @@ export interface CompetitorSnapshot {
   recorded_at: string;
 }
 
+/** Mirrors the competitor_daily_snapshots rollup table.
+ *  Used internally in getCompetitorDetails() to type the daily-snapshot
+ *  query result before it is normalised into CompetitorSnapshot[] for charts. */
+export interface CompetitorDailySnapshot {
+  id: string;
+  competitor_id: string;
+  snapshot_date: string; // ISO date string, e.g. "2026-08-05"
+  profile_reach: number;
+  profile_views: number;
+  follower_count: number;
+  pin_count: number;
+  created_at: string;
+}
+
 export interface CompetitorBoard {
   id: string;
   competitor_id: string;
