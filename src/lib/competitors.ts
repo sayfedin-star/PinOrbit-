@@ -657,6 +657,53 @@ export async function addCompetitor(data: {
 }
 
 /**
+ * Update an existing competitor's profile metadata.
+ */
+export async function updateCompetitor(
+  id: string,
+  data: {
+    full_name?: string;
+    username?: string;
+    account_type?: string;
+    niche?: string;
+    tags?: string[];
+  }
+): Promise<Competitor> {
+  if (!isSupabaseConfigured || !supabase) {
+    const idx = mockCompetitors.findIndex((c) => c.id === id);
+    if (idx === -1) throw new Error('Competitor not found');
+    mockCompetitors[idx] = { ...mockCompetitors[idx], ...data };
+    return { ...mockCompetitors[idx] };
+  }
+
+  const tagsArr = Array.isArray(data.tags) ? data.tags : data.tags ? (data.tags as any as string).split(',').map((t: string) => t.trim()).filter(Boolean) : undefined;
+
+  const updatePayload: Record<string, any> = {};
+  if (data.full_name !== undefined) updatePayload.full_name = data.full_name;
+  if (data.username !== undefined) updatePayload.username = data.username.trim().replace(/^@/, '').toLowerCase();
+  if (data.account_type !== undefined) updatePayload.account_type = data.account_type;
+  if (data.niche !== undefined) updatePayload.niche = data.niche;
+  if (tagsArr !== undefined) updatePayload.tags = tagsArr;
+
+  const { error: updateErr } = await supabase
+    .from('competitors')
+    .update(updatePayload)
+    .eq('id', id);
+
+  if (updateErr) throw new Error(updateErr.message);
+
+  const { data: updated, error: fetchErr } = await supabase
+    .from('competitors')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (fetchErr || !updated) throw new Error(fetchErr?.message || 'Failed to fetch updated competitor');
+
+  return updated as Competitor;
+}
+
+/**
  * Delete a competitor.
  */
 export async function deleteCompetitor(id: string): Promise<boolean> {
