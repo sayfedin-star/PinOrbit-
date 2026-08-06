@@ -30,7 +30,7 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
         </svg>
-        <span>Track Competitor</span>
+        <span>Track Profile</span>
       </button>
     </div>
   </div>
@@ -51,7 +51,7 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
   <!-- Summary KPI Cards Grid -->
   <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6" id="kpi-cards-grid">
     <div class="rounded-xl border border-border bg-card p-5 shadow-sm space-y-1">
-      <span class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Tracked Competitors</span>
+      <span class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Tracked Profiles</span>
       <div class="text-2xl font-bold tracking-tight text-foreground" id="kpi-total-competitors">-</div>
       <p class="text-[11px] text-muted-foreground">Active monitored accounts</p>
     </div>
@@ -59,11 +59,11 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
     <div class="rounded-xl border border-border bg-card p-5 shadow-sm space-y-1">
       <span class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Average Monthly Reach</span>
       <div class="text-2xl font-bold tracking-tight text-emerald-500" id="kpi-avg-reach">-</div>
-      <p class="text-[11px] text-muted-foreground">Across all competitors</p>
+      <p class="text-[11px] text-muted-foreground">Across monitored profiles</p>
     </div>
 
     <div class="rounded-xl border border-border bg-card p-5 shadow-sm space-y-1">
-      <span class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Top Competitor</span>
+      <span class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Top Reach Profile</span>
       <div class="text-lg font-bold tracking-tight text-foreground truncate" id="kpi-top-competitor">-</div>
       <p class="text-[11px] text-muted-foreground" id="kpi-top-reach">Highest monthly reach</p>
     </div>
@@ -77,11 +77,34 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
 
   <!-- Competitors Table Workspace -->
   <div class="rounded-xl border border-border bg-card shadow-sm overflow-hidden mb-8">
-    <div class="flex items-center justify-between border-b border-border px-6 py-4 bg-muted/30">
-      <div>
-        <h2 class="text-sm font-bold text-foreground">Tracked Pinterest Competitors</h2>
-        <p class="text-xs text-muted-foreground">Real-time metrics, reach analytics, and profile deep-dives.</p>
+    <!-- Header Controls: Tabs & Tag Filters -->
+    <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-border px-6 py-4 bg-muted/30">
+      <div class="flex items-center gap-4 flex-wrap">
+        <!-- Account Type Filter Tabs -->
+        <div class="flex items-center gap-1 bg-muted/60 p-1 rounded-xl border border-border/60">
+          <button data-type-tab="all" class="account-type-tab-btn rounded-lg px-3.5 py-1.5 text-xs font-semibold bg-background text-foreground shadow-xs transition-all">
+            All Profiles
+          </button>
+          <button data-type-tab="own" class="account-type-tab-btn rounded-lg px-3.5 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all flex items-center gap-1">
+            <span>👤 My Accounts</span>
+          </button>
+          <button data-type-tab="competitor" class="account-type-tab-btn rounded-lg px-3.5 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all flex items-center gap-1">
+            <span>🎯 Competitors</span>
+          </button>
+        </div>
+
+        <!-- Dynamic Tag Dropdown Filter -->
+        <div class="flex items-center gap-1.5">
+          <label for="tag-filter-select" class="text-xs font-semibold text-muted-foreground flex items-center gap-1">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><circle cx="7" cy="7" r=".5" fill="currentColor"/></svg>
+            <span>Tag:</span>
+          </label>
+          <select id="tag-filter-select" class="rounded-xl border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground focus:border-primary focus:outline-none">
+            <option value="all">All Tags</option>
+          </select>
+        </div>
       </div>
+
       <span class="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary" id="competitor-badge-count">
         0 Profiles
       </span>
@@ -91,14 +114,14 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
       <table class="w-full text-left text-xs text-muted-foreground">
         <thead class="border-b border-border bg-muted/40 text-foreground font-semibold">
           <tr>
-            <th scope="col" class="py-3.5 px-6">Competitor Profile</th>
+            <th scope="col" class="py-3.5 px-6">Profile & Tags</th>
+            <th scope="col" class="py-3.5 px-4">Type</th>
             <th scope="col" class="py-3.5 px-4">Niche</th>
             <th scope="col" class="py-3.5 px-4">Monthly Reach</th>
             <th scope="col" class="py-3.5 px-4">Profile Views</th>
             <th scope="col" class="py-3.5 px-4">Followers</th>
             <th scope="col" class="py-3.5 px-4">Total Pins</th>
             <th scope="col" class="py-3.5 px-4">Strategy Age</th>
-            <th scope="col" class="py-3.5 px-4">Last Checked</th>
             <th scope="col" class="py-3.5 px-6 text-right">Actions</th>
           </tr>
         </thead>
@@ -113,7 +136,7 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
     </div>
   </div>
 
-  <!-- MODAL 1: Track Competitor Modal -->
+  <!-- MODAL 1: Track Profile Modal -->
   <div id="add-competitor-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" aria-modal="true" role="dialog">
     <div id="add-competitor-backdrop" class="fixed inset-0"></div>
     <div class="relative w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-5 z-10">
@@ -124,7 +147,7 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
               <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
             </svg>
           </div>
-          <h3 class="text-base font-bold text-foreground">Track Pinterest Competitor</h3>
+          <h3 class="text-base font-bold text-foreground">Track Pinterest Profile</h3>
         </div>
         <button id="close-add-competitor-modal" class="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -134,6 +157,34 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
       <div id="add-competitor-error" class="hidden rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-500"></div>
 
       <form id="add-competitor-form" class="space-y-4">
+        <!-- Account Classification Switch -->
+        <div class="space-y-1.5">
+          <label class="block text-xs font-semibold text-foreground">Profile Classification *</label>
+          <div class="grid grid-cols-2 gap-3">
+            <label class="flex items-center justify-between rounded-xl border border-border bg-background p-3 cursor-pointer hover:border-primary has-[:checked]:border-primary has-[:checked]:bg-primary/5 transition-all">
+              <div class="flex items-center gap-2">
+                <span class="text-sm">🎯</span>
+                <div>
+                  <div class="text-xs font-bold text-foreground">Competitor</div>
+                  <div class="text-[10px] text-muted-foreground">External target profile</div>
+                </div>
+              </div>
+              <input type="radio" name="account_type_radio" value="competitor" checked class="text-primary focus:ring-primary" />
+            </label>
+
+            <label class="flex items-center justify-between rounded-xl border border-border bg-background p-3 cursor-pointer hover:border-primary has-[:checked]:border-primary has-[:checked]:bg-primary/5 transition-all">
+              <div class="flex items-center gap-2">
+                <span class="text-sm">👤</span>
+                <div>
+                  <div class="text-xs font-bold text-foreground">My Account</div>
+                  <div class="text-[10px] text-muted-foreground">Internal brand account</div>
+                </div>
+              </div>
+              <input type="radio" name="account_type_radio" value="own" class="text-primary focus:ring-primary" />
+            </label>
+          </div>
+        </div>
+
         <div class="space-y-1.5">
           <label for="competitor-username-input" class="block text-xs font-semibold text-foreground">Pinterest Username *</label>
           <div class="relative">
@@ -148,14 +199,26 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
           </div>
         </div>
 
-        <div class="space-y-1.5">
-          <label for="competitor-niche-input" class="block text-xs font-semibold text-foreground">Niche / Category</label>
-          <input
-            id="competitor-niche-input"
-            type="text"
-            placeholder="e.g. Food & Cooking, Fitness, Travel"
-            class="w-full rounded-xl border border-border bg-background py-2.5 px-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-          />
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="space-y-1.5">
+            <label for="competitor-niche-input" class="block text-xs font-semibold text-foreground">Niche / Category</label>
+            <input
+              id="competitor-niche-input"
+              type="text"
+              placeholder="e.g. Food & Cooking"
+              class="w-full rounded-xl border border-border bg-background py-2.5 px-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+          </div>
+
+          <div class="space-y-1.5">
+            <label for="competitor-tags-input" class="block text-xs font-semibold text-foreground">Tags (Comma-Separated)</label>
+            <input
+              id="competitor-tags-input"
+              type="text"
+              placeholder="e.g. Main, E-com, Priority"
+              class="w-full rounded-xl border border-border bg-background py-2.5 px-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+          </div>
         </div>
 
         <div class="space-y-1.5">
@@ -188,7 +251,7 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
     </div>
   </div>
 
-  <!-- MODAL 2: DevTools JSON Payload Parser Modal (Fail-Safe Feature) -->
+  <!-- MODAL 2: DevTools JSON Payload Parser Modal -->
   <div id="paste-payload-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" aria-modal="true" role="dialog">
     <div id="paste-payload-backdrop" class="fixed inset-0"></div>
     <div class="relative w-full max-w-2xl rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-5 z-10">
@@ -215,13 +278,13 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
       <form id="paste-payload-form" class="space-y-4">
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div class="space-y-1.5">
-            <label for="payload-target-competitor-select" class="block text-xs font-semibold text-foreground">Target Competitor *</label>
+            <label for="payload-target-competitor-select" class="block text-xs font-semibold text-foreground">Target Profile *</label>
             <select
               id="payload-target-competitor-select"
               required
               class="w-full rounded-xl border border-border bg-background py-2.5 px-3 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
             >
-              <option value="" disabled selected>Select competitor...</option>
+              <option value="" disabled selected>Select profile...</option>
             </select>
           </div>
 
@@ -282,12 +345,20 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
   let competitorsList: Competitor[] = [];
   let selectedCompetitorIdForPayload: string | null = null;
 
+  // Filter State
+  let activeTypeTab: 'all' | 'own' | 'competitor' = 'all';
+  let selectedTag = 'all';
+
   // DOM Elements
   const competitorsTableBody = document.getElementById('competitors-table-body') as HTMLElement;
   const competitorBadgeCount = document.getElementById('competitor-badge-count') as HTMLElement;
   const statusBanner = document.getElementById('competitor-status-banner') as HTMLElement;
   const statusText = document.getElementById('competitor-status-text') as HTMLElement;
   const dismissStatusBannerBtn = document.getElementById('dismiss-status-banner') as HTMLElement;
+
+  // Tabs & Tag Select
+  const typeTabBtns = document.querySelectorAll<HTMLButtonElement>('.account-type-tab-btn');
+  const tagFilterSelect = document.getElementById('tag-filter-select') as HTMLSelectElement;
 
   // KPI elements
   const kpiTotalCompetitors = document.getElementById('kpi-total-competitors') as HTMLElement;
@@ -319,17 +390,6 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
     return num.toLocaleString('en-US');
   }
 
-  function formatRelativeDate(isoStr?: string | null): string {
-    if (!isoStr) return 'Never';
-    const date = new Date(isoStr);
-    if (isNaN(date.getTime())) return 'Never';
-    const diffHours = Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60));
-    if (diffHours < 1) return 'Just now';
-    if (diffHours < 24) return `${diffHours}h ago`;
-    const diffDays = Math.floor(diffHours / 24);
-    return `${diffDays}d ago`;
-  }
-
   function showStatus(message: string, isError = false) {
     if (!statusBanner || !statusText) return;
     statusText.textContent = message;
@@ -349,15 +409,29 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
 
   async function loadWorkspaceData() {
     competitorsList = await getCompetitors();
+    populateTagDropdown();
     renderKPIs();
     renderCompetitorsTable();
     populatePayloadSelect();
   }
 
+  function populateTagDropdown() {
+    if (!tagFilterSelect) return;
+    const tagsSet = new Set<string>();
+    competitorsList.forEach(c => {
+      if (Array.isArray(c.tags)) {
+        c.tags.forEach(t => tagsSet.add(t));
+      }
+    });
+
+    const tagsArr = Array.from(tagsSet).sort();
+    tagFilterSelect.innerHTML = `<option value="all">All Tags</option>` +
+      tagsArr.map(t => `<option value="${t}" ${selectedTag === t ? 'selected' : ''}>#${t}</option>`).join('');
+  }
+
   function renderKPIs() {
     const count = competitorsList.length;
     if (kpiTotalCompetitors) kpiTotalCompetitors.textContent = String(count);
-    if (competitorBadgeCount) competitorBadgeCount.textContent = `${count} ${count === 1 ? 'Profile' : 'Profiles'}`;
 
     if (count === 0) {
       if (kpiAvgReach) kpiAvgReach.textContent = '0';
@@ -383,21 +457,44 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
   function renderCompetitorsTable() {
     if (!competitorsTableBody) return;
 
-    if (competitorsList.length === 0) {
+    // Filter by Account Type tab
+    let filtered = competitorsList.filter(c => {
+      if (activeTypeTab === 'own') return c.account_type === 'own';
+      if (activeTypeTab === 'competitor') return c.account_type !== 'own';
+      return true;
+    });
+
+    // Filter by Tag
+    if (selectedTag !== 'all') {
+      filtered = filtered.filter(c => Array.isArray(c.tags) && c.tags.includes(selectedTag));
+    }
+
+    if (competitorBadgeCount) competitorBadgeCount.textContent = `${filtered.length} ${filtered.length === 1 ? 'Profile' : 'Profiles'}`;
+
+    if (filtered.length === 0) {
       competitorsTableBody.innerHTML = `
         <tr>
           <td colspan="9" class="py-12 text-center text-xs text-muted-foreground">
-            No competitors tracked yet. Click <span class="font-semibold text-foreground">Track Competitor</span> above to start monitoring!
+            No profile records match your selected filters. Click <span class="font-semibold text-foreground">Track Profile</span> to add profiles!
           </td>
         </tr>
       `;
       return;
     }
 
-    competitorsTableBody.innerHTML = competitorsList
+    competitorsTableBody.innerHTML = filtered
       .map((c) => {
         const avatar = c.avatar_url || `https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&h=200&q=80`;
         const strategyAgeText = c.strategy_age_days ? `${c.strategy_age_days}d active` : 'Unknown';
+
+        const isOwn = c.account_type === 'own';
+        const typePill = isOwn
+          ? `<span class="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-bold text-blue-500 border border-blue-500/20">👤 My Account</span>`
+          : `<span class="inline-flex items-center gap-1 rounded-full bg-purple-500/10 px-2 py-0.5 text-[10px] font-bold text-purple-500 border border-purple-500/20">🎯 Competitor</span>`;
+
+        const tagsHtml = (Array.isArray(c.tags) && c.tags.length > 0)
+          ? `<div class="flex flex-wrap items-center gap-1 pt-1">${c.tags.map(t => `<span class="rounded bg-muted px-1.5 py-0.5 text-[9.5px] font-semibold text-muted-foreground border border-border/50">#${t}</span>`).join('')}</div>`
+          : '';
 
         return `
           <tr class="hover:bg-muted/30 transition-colors">
@@ -414,8 +511,12 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
                       <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
                     </a>
                   </div>
+                  ${tagsHtml}
                 </div>
               </div>
+            </td>
+            <td class="py-4 px-4">
+              ${typePill}
             </td>
             <td class="py-4 px-4">
               <span class="inline-flex items-center rounded-md bg-muted px-2 py-1 text-[11px] font-medium text-foreground">
@@ -439,15 +540,12 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
                 ${strategyAgeText}
               </span>
             </td>
-            <td class="py-4 px-4 text-muted-foreground text-[11px]">
-              ${formatRelativeDate(c.last_checked_at)}
-            </td>
             <td class="py-4 px-6 text-right">
               <div class="flex items-center justify-end gap-2">
                 <button
                   data-paste-id="${c.id}"
                   class="paste-payload-btn rounded-lg border border-border p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                  title="Paste DevTools Payload for this competitor"
+                  title="Paste DevTools Payload for this profile"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
                 </button>
@@ -463,7 +561,7 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
                 <button
                   data-delete-id="${c.id}"
                   class="delete-competitor-btn rounded-lg p-1.5 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors"
-                  title="Delete competitor"
+                  title="Delete profile"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
                 </button>
@@ -485,10 +583,10 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
     document.querySelectorAll('.delete-competitor-btn').forEach((btn) => {
       btn.addEventListener('click', async (e) => {
         const id = (e.currentTarget as HTMLElement).getAttribute('data-delete-id');
-        if (id && confirm('Are you sure you want to remove this competitor from tracking?')) {
+        if (id && confirm('Are you sure you want to remove this profile from tracking?')) {
           try {
             await deleteCompetitor(id);
-            showStatus('Competitor removed successfully.');
+            showStatus('Profile removed successfully.');
             await loadWorkspaceData();
           } catch (err: any) {
             showStatus(`Failed to delete: ${err.message}`, true);
@@ -498,10 +596,31 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
     });
   }
 
+  // Account Type Tab Buttons Listener
+  typeTabBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      typeTabBtns.forEach(b => {
+        b.className = 'account-type-tab-btn rounded-lg px-3.5 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all flex items-center gap-1';
+      });
+      btn.className = 'account-type-tab-btn rounded-lg px-3.5 py-1.5 text-xs font-semibold bg-background text-foreground shadow-xs transition-all flex items-center gap-1';
+      
+      activeTypeTab = (btn.dataset.typeTab as any) || 'all';
+      renderCompetitorsTable();
+    });
+  });
+
+  // Tag Dropdown Filter Listener
+  if (tagFilterSelect) {
+    tagFilterSelect.addEventListener('change', () => {
+      selectedTag = tagFilterSelect.value;
+      renderCompetitorsTable();
+    });
+  }
+
   function populatePayloadSelect() {
     if (!payloadTargetSelect) return;
     payloadTargetSelect.innerHTML = `
-      <option value="" disabled selected>Select competitor...</option>
+      <option value="" disabled selected>Select profile...</option>
       ${competitorsList
         .map(
           (c) => `<option value="${c.id}" ${selectedCompetitorIdForPayload === c.id ? 'selected' : ''}>${c.full_name || c.username} (@${c.username})</option>`
@@ -510,7 +629,7 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
     `;
   }
 
-  // Track Competitor Modal
+  // Track Profile Modal
   function openAddModal() {
     if (addCompetitorError) addCompetitorError.classList.add('hidden');
     if (addCompetitorForm) addCompetitorForm.reset();
@@ -530,8 +649,12 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
   if (addCompetitorForm) {
     addCompetitorForm.addEventListener('submit', async (e) => {
       e.preventDefault();
+      const typeRadio = document.querySelector<HTMLInputElement>('input[name="account_type_radio"]:checked');
+      const accountTypeVal = typeRadio ? typeRadio.value : 'competitor';
+
       const usernameInput = (document.getElementById('competitor-username-input') as HTMLInputElement).value;
       const nicheInput = (document.getElementById('competitor-niche-input') as HTMLInputElement).value;
+      const tagsInput = (document.getElementById('competitor-tags-input') as HTMLInputElement).value;
       const notesInput = (document.getElementById('competitor-notes-input') as HTMLTextAreaElement).value;
 
       try {
@@ -539,13 +662,15 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
           username: usernameInput,
           niche: nicheInput,
           notes: notesInput,
+          account_type: accountTypeVal as 'own' | 'competitor',
+          tags: tagsInput,
         });
         closeAddModal();
-        showStatus(`Competitor @${usernameInput.replace(/^@/, '')} added to monitoring workspace!`);
+        showStatus(`Profile @${usernameInput.replace(/^@/, '')} added to workspace!`);
         await loadWorkspaceData();
       } catch (err: any) {
         if (addCompetitorError) {
-          addCompetitorError.textContent = err.message || 'Failed to add competitor.';
+          addCompetitorError.textContent = err.message || 'Failed to add profile.';
           addCompetitorError.classList.remove('hidden');
         }
       }
@@ -615,7 +740,7 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
 
       if (!targetId) {
         if (pastePayloadError) {
-          pastePayloadError.textContent = 'Please select a target competitor.';
+          pastePayloadError.textContent = 'Please select a target profile.';
           pastePayloadError.classList.remove('hidden');
         }
         return;

@@ -156,6 +156,8 @@ export interface Competitor {
   website_url?: string | null;
   domain_verified?: boolean;
   last_pin_at?: string | null;
+  account_type?: 'own' | 'competitor' | string;
+  tags?: string[];
   created_at: string;
   boards_count?: number;
   strategy_age_days?: number;

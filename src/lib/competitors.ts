@@ -506,8 +506,20 @@ export async function getCompetitorDetails(competitorId: string): Promise<{
 /**
  * Add a new competitor.
  */
-export async function addCompetitor(data: { username: string; niche?: string; notes?: string }): Promise<Competitor> {
+export async function addCompetitor(data: {
+  username: string;
+  niche?: string;
+  notes?: string;
+  account_type?: 'own' | 'competitor' | string;
+  tags?: string[] | string;
+}): Promise<Competitor> {
   const cleanUsername = data.username.trim().replace(/^@/, '').toLowerCase();
+  const accountType = data.account_type || 'competitor';
+  const tagsArr = Array.isArray(data.tags)
+    ? data.tags
+    : typeof data.tags === 'string'
+      ? data.tags.split(',').map((t) => t.trim()).filter(Boolean)
+      : [];
 
   if (!isSupabaseConfigured || !supabase) {
     const newComp: Competitor = {
@@ -521,6 +533,8 @@ export async function addCompetitor(data: { username: string; niche?: string; no
       pin_count: 0,
       avatar_url: `https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&h=200&q=80`,
       notes: data.notes || '',
+      account_type: accountType,
+      tags: tagsArr,
       last_checked_at: null,
       created_at: new Date().toISOString(),
       boards_count: 0,
@@ -544,6 +558,8 @@ export async function addCompetitor(data: { username: string; niche?: string; no
         full_name: cleanUsername,
         niche: data.niche || 'General',
         notes: data.notes || '',
+        account_type: accountType,
+        tags: tagsArr,
       },
     ])
     .select()
