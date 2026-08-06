@@ -355,32 +355,40 @@ export function calculateCompetitorDeltas(
 /**
  * Finds the oldest board created date and calculates account strategy age in days.
  */
-export function calculateStrategyAge(boards: CompetitorBoard[]): { strategyAgeDays: number; oldestBoardDate: string | null } {
+export function calculateStrategyAge(boards: Array<{ created_at?: string; board_created_at?: string; last_pinned_at?: string }>): {
+  label: string;
+  days: number;
+  oldestBoardDate: string | null;
+} {
   if (!boards || boards.length === 0) {
-    return { strategyAgeDays: 0, oldestBoardDate: null };
+    return { label: 'Unknown', days: 0, oldestBoardDate: null };
   }
 
-  let oldestTimestamp = Infinity;
-  let oldestDateStr: string | null = null;
+  const dates = boards
+    .map(b => b.board_created_at || b.created_at || b.last_pinned_at)
+    .filter((d): d is string => !!d)
+    .map(d => new Date(d).getTime())
+    .filter(t => !isNaN(t));
 
-  for (const b of boards) {
-    if (b.board_created_at) {
-      const time = new Date(b.board_created_at).getTime();
-      if (!isNaN(time) && time < oldestTimestamp) {
-        oldestTimestamp = time;
-        oldestDateStr = b.board_created_at;
-      }
-    }
+  if (dates.length === 0) {
+    return { label: 'Unknown', days: 0, oldestBoardDate: null };
   }
 
-  if (oldestTimestamp === Infinity) {
-    return { strategyAgeDays: 0, oldestBoardDate: null };
+  const oldestTimestamp = Math.min(...dates);
+  const oldestDate = new Date(oldestTimestamp);
+  const now = new Date();
+  const diffTime = Math.abs(now.getTime() - oldestTimestamp);
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0) {
+    return { label: 'Active today', days: 0, oldestBoardDate: oldestDate.toISOString() };
   }
 
-  const diffMs = Date.now() - oldestTimestamp;
-  const strategyAgeDays = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
-
-  return { strategyAgeDays, oldestBoardDate: oldestDateStr };
+  return {
+    label: `${diffDays}d active`,
+    days: diffDays,
+    oldestBoardDate: oldestDate.toISOString()
+  };
 }
 
 /**
@@ -407,7 +415,7 @@ export async function getCompetitors(): Promise<Competitor[]> {
 
     const result: Competitor[] = competitors.map((c) => {
       const compBoards = (boards || []).filter((b) => b.competitor_id === c.id);
-      const { strategyAgeDays, oldestBoardDate } = calculateStrategyAge(compBoards as any);
+      const { days: strategyAgeDays, oldestBoardDate } = calculateStrategyAge(compBoards as any);
 
       return {
         ...c,
@@ -444,7 +452,7 @@ export async function getCompetitorDetails(competitorId: string): Promise<{
     const deltas = competitor ? calculateCompetitorDeltas(competitor, prevSnap) : calculateCompetitorDeltas({ profile_reach: 0, profile_views: 0, follower_count: 0, pin_count: 0 });
 
     if (competitor) {
-      const { strategyAgeDays, oldestBoardDate } = calculateStrategyAge(boards);
+      const { days: strategyAgeDays, oldestBoardDate } = calculateStrategyAge(boards);
       competitor.strategy_age_days = strategyAgeDays;
       competitor.oldest_board_date = oldestBoardDate;
       competitor.boards_count = boards.length;
@@ -467,7 +475,7 @@ export async function getCompetitorDetails(competitorId: string): Promise<{
     if (competitor) {
       competitor.profile_reach = Number(competitor.profile_reach) || 0;
       competitor.profile_views = Number(competitor.profile_views) || 0;
-      const { strategyAgeDays, oldestBoardDate } = calculateStrategyAge(boards);
+      const { days: strategyAgeDays, oldestBoardDate } = calculateStrategyAge(boards);
       competitor.strategy_age_days = strategyAgeDays;
       competitor.oldest_board_date = oldestBoardDate;
       competitor.boards_count = boards.length;
@@ -557,6 +565,7 @@ export async function deleteCompetitor(id: string): Promise<boolean> {
   return true;
 }
 
+
 /**
  * Ingest DevTools JSON payload for a target competitor.
  */
@@ -630,7 +639,7 @@ export async function ingestDevToolsPayload(
         }
       }
 
-      const { strategyAgeDays, oldestBoardDate } = calculateStrategyAge(mockBoards[competitorId]);
+      const { days: strategyAgeDays, oldestBoardDate } = calculateStrategyAge(mockBoards[competitorId]);
       comp.strategy_age_days = strategyAgeDays;
       comp.oldest_board_date = oldestBoardDate;
       comp.boards_count = mockBoards[competitorId].length;

@@ -126,67 +126,105 @@ async function updateCompetitors() {
     }
 
     // =========================================================================
-    // STEP 2: Fetch Boards via BoardsResource Endpoint (Detailed Fieldset)
+    // STEP 2: Fetch ALL Boards via BoardsResource (with Bookmark Pagination)
     // =========================================================================
-    const boardsOptions = {
-      options: {
+    let allBoards = [];
+    let bookmark = null;
+    let hasMore = true;
+    let pageCount = 0;
+    const maxPages = 20; // Safety ceiling (up to 1,000 boards per competitor)
+
+    while (hasMore && pageCount < maxPages) {
+      pageCount++;
+
+      const optionsPayload = {
         username: username,
-        field_set_key: "detailed",
+        field_set_key: "profile_grid_item",
         privacy_filter: "all",
         sort: "last_pinned_to",
-        page_size: 50
-      },
-      context: {}
-    };
+        filter_stories: false,
+        page_size: 50,
+        group_by: "visibility",
+        include_archived: true,
+        filter_all_pins: false,
+        add_fields: "board.{meal_plan}"
+      };
 
-    const boardsUrl = `https://www.pinterest.com/resource/BoardsResource/get/?source_url=%2F${username}%2F&data=${encodeURIComponent(JSON.stringify(boardsOptions))}&_=${Date.now()}`;
-
-    try {
-      const boardsRes = await fetch(boardsUrl, { method: "GET", headers: getHeaders(username) });
-
-      if (!boardsRes.ok) {
-        console.warn(`⚠️ BoardsResource HTTP ${boardsRes.status} for @${username}. Skipping boards update.`);
-      } else {
-        const boardsPayload = await boardsRes.json();
-        const boardsList = boardsPayload?.resource_response?.data || [];
-
-        if (Array.isArray(boardsList) && boardsList.length > 0) {
-          const boardsToUpsert = boardsList.map((b) => {
-            const boardUrl = b.url 
-              ? (b.url.startsWith('http') ? b.url : `https://www.pinterest.com${b.url}`)
-              : `https://www.pinterest.com/${username}/`;
-
-            const boardCreatedAt = b.created_at || b.board_created_at || now;
-
-            return {
-              competitor_id: comp.id,
-              board_id: String(b.id || b.node_id),
-              name: b.name || 'Untitled Board',
-              description: b.description || '',
-              pin_count: b.pin_count || 0,
-              follower_count: b.follower_count || 0,
-              url: boardUrl,
-              board_created_at: boardCreatedAt,
-              created_at: boardCreatedAt,
-              last_pinned_at: b.last_pinned_by_owner_at || b.last_pinned_at || now
-            };
-          });
-
-          const { error: boardError } = await supabase
-            .from('competitor_boards')
-            .upsert(boardsToUpsert, { onConflict: 'competitor_id, board_id' });
-
-          if (boardError) {
-            console.warn(`⚠️ Boards Upsert Warning for @${username}:`, boardError.message);
-          } else {
-            console.log(`📋 Ingested ${boardsToUpsert.length} Board(s) with full details for @${username}.`);
-          }
-        } else {
-          console.log(`ℹ️ No public boards returned for @${username}.`);
-        }
+      if (bookmark) {
+        optionsPayload.bookmarks = [bookmark];
       }
-    } catch (err) {
-      console.error(`❌ BoardsResource error for @${username}:`, err.message);
+
+      const boardsUrl = `https://www.pinterest.com/resource/BoardsResource/get/?source_url=%2F${username}%2F&data=${encodeURIComponent(JSON.stringify({ options: optionsPayload, context: {} }))}&_=${Date.now()}`;
+
+      try {
+        const boardsRes = await fetch(boardsUrl, { method: "GET", headers: getHeaders(username) });
+
+        if (!boardsRes.ok) {
+          console.warn(`⚠️ BoardsResource HTTP ${boardsRes.status} on page ${pageCount} for @${username}. Stopping pagination.`);
+          break;
+        }
+
+        const boardsPayload = await boardsRes.json();
+        const responseData = boardsPayload?.resource_response;
+        const boardsList = responseData?.data || [];
+
+        // Filter out 'story' types or non-board items if present
+        const actualBoards = boardsList.filter(b => b.type === 'board' || !b.type);
+        allBoards.push(...actualBoards);
+
+        // Check for next page bookmark
+        const nextBookmark = responseData?.bookmark;
+        if (nextBookmark && nextBookmark !== '-end-' && boardsList.length > 0) {
+          bookmark = nextBookmark;
+        } else {
+          hasMore = false;
+        }
+      } catch (err) {
+        console.error(`❌ Error fetching boards page ${pageCount} for @${username}:`, err.message);
+        break;
+      }
+    }
+
+    if (allBoards.length > 0) {
+      const boardsToUpsert = allBoards.map((b) => {
+        const boardUrl = b.url 
+          ? (b.url.startsWith('http') ? b.url : `https://www.pinterest.com${b.url}`)
+          : `https://www.pinterest.com/${username}/`;
+
+        // Extract exact Pinterest creation & modification dates
+        const realCreatedAt = b.created_at 
+          ? new Date(b.created_at).toISOString() 
+          : now;
+
+        const realLastPinnedAt = (b.board_order_modified_at || b.last_pinned_by_owner_at || b.last_pinned_at)
+          ? new Date(b.board_order_modified_at || b.last_pinned_by_owner_at || b.last_pinned_at).toISOString()
+          : now;
+
+        return {
+          competitor_id: comp.id,
+          board_id: String(b.id || b.node_id),
+          name: b.name || 'Untitled Board',
+          description: b.description || '',
+          pin_count: b.pin_count || 0,
+          follower_count: b.follower_count || 0,
+          url: boardUrl,
+          board_created_at: realCreatedAt,
+          created_at: realCreatedAt,
+          last_pinned_at: realLastPinnedAt
+        };
+      });
+
+      const { error: boardError } = await supabase
+        .from('competitor_boards')
+        .upsert(boardsToUpsert, { onConflict: 'competitor_id, board_id' });
+
+      if (boardError) {
+        console.warn(`⚠️ Boards Upsert Warning for @${username}:`, boardError.message);
+      } else {
+        console.log(`📋 Ingested ALL ${boardsToUpsert.length} Board(s) across ${pageCount} page(s) with REAL creation dates for @${username}.`);
+      }
+    } else {
+      console.log(`ℹ️ No public boards found for @${username}.`);
     }
   }
 

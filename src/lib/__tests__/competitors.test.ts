@@ -129,9 +129,9 @@ describe('Competitor Intelligence Payload Parser & Engine', () => {
       },
     ];
 
-    const { strategyAgeDays, oldestBoardDate } = calculateStrategyAge(boards);
+    const { days: strategyAgeDays, oldestBoardDate } = calculateStrategyAge(boards);
 
-    expect(oldestBoardDate).toBe('2019-06-15T00:00:00Z');
+    expect(oldestBoardDate).toBe(new Date('2019-06-15T00:00:00Z').toISOString());
     expect(strategyAgeDays).toBeGreaterThan(2000);
   });
 
