@@ -78,12 +78,16 @@ async function updateCompetitors() {
         const userData = userPayload?.resource_response?.data;
 
         if (userData) {
-          // Extract exact JSON metrics
+          // Extract exact JSON metrics & extended metadata
           const profileViews = userData.profile_views || userData.monthly_views || 0;
           const profileReach = userData.profile_reach || userData.monthly_views || profileViews;
           const followers = userData.follower_count || 0;
           const pins = userData.pin_count || 0;
           const fullName = userData.full_name || username;
+
+          const websiteUrl = userData.website_url || (userData.domain_url ? `https://${userData.domain_url}` : null);
+          const domainVerified = !!userData.domain_verified;
+          const lastPinAt = userData.last_pin_save_time ? new Date(userData.last_pin_save_time).toISOString() : null;
 
           // Update DB record
           const { error: updateError } = await supabase
@@ -94,6 +98,9 @@ async function updateCompetitors() {
               profile_views: profileViews,
               follower_count: followers,
               pin_count: pins,
+              website_url: websiteUrl,
+              domain_verified: domainVerified,
+              last_pin_at: lastPinAt,
               last_checked_at: now
             })
             .eq('id', comp.id);
@@ -104,12 +111,13 @@ async function updateCompetitors() {
             console.log(`✅ Profile Updated -> Reach: ${profileReach.toLocaleString()}, Views: ${profileViews.toLocaleString()}, Followers: ${followers.toLocaleString()}, Pins: ${pins.toLocaleString()}`);
           }
 
-          // Insert historical snapshot
+          // Insert historical snapshot with profile_views
           const { error: snapshotError } = await supabase
             .from('competitor_snapshots')
             .insert({
               competitor_id: comp.id,
               profile_reach: profileReach,
+              profile_views: profileViews,
               follower_count: followers,
               pin_count: pins
             });

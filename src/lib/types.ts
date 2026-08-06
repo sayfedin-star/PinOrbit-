@@ -153,6 +153,9 @@ export interface Competitor {
   avatar_url?: string | null;
   notes?: string | null;
   last_checked_at?: string | null;
+  website_url?: string | null;
+  domain_verified?: boolean;
+  last_pin_at?: string | null;
   created_at: string;
   boards_count?: number;
   strategy_age_days?: number;
@@ -207,6 +210,9 @@ export interface ParsedPinterestPayload {
     pin_count?: number;
     avatar_url?: string;
     about?: string;
+    website_url?: string;
+    domain_verified?: boolean;
+    last_pin_at?: string;
   };
   boardsData?: Array<{
     board_id: string;

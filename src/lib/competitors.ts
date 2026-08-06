@@ -237,6 +237,10 @@ export function parsePinterestPayload(input: string | object): ParsedPinterestPa
       data.username ||
       '';
 
+    const websiteUrl = data.website_url || (data.domain_url ? `https://${data.domain_url}` : undefined);
+    const domainVerified = !!data.domain_verified;
+    const lastPinAt = data.last_pin_save_time ? new Date(data.last_pin_save_time).toISOString() : undefined;
+
     return {
       type: 'user_profile',
       username: data.username || '',
@@ -248,6 +252,9 @@ export function parsePinterestPayload(input: string | object): ParsedPinterestPa
         pin_count: Number(data.pin_count) || 0,
         avatar_url: avatarUrl,
         about: data.about || data.bio || '',
+        website_url: websiteUrl,
+        domain_verified: domainVerified,
+        last_pin_at: lastPinAt,
       },
       rawJson: jsonObj,
     };
@@ -655,7 +662,7 @@ export async function ingestDevToolsPayload(
   // Supabase implementation
   try {
     if (parsed.type === 'user_profile' && parsed.profileData) {
-      const { full_name, profile_reach, profile_views, follower_count, pin_count, avatar_url } = parsed.profileData;
+      const { full_name, profile_reach, profile_views, follower_count, pin_count, avatar_url, website_url, domain_verified, last_pin_at } = parsed.profileData;
 
       // Update competitors table
       const { error: updateErr } = await supabase
@@ -667,6 +674,9 @@ export async function ingestDevToolsPayload(
           follower_count,
           pin_count,
           ...(avatar_url ? { avatar_url } : {}),
+          ...(website_url !== undefined ? { website_url } : {}),
+          ...(domain_verified !== undefined ? { domain_verified } : {}),
+          ...(last_pin_at !== undefined ? { last_pin_at } : {}),
           last_checked_at: new Date().toISOString(),
         })
         .eq('id', competitorId);
