@@ -158,6 +158,7 @@ import KPIStatCard from '../components/ui/KPIStatCard.astro';
   import { requireAuth } from '../lib/auth';
   import { getDashboardKPIs, getPins, getLogs, getImportSessions } from '../lib/supabase';
   import { renderStatusBadge, formatDate, formatTime, renderEmptyStateHTML, escapeHtml } from '../lib/ui-helpers';
+  import { getActiveWorkspaceId } from '../lib/workspaces';
 
   async function init() {
     const isAuth = await requireAuth();
@@ -167,11 +168,12 @@ import KPIStatCard from '../components/ui/KPIStatCard.astro';
 
   async function loadDashboardData() {
     try {
+      const activeWsId = getActiveWorkspaceId();
       const [kpis, recentPins, latestLogs, importSessions] = await Promise.all([
-        getDashboardKPIs(),
-        getPins('all'),
-        getLogs(4),
-        getImportSessions(4),
+        getDashboardKPIs(activeWsId),
+        getPins('all', undefined, activeWsId),
+        getLogs(4, activeWsId),
+        getImportSessions(4, activeWsId),
       ]);
 
       // Update Webhook Metrics

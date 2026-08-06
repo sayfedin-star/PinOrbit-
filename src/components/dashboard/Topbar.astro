@@ -1,5 +1,6 @@
 ---
 import { isSupabaseConfigured } from '../../lib/supabase';
+import WorkspaceSwitcher from '../WorkspaceSwitcher.astro';
 
 interface Props {
   title?: string;
@@ -24,6 +25,9 @@ const { title = 'Dashboard' } = Astro.props;
     </button>
 
     <h2 class="text-lg font-semibold tracking-tight text-foreground lg:text-xl">{title}</h2>
+
+    <!-- Workspace Switcher -->
+    <WorkspaceSwitcher />
   </div>
 
   <div class="flex items-center gap-3">

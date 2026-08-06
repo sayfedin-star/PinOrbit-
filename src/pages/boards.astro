@@ -188,6 +188,7 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
   import { getBoards, getAccounts, createBoard, updateBoard } from '../lib/supabase';
   import { formatDate, renderEmptyStateHTML, escapeHtml } from '../lib/ui-helpers';
   import type { Board, Account } from '../lib/types';
+  import { getActiveWorkspaceId } from '../lib/workspaces';
 
   let currentBoards: Board[] = [];
   let currentAccounts: Account[] = [];
@@ -204,7 +205,8 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
     if (!container) return;
 
     try {
-      [currentBoards, currentAccounts] = await Promise.all([getBoards(), getAccounts()]);
+      const activeWsId = getActiveWorkspaceId();
+      [currentBoards, currentAccounts] = await Promise.all([getBoards(activeWsId), getAccounts(activeWsId)]);
 
       populateAccountDropdowns();
 

@@ -464,6 +464,7 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
     parsePinterestPayload,
     ingestDevToolsPayload,
   } from '../lib/competitors';
+  import { getActiveWorkspaceId } from '../lib/workspaces';
   import type { Competitor } from '../lib/types';
 
   // ─── State ────────────────────────────────────────────────────────────────
@@ -911,7 +912,8 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
 
   // ─── Load data ────────────────────────────────────────────────────────────
   async function loadWorkspaceData() {
-    competitorsList = await getCompetitors();
+    const activeWsId = getActiveWorkspaceId();
+    competitorsList = await getCompetitors(activeWsId);
     populateTagDropdown();
     renderKPIs();
     renderTable();
@@ -973,7 +975,8 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
       const notesInput    = (document.getElementById('competitor-notes-input') as HTMLTextAreaElement).value;
 
       try {
-        await addCompetitor({ username: usernameInput, niche: nicheInput, notes: notesInput, account_type: accountTypeVal as 'own' | 'competitor', tags: tagsInput });
+        const activeWsId = getActiveWorkspaceId();
+        await addCompetitor({ username: usernameInput, niche: nicheInput, notes: notesInput, account_type: accountTypeVal as 'own' | 'competitor', tags: tagsInput, workspace_id: activeWsId });
         closeAddModal();
         showStatus(`Profile @${usernameInput.replace(/^@/, '')} added to workspace!`);
         await loadWorkspaceData();

@@ -1,3 +1,28 @@
+export type WorkspaceRole = 'owner' | 'admin' | 'member';
+
+export interface Workspace {
+  id: string;
+  name: string;
+  slug?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkspaceMembership {
+  id: string;
+  workspace_id: string;
+  user_id: string;
+  role: WorkspaceRole;
+  created_at: string;
+}
+
+export interface WorkspaceOption {
+  id: string;
+  name: string;
+  slug?: string | null;
+  is_default?: boolean;
+}
+
 export interface AccountWebhook {
   id: string;
   account_id: string;
@@ -18,6 +43,7 @@ export interface AccountWebhook {
 
 export interface Account {
   id: string;
+  workspace_id?: string;
   account_name: string;
   webhook_url?: string;
   max_pins_per_day: number;
@@ -57,6 +83,7 @@ export interface AccountWebhookSummary {
 
 export interface Board {
   id: string;
+  workspace_id?: string;
   account_id: string;
   board_name: string;
   board_id: string;
@@ -69,6 +96,7 @@ export interface Board {
 
 export interface Pin {
   id: string;
+  workspace_id?: string;
   account_id: string;
   title: string;
   description: string | null;
@@ -92,6 +120,7 @@ export interface Pin {
 
 export interface Log {
   id: string;
+  workspace_id?: string;
   pin_id: string | null;
   account_id: string | null;
   webhook_id?: string | null;
@@ -117,6 +146,7 @@ export interface AuditLog {
 
 export interface ImportSession {
   id: string;
+  workspace_id?: string;
   account_id: string;
   source_type: 'csv_upload' | 'google_sheets' | string;
   source_label?: string | null;
@@ -142,6 +172,7 @@ export interface DashboardKPIs {
 
 export interface Competitor {
   id: string;
+  workspace_id?: string;
   user_id?: string;
   username: string;
   full_name?: string | null;
@@ -174,13 +205,10 @@ export interface CompetitorSnapshot {
   recorded_at: string;
 }
 
-/** Mirrors the competitor_daily_snapshots rollup table.
- *  Used internally in getCompetitorDetails() to type the daily-snapshot
- *  query result before it is normalised into CompetitorSnapshot[] for charts. */
 export interface CompetitorDailySnapshot {
   id: string;
   competitor_id: string;
-  snapshot_date: string; // ISO date string, e.g. "2026-08-05"
+  snapshot_date: string;
   profile_reach: number;
   profile_views: number;
   follower_count: number;
@@ -190,6 +218,7 @@ export interface CompetitorDailySnapshot {
 
 export interface CompetitorBoard {
   id: string;
+  workspace_id?: string;
   competitor_id: string;
   board_id: string;
   name: string;
@@ -242,4 +271,3 @@ export interface ParsedPinterestPayload {
   }>;
   rawJson?: any;
 }
-

@@ -399,23 +399,41 @@ export function calculateStrategyAge(boards: Array<{ created_at?: string; board_
   };
 }
 
+const DEFAULT_WS_ID = '00000000-0000-0000-0000-000000000001';
+
+function matchesWorkspace(entityWsId?: string, targetWsId?: string): boolean {
+  if (!targetWsId) return true;
+  const actualWs = entityWsId || DEFAULT_WS_ID;
+  return actualWs === targetWsId;
+}
+
 /**
- * Fetch all tracked competitors.
+ * Fetch all tracked competitors for a workspace.
  */
-export async function getCompetitors(): Promise<Competitor[]> {
+export async function getCompetitors(workspaceId?: string): Promise<Competitor[]> {
   if (!isSupabaseConfigured || !supabase) {
-    return [...mockCompetitors];
+    return workspaceId
+      ? mockCompetitors.filter((c) => matchesWorkspace(c.workspace_id, workspaceId))
+      : [...mockCompetitors];
   }
 
   try {
-    const { data: competitors, error } = await supabase
+    let query = supabase
       .from('competitors')
       .select('*')
       .order('created_at', { ascending: false });
 
+    if (workspaceId) {
+      query = query.eq('workspace_id', workspaceId);
+    }
+
+    const { data: competitors, error } = await query;
+
     if (error || !competitors) {
       console.warn('Supabase competitors query failed, falling back to mock state:', error);
-      return [...mockCompetitors];
+      return workspaceId
+        ? mockCompetitors.filter((c) => matchesWorkspace(c.workspace_id, workspaceId))
+        : [...mockCompetitors];
     }
 
     // Attach board count & strategy age if boards exist
@@ -438,7 +456,9 @@ export async function getCompetitors(): Promise<Competitor[]> {
     return result;
   } catch (err) {
     console.error('Error fetching competitors:', err);
-    return [...mockCompetitors];
+    return workspaceId
+      ? mockCompetitors.filter((c) => !c.workspace_id || c.workspace_id === workspaceId)
+      : [...mockCompetitors];
   }
 }
 
@@ -596,9 +616,11 @@ export async function addCompetitor(data: {
   notes?: string;
   account_type?: 'own' | 'competitor' | string;
   tags?: string[] | string;
+  workspace_id?: string;
 }): Promise<Competitor> {
   const cleanUsername = data.username.trim().replace(/^@/, '').toLowerCase();
   const accountType = data.account_type || 'competitor';
+  const targetWsId = data.workspace_id || '00000000-0000-0000-0000-000000000001';
   const tagsArr = Array.isArray(data.tags)
     ? data.tags
     : typeof data.tags === 'string'
@@ -608,6 +630,7 @@ export async function addCompetitor(data: {
   if (!isSupabaseConfigured || !supabase) {
     const newComp: Competitor = {
       id: `comp-${Date.now()}`,
+      workspace_id: targetWsId,
       username: cleanUsername,
       full_name: cleanUsername.charAt(0).toUpperCase() + cleanUsername.slice(1),
       niche: data.niche || 'General',
@@ -637,6 +660,7 @@ export async function addCompetitor(data: {
     .from('competitors')
     .insert([
       {
+        workspace_id: targetWsId,
         user_id: userId,
         username: cleanUsername,
         full_name: cleanUsername,

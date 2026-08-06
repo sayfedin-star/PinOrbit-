@@ -86,6 +86,7 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
   import { getPins, getAccounts } from '../lib/supabase';
   import { renderStatusBadge, formatDate, renderEmptyStateHTML, escapeHtml } from '../lib/ui-helpers';
   import type { Pin, Account } from '../lib/types';
+  import { getActiveWorkspaceId } from '../lib/workspaces';
 
   let allPins: Pin[] = [];
   let accounts: Account[] = [];
@@ -103,7 +104,8 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
     const select = document.getElementById('account-filter-select') as HTMLSelectElement | null;
     if (!select) return;
 
-    accounts = await getAccounts();
+    const activeWsId = getActiveWorkspaceId();
+    accounts = await getAccounts(activeWsId);
     select.innerHTML =
       '<option value="all">All Accounts</option>' +
       accounts.map((a) => `<option value="${a.id}">${escapeHtml(a.account_name)}</option>`).join('');
@@ -119,7 +121,8 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
     if (!container) return;
 
     try {
-      allPins = await getPins('all');
+      const activeWsId = getActiveWorkspaceId();
+      allPins = await getPins('all', undefined, activeWsId);
 
       if (!allPins || allPins.length === 0) {
         container.innerHTML = renderEmptyStateHTML(

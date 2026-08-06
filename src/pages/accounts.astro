@@ -362,6 +362,7 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
   } from '../lib/supabase';
   import { renderStatusBadge, formatDate, renderEmptyStateHTML, escapeHtml, maskWebhookUrl } from '../lib/ui-helpers';
   import type { Account, AccountWebhook } from '../lib/types';
+  import { getActiveWorkspaceId } from '../lib/workspaces';
 
   let currentAccounts: Account[] = [];
   let activeManageAccount: Account | null = null;
@@ -380,7 +381,8 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
     if (!container) return;
 
     try {
-      currentAccounts = await getAccounts();
+      const activeWsId = getActiveWorkspaceId();
+      currentAccounts = await getAccounts(activeWsId);
 
       if (!currentAccounts || currentAccounts.length === 0) {
         container.innerHTML = renderEmptyStateHTML(
@@ -837,11 +839,13 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
 
       setAddLoading(true);
 
+      const activeWsId = getActiveWorkspaceId();
       const { error } = await createAccount({
         account_name: name,
         webhook_url: webhook,
         max_pins_per_day: limit,
         is_active: active,
+        workspace_id: activeWsId,
       });
 
       setAddLoading(false);

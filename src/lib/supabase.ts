@@ -274,23 +274,43 @@ interface RawLog extends Log {
   account_webhooks?: { label: string } | null;
 }
 
+const DEFAULT_WS_ID = '00000000-0000-0000-0000-000000000001';
+
+function matchesWorkspace(entityWsId?: string, targetWsId?: string): boolean {
+  if (!targetWsId) return true;
+  const actualWs = entityWsId || DEFAULT_WS_ID;
+  return actualWs === targetWsId;
+}
+
 // 1. Fetch Accounts with Webhook Summary
-export async function getAccounts(): Promise<Account[]> {
+export async function getAccounts(workspaceId?: string): Promise<Account[]> {
   let list: Account[] = [];
   if (!supabase) {
-    list = mockAccounts;
+    list = workspaceId ? mockAccounts.filter((a) => matchesWorkspace(a.workspace_id, workspaceId)) : mockAccounts;
   } else {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('accounts')
         .select('*, boards(id), account_webhooks(id, label, is_active, is_primary)')
         .order('created_at', { ascending: false });
 
+      if (workspaceId) {
+        query = query.eq('workspace_id', workspaceId);
+      }
+
+      const { data, error } = await query;
+
       if (error) {
-        const { data: basicData } = await supabase
+        let basicQuery = supabase
           .from('accounts')
           .select('*')
           .order('created_at', { ascending: false });
+
+        if (workspaceId) {
+          basicQuery = basicQuery.eq('workspace_id', workspaceId);
+        }
+
+        const { data: basicData } = await basicQuery;
 
         list = (basicData as Account[] || []).map((acc) => ({
           ...acc,
@@ -315,7 +335,7 @@ export async function getAccounts(): Promise<Account[]> {
       }
     } catch (err) {
       console.warn('Supabase fetch accounts error, using fallback:', err);
-      list = mockAccounts;
+      list = workspaceId ? mockAccounts.filter((a) => !a.workspace_id || a.workspace_id === workspaceId) : mockAccounts;
     }
   }
 
@@ -328,7 +348,7 @@ export async function getAccounts(): Promise<Account[]> {
 }
 
 // 2. Fetch Account Webhooks
-export async function getAccountWebhooks(accountId?: string): Promise<AccountWebhook[]> {
+export async function getAccountWebhooks(accountId?: string, workspaceId?: string): Promise<AccountWebhook[]> {
   if (!supabase) {
     if (!accountId) return mockWebhooks;
     return mockWebhooks.filter((w) => w.account_id === accountId);
@@ -342,6 +362,15 @@ export async function getAccountWebhooks(accountId?: string): Promise<AccountWeb
 
     if (accountId) {
       query = query.eq('account_id', accountId);
+    } else if (workspaceId) {
+      // Find accounts for workspaceId
+      const { data: accs } = await supabase.from('accounts').select('id').eq('workspace_id', workspaceId);
+      if (accs && accs.length > 0) {
+        const accIds = accs.map((a) => a.id);
+        query = query.in('account_id', accIds);
+      } else {
+        return [];
+      }
     }
 
     const { data, error } = await query;
@@ -355,19 +384,33 @@ export async function getAccountWebhooks(accountId?: string): Promise<AccountWeb
 }
 
 // 3. Fetch Boards
-export async function getBoards(): Promise<Board[]> {
-  if (!supabase) return mockBoards;
+export async function getBoards(workspaceId?: string): Promise<Board[]> {
+  if (!supabase) {
+    return workspaceId ? mockBoards.filter((b) => matchesWorkspace(b.workspace_id, workspaceId)) : mockBoards;
+  }
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('boards')
       .select('*, accounts(account_name)')
       .order('created_at', { ascending: false });
 
+    if (workspaceId) {
+      query = query.eq('workspace_id', workspaceId);
+    }
+
+    const { data, error } = await query;
+
     if (error) {
-      const { data: basicData, error: basicErr } = await supabase
+      let basicQuery = supabase
         .from('boards')
         .select('*')
         .order('created_at', { ascending: false });
+
+      if (workspaceId) {
+        basicQuery = basicQuery.eq('workspace_id', workspaceId);
+      }
+
+      const { data: basicData, error: basicErr } = await basicQuery;
 
       if (basicErr || !basicData) throw basicErr || new Error('No data');
       return basicData as Board[];
@@ -380,7 +423,7 @@ export async function getBoards(): Promise<Board[]> {
     }));
   } catch (err) {
     console.warn('Supabase fetch boards error, using fallback:', err);
-    return mockBoards;
+    return workspaceId ? mockBoards.filter((b) => matchesWorkspace(b.workspace_id, workspaceId)) : mockBoards;
   }
 }
 
@@ -484,15 +527,18 @@ export async function getBulkAccountBoards(accountIds: string[]): Promise<Map<st
     });
     return map;
   } catch (err) {
-    console.warn('Supabase getBulkAccountBoards error:', err);
+    console.warn('Supabase fetch boards error, using fallback:', err);
     return map;
   }
 }
 
 // 4. Fetch Pins
-export async function getPins(statusFilter?: string, accountIdFilter?: string): Promise<Pin[]> {
+export async function getPins(statusFilter?: string, accountIdFilter?: string, workspaceId?: string): Promise<Pin[]> {
   if (!supabase) {
     let pins = mockPins;
+    if (workspaceId) {
+      pins = pins.filter((p) => matchesWorkspace(p.workspace_id, workspaceId));
+    }
     if (statusFilter && statusFilter !== 'all') {
       pins = pins.filter((p) => p.status === statusFilter);
     }
@@ -507,6 +553,9 @@ export async function getPins(statusFilter?: string, accountIdFilter?: string): 
       .select('*, accounts(account_name)')
       .order('created_at', { ascending: false });
 
+    if (workspaceId) {
+      query = query.eq('workspace_id', workspaceId);
+    }
     if (statusFilter && statusFilter !== 'all') {
       query = query.eq('status', statusFilter);
     }
@@ -517,6 +566,9 @@ export async function getPins(statusFilter?: string, accountIdFilter?: string): 
     const { data, error } = await query;
     if (error) {
       let basicQuery = supabase.from('pins').select('*').order('created_at', { ascending: false });
+      if (workspaceId) {
+        basicQuery = basicQuery.eq('workspace_id', workspaceId);
+      }
       if (statusFilter && statusFilter !== 'all') {
         basicQuery = basicQuery.eq('status', statusFilter);
       }
@@ -536,6 +588,9 @@ export async function getPins(statusFilter?: string, accountIdFilter?: string): 
   } catch (err) {
     console.warn('Supabase fetch pins error, using fallback:', err);
     let pins = mockPins;
+    if (workspaceId) {
+      pins = pins.filter((p) => matchesWorkspace(p.workspace_id, workspaceId));
+    }
     if (statusFilter && statusFilter !== 'all') {
       pins = pins.filter((p) => p.status === statusFilter);
     }
@@ -547,21 +602,35 @@ export async function getPins(statusFilter?: string, accountIdFilter?: string): 
 }
 
 // 5. Fetch Logs
-export async function getLogs(limit = 50): Promise<Log[]> {
+export async function getLogs(limit = 50, workspaceId?: string): Promise<Log[]> {
   if (!supabase) return mockLogs.slice(0, limit);
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('logs')
       .select('*, accounts(account_name), pins(title), account_webhooks(label)')
-      .order('created_at', { ascending: false })
-      .limit(limit);
+      .order('created_at', { ascending: false });
+
+    if (workspaceId) {
+      query = query.eq('workspace_id', workspaceId);
+    }
+
+    query = query.limit(limit);
+
+    const { data, error } = await query;
 
     if (error) {
-      const { data: basicData, error: basicErr } = await supabase
+      let basicQuery = supabase
         .from('logs')
         .select('*')
-        .order('created_at', { ascending: false })
-        .limit(limit);
+        .order('created_at', { ascending: false });
+
+      if (workspaceId) {
+        basicQuery = basicQuery.eq('workspace_id', workspaceId);
+      }
+
+      basicQuery = basicQuery.limit(limit);
+
+      const { data: basicData, error: basicErr } = await basicQuery;
 
       if (basicErr || !basicData) throw basicErr || new Error('No data');
       return basicData as Log[];
@@ -599,14 +668,21 @@ export async function getAuditLogs(limit = 100): Promise<AuditLog[]> {
 }
 
 // 7. Fetch Import Sessions History
-export async function getImportSessions(limit = 10): Promise<ImportSession[]> {
+export async function getImportSessions(limit = 10, workspaceId?: string): Promise<ImportSession[]> {
   if (!supabase) return mockImportSessions.slice(0, limit);
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('import_sessions')
       .select('*, accounts(account_name)')
-      .order('created_at', { ascending: false })
-      .limit(limit);
+      .order('created_at', { ascending: false });
+
+    if (workspaceId) {
+      query = query.eq('workspace_id', workspaceId);
+    }
+
+    query = query.limit(limit);
+
+    const { data, error } = await query;
 
     if (error) throw error;
     return (data as any[]).map((s) => ({
@@ -620,12 +696,12 @@ export async function getImportSessions(limit = 10): Promise<ImportSession[]> {
 }
 
 // 8. Fetch Dashboard KPIs
-export async function getDashboardKPIs(): Promise<DashboardKPIs> {
+export async function getDashboardKPIs(workspaceId?: string): Promise<DashboardKPIs> {
   const [accounts, webhooks, pins, logs] = await Promise.all([
-    getAccounts(),
-    getAccountWebhooks(),
-    getPins(),
-    getLogs(100),
+    getAccounts(workspaceId),
+    getAccountWebhooks(undefined, workspaceId),
+    getPins('all', undefined, workspaceId),
+    getLogs(100, workspaceId),
   ]);
 
   return {
@@ -649,10 +725,14 @@ export async function createAccount(payload: {
   max_pins_per_day: number;
   posting_interval_minutes?: number;
   is_active?: boolean;
+  workspace_id?: string;
 }): Promise<{ data: Account | null; error: string | null }> {
+  const targetWsId = payload.workspace_id || '00000000-0000-0000-0000-000000000001';
+
   if (!supabase) {
     const newAcc: Account = {
       id: 'acc-' + Date.now(),
+      workspace_id: targetWsId,
       account_name: payload.account_name,
       webhook_url: payload.webhook_url,
       max_pins_per_day: payload.max_pins_per_day,
@@ -671,6 +751,7 @@ export async function createAccount(payload: {
   const { data, error } = await supabase
     .from('accounts')
     .insert({
+      workspace_id: targetWsId,
       account_name: payload.account_name,
       webhook_url: payload.webhook_url,
       max_pins_per_day: payload.max_pins_per_day,

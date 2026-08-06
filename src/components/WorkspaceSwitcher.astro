@@ -1,0 +1,196 @@
+---
+import { getWorkspaces, getActiveWorkspaceId } from '../lib/workspaces';
+
+const workspaces = await getWorkspaces();
+const activeWorkspaceId = getActiveWorkspaceId(Astro.cookies);
+const currentWorkspace = workspaces.find((w) => w.id === activeWorkspaceId) || workspaces[0];
+---
+
+<div class="relative inline-block text-left" id="workspace-switcher-root">
+  <!-- Trigger Button -->
+  <div class="flex items-center gap-2">
+    <div class="relative">
+      <select
+        id="workspace-select"
+        class="h-9 cursor-pointer appearance-none rounded-xl border border-border bg-card/80 py-1.5 pl-9 pr-8 text-xs font-semibold text-foreground shadow-sm backdrop-blur-md transition-all hover:bg-muted/80 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+        aria-label="Select active workspace"
+        data-active-id={activeWorkspaceId}
+      >
+        {workspaces.map((ws) => (
+          <option value={ws.id} selected={ws.id === currentWorkspace?.id}>
+            {ws.name}
+          </option>
+        ))}
+      </select>
+
+      <!-- Folder/Niche Icon -->
+      <div class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-primary">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L8.6 3.3A2 2 0 0 0 6.9 2.5H4a2 2 0 0 0-2 2v13.5a2 2 0 0 0 2 2z"/>
+        </svg>
+      </div>
+
+      <!-- Chevron Down Icon -->
+      <div class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </div>
+    </div>
+
+    <!-- Create Workspace Button -->
+    <button
+      id="open-create-workspace-modal"
+      type="button"
+      class="flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-card/80 text-muted-foreground shadow-sm backdrop-blur-md transition-all hover:bg-primary/10 hover:text-primary hover:border-primary/30"
+      title="Create New Workspace / Niche Cluster"
+      aria-label="Create new workspace"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="12" y1="5" x2="12" y2="19"/>
+        <line x1="5" y1="12" x2="19" y2="12"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Create Workspace Modal -->
+  <div
+    id="create-workspace-modal"
+    class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+    aria-modal="true"
+    role="dialog"
+  >
+    <div id="create-workspace-backdrop" class="fixed inset-0"></div>
+    <div class="relative w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-5 z-10">
+      <div class="flex items-center justify-between border-b border-border pb-4">
+        <div class="flex items-center gap-2">
+          <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+              <line x1="12" y1="11" x2="12" y2="17"/>
+              <line x1="9" y1="14" x2="15" y2="14"/>
+            </svg>
+          </div>
+          <h3 class="text-base font-bold text-foreground">Create New Workspace</h3>
+        </div>
+        <button
+          id="close-create-workspace-modal"
+          type="button"
+          class="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div id="create-ws-error" class="hidden rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-500"></div>
+
+      <form id="create-workspace-form" class="space-y-4">
+        <div class="space-y-1.5">
+          <label for="ws-name" class="block text-xs font-semibold text-foreground">Workspace Name *</label>
+          <input
+            id="ws-name"
+            type="text"
+            required
+            placeholder="e.g. Food & Drinks, Home Decor, Fitness"
+            class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+          <p class="text-[11px] text-muted-foreground">Isolates accounts, boards, pins, and competitors by niche cluster.</p>
+        </div>
+
+        <div class="flex items-center justify-end gap-3 border-t border-border pt-4">
+          <button
+            id="cancel-create-ws-btn"
+            type="button"
+            class="rounded-xl border border-border px-4 py-2 text-xs font-semibold text-foreground hover:bg-muted"
+          >
+            Cancel
+          </button>
+          <button
+            id="submit-create-ws-btn"
+            type="submit"
+            class="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-md hover:bg-primary/90"
+          >
+            Create & Switch
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  import { setActiveWorkspaceId, createWorkspace } from '../lib/workspaces-client';
+
+  const select = document.getElementById('workspace-select') as HTMLSelectElement | null;
+  const openModalBtn = document.getElementById('open-create-workspace-modal');
+  const closeModalBtn = document.getElementById('close-create-workspace-modal');
+  const cancelModalBtn = document.getElementById('cancel-create-ws-btn');
+  const modal = document.getElementById('create-workspace-modal');
+  const backdrop = document.getElementById('create-workspace-backdrop');
+  const form = document.getElementById('create-workspace-form') as HTMLFormElement | null;
+  const errorDiv = document.getElementById('create-ws-error');
+  const submitBtn = document.getElementById('submit-create-ws-btn') as HTMLButtonElement | null;
+
+  // Switch Workspace Handler
+  select?.addEventListener('change', (e) => {
+    const target = e.target as HTMLSelectElement;
+    const selectedWsId = target.value;
+    if (selectedWsId) {
+      setActiveWorkspaceId(selectedWsId);
+      window.location.reload();
+    }
+  });
+
+  // Modal Open/Close Controls
+  function openModal() {
+    modal?.classList.remove('hidden');
+    modal?.classList.add('flex');
+    errorDiv?.classList.add('hidden');
+    const nameInput = document.getElementById('ws-name') as HTMLInputElement | null;
+    if (nameInput) {
+      nameInput.value = '';
+      nameInput.focus();
+    }
+  }
+
+  function closeModal() {
+    modal?.classList.add('hidden');
+    modal?.classList.remove('flex');
+  }
+
+  openModalBtn?.addEventListener('click', openModal);
+  closeModalBtn?.addEventListener('click', closeModal);
+  cancelModalBtn?.addEventListener('click', closeModal);
+  backdrop?.addEventListener('click', closeModal);
+
+  // Form Submit Handler
+  form?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const nameInput = document.getElementById('ws-name') as HTMLInputElement | null;
+    const name = nameInput?.value || '';
+
+    if (!name.trim()) return;
+
+    try {
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Creating...';
+      }
+      errorDiv?.classList.add('hidden');
+
+      const created = await createWorkspace({ name });
+      setActiveWorkspaceId(created.id);
+      window.location.reload();
+    } catch (err: any) {
+      if (errorDiv) {
+        errorDiv.textContent = err.message || 'Failed to create workspace';
+        errorDiv.classList.remove('hidden');
+      }
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Create & Switch';
+      }
+    }
+  });
+</script>
