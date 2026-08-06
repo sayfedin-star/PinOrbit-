@@ -1,0 +1,31 @@
+name: Update Pinterest Competitors Daily
+
+on:
+  schedule:
+    # Runs daily at 02:00 UTC
+    - cron: '0 2 * * *'
+  # Enables manual execution button in GitHub Actions tab
+  workflow_dispatch:
+
+jobs:
+  run-competitor-sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Dependencies
+        run: npm install @supabase/supabase-js
+
+      - name: Execute Competitor Update Script
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          PINTEREST_COOKIE: ${{ secrets.PINTEREST_COOKIE }}
+        run: node scripts/update-competitors.mjs
