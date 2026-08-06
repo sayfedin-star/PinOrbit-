@@ -9,7 +9,9 @@ if (!supabaseUrl || !serviceRoleKey) {
   process.exit(1);
 }
 
-const supabase = createClient(supabaseUrl, serviceRoleKey);
+const supabase = createClient(supabaseUrl, serviceRoleKey, {
+  auth: { persistSession: false }
+});
 
 async function updateCompetitors() {
   console.log('🚀 Starting daily Pinterest competitor metric update...');
