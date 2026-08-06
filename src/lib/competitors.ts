@@ -572,6 +572,22 @@ export async function deleteCompetitor(id: string): Promise<boolean> {
   return true;
 }
 
+/**
+ * Delete an individual competitor snapshot record.
+ */
+export async function deleteCompetitorSnapshot(snapshotId: string, competitorId?: string): Promise<boolean> {
+  if (!isSupabaseConfigured || !supabase) {
+    if (competitorId && mockSnapshots[competitorId]) {
+      mockSnapshots[competitorId] = mockSnapshots[competitorId].filter((s) => s.id !== snapshotId);
+    }
+    return true;
+  }
+
+  const { error } = await supabase.from('competitor_snapshots').delete().eq('id', snapshotId);
+  if (error) throw new Error(error.message);
+  return true;
+}
+
 
 /**
  * Ingest DevTools JSON payload for a target competitor.

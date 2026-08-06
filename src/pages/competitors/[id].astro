@@ -289,16 +289,39 @@ export async function getStaticPaths() {
     </div>
   </div>
 
-  <!-- Board Strategy History Table -->
+  <!-- Board Strategy History Table & Controls -->
   <div class="rounded-xl border border-border bg-card shadow-sm overflow-hidden mb-8">
-    <div class="flex items-center justify-between border-b border-border px-6 py-4 bg-muted/30">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border px-6 py-4 bg-muted/30">
       <div>
         <h2 class="text-sm font-bold text-foreground">Pinterest Board Strategy & Timeline</h2>
-        <p class="text-xs text-muted-foreground">Board creation dates, SEO descriptions, pin counts, and last activity timestamps.</p>
+        <p class="text-xs text-muted-foreground">Search, filter, and sort competitor boards with pagination.</p>
       </div>
-      <span class="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary" id="boards-count-badge">
-        0 Boards
-      </span>
+
+      <!-- Board Search & Sort Controls -->
+      <div class="flex items-center gap-3 flex-wrap">
+        <!-- Quick Search -->
+        <div class="relative">
+          <input
+            type="text"
+            id="board-search-input"
+            placeholder="Search boards..."
+            class="h-8 rounded-lg border border-border bg-background pl-8 pr-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+          />
+          <svg xmlns="http://www.w3.org/2000/svg" class="absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        </div>
+
+        <!-- Sort Select -->
+        <select id="board-sort-select" class="h-8 rounded-lg border border-border bg-background px-2.5 text-xs font-medium text-foreground focus:border-primary focus:outline-none">
+          <option value="most_pins">Sort by: Most Pins</option>
+          <option value="most_followers">Sort by: Most Followers</option>
+          <option value="recent_activity">Sort by: Recent Activity</option>
+          <option value="creation_date">Sort by: Creation Date</option>
+        </select>
+
+        <span class="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary" id="boards-count-badge">
+          0 Boards
+        </span>
+      </div>
     </div>
 
     <div class="overflow-x-auto">
@@ -317,6 +340,63 @@ export async function getStaticPaths() {
           <tr>
             <td colspan="6" class="py-12 text-center text-xs text-muted-foreground animate-pulse">
               Loading board strategy timeline...
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Boards Pagination Controls Bar -->
+    <div id="boards-pagination-bar" class="flex items-center justify-between border-t border-border px-6 py-3 bg-muted/20 text-xs text-muted-foreground">
+      <span id="boards-pagination-info">Showing 0 of 0 boards</span>
+      <div class="flex items-center gap-2">
+        <button
+          id="boards-prev-page-btn"
+          disabled
+          class="rounded-lg border border-border bg-background px-3 py-1 text-xs font-semibold text-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+        >
+          Previous
+        </button>
+        <span id="boards-page-indicator" class="font-medium text-foreground">Page 1 of 1</span>
+        <button
+          id="boards-next-page-btn"
+          disabled
+          class="rounded-lg border border-border bg-background px-3 py-1 text-xs font-semibold text-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Snapshot Import History & Snapshot Log Section -->
+  <div class="rounded-xl border border-border bg-card shadow-sm overflow-hidden mb-8">
+    <div class="flex items-center justify-between border-b border-border px-6 py-4 bg-muted/30">
+      <div>
+        <h2 class="text-sm font-bold text-foreground">Import History & Snapshot Log</h2>
+        <p class="text-xs text-muted-foreground">All historical snapshot records logged for this profile with snapshot deletion capability.</p>
+      </div>
+      <span class="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary" id="snapshots-count-badge">
+        0 Snapshots
+      </span>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="w-full text-left text-xs text-muted-foreground">
+        <thead class="border-b border-border bg-muted/40 text-foreground font-semibold">
+          <tr>
+            <th scope="col" class="py-3.5 px-6">Recorded Date & Time</th>
+            <th scope="col" class="py-3.5 px-4">Monthly Reach</th>
+            <th scope="col" class="py-3.5 px-4">Profile Views</th>
+            <th scope="col" class="py-3.5 px-4">Followers</th>
+            <th scope="col" class="py-3.5 px-4">Total Pins</th>
+            <th scope="col" class="py-3.5 px-6 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="snapshots-table-body" class="divide-y divide-border">
+          <tr>
+            <td colspan="6" class="py-12 text-center text-xs text-muted-foreground animate-pulse">
+              Loading snapshot import log...
             </td>
           </tr>
         </tbody>
@@ -392,6 +472,7 @@ export async function getStaticPaths() {
   import {
     getCompetitorDetails,
     deleteCompetitor,
+    deleteCompetitorSnapshot,
     parsePinterestPayload,
     ingestDevToolsPayload,
   } from '../../lib/competitors';
@@ -422,10 +503,16 @@ export async function getStaticPaths() {
   let snapshotsList: CompetitorSnapshot[] = [];
   let deltasData: CompetitorDeltaStats | null = null;
 
-  // Analytics Engine Filter State
+  // Analytics Engine State
   let activeTimeRange = 'ALL';
   let selectedMonth = 'all';
   let isComparisonMode = false;
+
+  // Boards Pagination & Search State
+  let boardSearchQuery = '';
+  let boardSortKey = 'most_pins';
+  let currentBoardPage = 1;
+  const boardsPageSize = 10;
 
   // DOM Elements - Profile Header
   const competitorAvatar = document.getElementById('competitor-avatar') as HTMLImageElement;
@@ -479,6 +566,17 @@ export async function getStaticPaths() {
   const boardsTableBody = document.getElementById('boards-table-body') as HTMLElement;
   const boardsCountBadge = document.getElementById('boards-count-badge') as HTMLElement;
 
+  const boardSearchInput = document.getElementById('board-search-input') as HTMLInputElement;
+  const boardSortSelect = document.getElementById('board-sort-select') as HTMLSelectElement;
+  const boardsPaginationInfo = document.getElementById('boards-pagination-info') as HTMLElement;
+  const boardsPrevPageBtn = document.getElementById('boards-prev-page-btn') as HTMLButtonElement;
+  const boardsNextPageBtn = document.getElementById('boards-next-page-btn') as HTMLButtonElement;
+  const boardsPageIndicator = document.getElementById('boards-page-indicator') as HTMLElement;
+
+  // DOM Elements - Snapshots Log Table
+  const snapshotsTableBody = document.getElementById('snapshots-table-body') as HTMLElement;
+  const snapshotsCountBadge = document.getElementById('snapshots-count-badge') as HTMLElement;
+
   // DOM Elements - Status & Modal
   const statusBanner = document.getElementById('deepdive-status-banner') as HTMLElement;
   const statusText = document.getElementById('deepdive-status-text') as HTMLElement;
@@ -493,10 +591,13 @@ export async function getStaticPaths() {
   const modalTextarea = document.getElementById('deepdive-payload-textarea') as HTMLTextAreaElement;
   const modalDetectedSpan = document.getElementById('deepdive-detected-type') as HTMLElement;
 
-  function formatDate(isoStr?: string | null): string {
+  function formatDate(isoStr?: string | null, includeTime = false): string {
     if (!isoStr) return 'N/A';
     const date = new Date(isoStr);
     if (isNaN(date.getTime())) return 'N/A';
+    if (includeTime) {
+      return date.toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    }
     return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
   }
 
@@ -543,7 +644,6 @@ export async function getStaticPaths() {
 
     let filtered = sorted;
 
-    // Filter by Time Range
     if (activeTimeRange === '7D') {
       filtered = sorted.filter(s => now - new Date(s.recorded_at).getTime() <= 7 * 86400000);
     } else if (activeTimeRange === '30D') {
@@ -555,7 +655,6 @@ export async function getStaticPaths() {
       filtered = sorted.filter(s => new Date(s.recorded_at).getTime() >= yearStart);
     }
 
-    // Filter by Specific Month Dropdown
     if (selectedMonth !== 'all') {
       filtered = filtered.filter(s => {
         const d = new Date(s.recorded_at);
@@ -579,7 +678,6 @@ export async function getStaticPaths() {
       return;
     }
 
-    // Prepare SVG canvas bounds
     const width = 800;
     const height = 220;
     const paddingLeft = 60;
@@ -590,23 +688,32 @@ export async function getStaticPaths() {
     const chartWidth = width - paddingLeft - paddingRight;
     const chartHeight = height - paddingTop - paddingBottom;
 
-    // Read profile_reach & profile_views directly from snapshots
     const reaches = snapshots.map(s => s.profile_reach || 0);
     const views = snapshots.map(s => s.profile_views || 0);
 
     const maxReach = Math.max(...reaches, ...views, 100);
     const minReach = 0;
 
-    // Map point coordinates
+    // Check if multiple snapshots exist on the same day to format time string
     const points = snapshots.map((s, idx) => {
       const x = paddingLeft + (snapshots.length === 1 ? chartWidth / 2 : (idx / (snapshots.length - 1)) * chartWidth);
       const reachY = paddingTop + chartHeight - (((s.profile_reach || 0) - minReach) / (maxReach - minReach)) * chartHeight;
       const viewsY = paddingTop + chartHeight - (((s.profile_views || 0) - minReach) / (maxReach - minReach)) * chartHeight;
-      const dateLabel = new Date(s.recorded_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+      const dateObj = new Date(s.recorded_at);
+      const hasSameDaySibling = snapshots.some((other, oIdx) => {
+        if (oIdx === idx) return false;
+        const od = new Date(other.recorded_at);
+        return od.toDateString() === dateObj.toDateString();
+      });
+
+      const dateLabel = hasSameDaySibling
+        ? dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ', ' + dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+        : dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
       return { x, reachY, viewsY, s, dateLabel };
     });
 
-    // Generate Path Strings
     let reachPathStr = '';
     let viewsPathStr = '';
 
@@ -618,7 +725,6 @@ export async function getStaticPaths() {
       viewsPathStr = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.viewsY}`).join(' ');
     }
 
-    // Grid Lines & Labels
     const gridLines = [0, 0.33, 0.66, 1].map(ratio => {
       const y = paddingTop + chartHeight * (1 - ratio);
       const val = Math.round(minReach + ratio * (maxReach - minReach));
@@ -628,12 +734,10 @@ export async function getStaticPaths() {
       `;
     }).join('');
 
-    // X-Axis Date Labels
     const xLabels = points.map(p => `
       <text x="${p.x}" y="${height - 12}" text-anchor="middle" font-size="9" fill="currentColor" class="text-muted-foreground">${p.dateLabel}</text>
     `).join('');
 
-    // Data Circles (Reach = Emerald, Views = Sky)
     const circles = points.map(p => `
       <circle cx="${p.x}" cy="${p.reachY}" r="4" class="fill-emerald-500 stroke-card stroke-2">
         <title>Date: ${p.dateLabel}&#10;Reach: ${formatNumber(p.s.profile_reach)}</title>
@@ -669,23 +773,24 @@ export async function getStaticPaths() {
     const earliestTime = new Date(earliest.recorded_at).getTime();
     const latestTime = new Date(latest.recorded_at).getTime();
 
-    const diffDays = Math.max(1, Math.round((latestTime - earliestTime) / (1000 * 60 * 60 * 24)));
+    const rawDiffDays = (latestTime - earliestTime) / (1000 * 60 * 60 * 24);
+    const daysSpan = Math.max(1, Math.round(rawDiffDays));
     const pinsAdded = (latest.pin_count || 0) - (earliest.pin_count || 0);
-    const pinsPerDay = pinsAdded > 0 ? (pinsAdded / diffDays).toFixed(1) : '0.0';
-    const estimatedMonthly = Math.round((pinsAdded / diffDays) * 30);
+
+    const pinsPerDay = pinsAdded > 0 ? (pinsAdded / daysSpan).toFixed(1) : '0.0';
+    const estimatedMonthly = Math.round((pinsAdded / daysSpan) * 30);
 
     pinningVelocityVal.textContent = `${pinsPerDay} Pins/Day`;
-    pinningVelocitySub.textContent = `Pacing based on snapshot deltas over ${diffDays} day(s).`;
+    pinningVelocitySub.textContent = `Rolling pacing evaluated over ${daysSpan} day(s).`;
 
     if (velocityPinsAdded) velocityPinsAdded.textContent = `${pinsAdded >= 0 ? '+' : ''}${formatNumber(pinsAdded)}`;
-    if (velocityDaysSpan) velocityDaysSpan.textContent = `${diffDays} days`;
+    if (velocityDaysSpan) velocityDaysSpan.textContent = `${daysSpan} days`;
     if (velocityMonthlyRate) velocityMonthlyRate.textContent = `~${formatNumber(estimatedMonthly)} pins/mo`;
   }
 
   function populateMonthDropdowns() {
     if (!snapshotsList || snapshotsList.length === 0) return;
 
-    // Extract unique YYYY-MM keys
     const monthsMap = new Map<string, string>();
     snapshotsList.forEach(s => {
       const d = new Date(s.recorded_at);
@@ -698,21 +803,19 @@ export async function getStaticPaths() {
 
     const monthsArr = Array.from(monthsMap.entries()).sort((a, b) => b[0].localeCompare(a[0]));
 
-    // Populate Snapshot Filter Select Month Dropdown
     if (snapshotMonthSelect) {
       snapshotMonthSelect.innerHTML = `<option value="all">All Months</option>` +
         monthsArr.map(([key, label]) => `<option value="${key}">${label}</option>`).join('');
     }
 
-    // Populate Month-over-Month Comparison Dropdowns
     if (momMonthASelect && momMonthBSelect) {
       const optionsHtml = monthsArr.map(([key, label]) => `<option value="${key}">${label}</option>`).join('');
       momMonthASelect.innerHTML = optionsHtml;
       momMonthBSelect.innerHTML = optionsHtml;
 
       if (monthsArr.length >= 2) {
-        momMonthASelect.value = monthsArr[1][0]; // Previous month
-        momMonthBSelect.value = monthsArr[0][0]; // Current month
+        momMonthASelect.value = monthsArr[1][0];
+        momMonthBSelect.value = monthsArr[0][0];
       }
     }
   }
@@ -725,7 +828,6 @@ export async function getStaticPaths() {
 
     if (!monthAKey || !monthBKey) return;
 
-    // Get latest snapshot for Month A and Month B
     const snapshotsA = snapshotsList.filter(s => {
       const d = new Date(s.recorded_at);
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === monthAKey;
@@ -739,7 +841,6 @@ export async function getStaticPaths() {
     const snapA = snapshotsA[0] || snapshotsList[0];
     const snapB = snapshotsB[0] || snapshotsList[snapshotsList.length - 1];
 
-    // Compute Deltas between Month A and Month B
     const reachChange = (snapB.profile_reach || 0) - (snapA.profile_reach || 0);
     const reachPct = (snapA.profile_reach || 0) > 0 ? (reachChange / snapA.profile_reach) * 100 : 0;
 
@@ -781,7 +882,198 @@ export async function getStaticPaths() {
     `;
   }
 
-  // --- Event Listeners for Filter Controls ---
+  // --- Boards Pagination, Search & Sorting Engine ---
+
+  function renderBoardsTable() {
+    if (!boardsTableBody) return;
+
+    // Filter by search query
+    let filtered = boardsList.filter(b => {
+      if (!boardSearchQuery) return true;
+      const q = boardSearchQuery.toLowerCase();
+      const nameMatch = b.name.toLowerCase().includes(q);
+      const descMatch = b.description ? b.description.toLowerCase().includes(q) : false;
+      return nameMatch || descMatch;
+    });
+
+    // Sort boards
+    filtered.sort((a, b) => {
+      if (boardSortKey === 'most_pins') {
+        return (b.pin_count || 0) - (a.pin_count || 0);
+      } else if (boardSortKey === 'most_followers') {
+        return (b.follower_count || 0) - (a.follower_count || 0);
+      } else if (boardSortKey === 'recent_activity') {
+        return new Date(b.last_pinned_at || 0).getTime() - new Date(a.last_pinned_at || 0).getTime();
+      } else if (boardSortKey === 'creation_date') {
+        return new Date(b.board_created_at || 0).getTime() - new Date(a.board_created_at || 0).getTime();
+      }
+      return 0;
+    });
+
+    if (boardsCountBadge) boardsCountBadge.textContent = `${filtered.length} ${filtered.length === 1 ? 'Board' : 'Boards'}`;
+
+    if (filtered.length === 0) {
+      boardsTableBody.innerHTML = `
+        <tr>
+          <td colspan="6" class="py-12 text-center text-xs text-muted-foreground">
+            ${boardsList.length === 0 ? 'No Pinterest boards recorded yet for this competitor. Click <span class="font-semibold text-foreground">Paste DevTools Payload</span> to ingest boards!' : 'No boards match your search query.'}
+          </td>
+        </tr>
+      `;
+      if (boardsPaginationInfo) boardsPaginationInfo.textContent = 'Showing 0 of 0 boards';
+      if (boardsPageIndicator) boardsPageIndicator.textContent = 'Page 1 of 1';
+      if (boardsPrevPageBtn) boardsPrevPageBtn.disabled = true;
+      if (boardsNextPageBtn) boardsNextPageBtn.disabled = true;
+      return;
+    }
+
+    // Pagination math
+    const totalPages = Math.ceil(filtered.length / boardsPageSize);
+    if (currentBoardPage > totalPages) currentBoardPage = totalPages;
+    if (currentBoardPage < 1) currentBoardPage = 1;
+
+    const startIdx = (currentBoardPage - 1) * boardsPageSize;
+    const endIdx = Math.min(startIdx + boardsPageSize, filtered.length);
+    const paginatedSlice = filtered.slice(startIdx, endIdx);
+
+    // Render table rows
+    boardsTableBody.innerHTML = paginatedSlice
+      .map((b) => {
+        const boardUrl = b.url ? (b.url.startsWith('http') ? b.url : `https://www.pinterest.com${b.url}`) : `https://www.pinterest.com/${competitorData?.username}/`;
+        return `
+          <tr class="hover:bg-muted/30 transition-colors">
+            <td class="py-4 px-6">
+              <div class="flex flex-col min-w-0">
+                <span class="text-xs font-bold text-foreground truncate">${b.name}</span>
+                <p class="text-[11px] text-muted-foreground line-clamp-2 max-w-md">${b.description || 'No description'}</p>
+              </div>
+            </td>
+            <td class="py-4 px-4 font-semibold text-foreground">
+              ${formatDate(b.board_created_at)}
+            </td>
+            <td class="py-4 px-4 text-muted-foreground">
+              ${formatDate(b.last_pinned_at)}
+            </td>
+            <td class="py-4 px-4 font-bold text-primary">
+              ${formatNumber(b.pin_count || 0)}
+            </td>
+            <td class="py-4 px-4 font-semibold text-foreground">
+              ${formatNumber(b.follower_count || 0)}
+            </td>
+            <td class="py-4 px-6 text-right">
+              <a
+                href="${boardUrl}"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-semibold text-foreground hover:bg-muted hover:text-primary transition-all"
+              >
+                <span>Board</span>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              </a>
+            </td>
+          </tr>
+        `;
+      })
+      .join('');
+
+    // Update Pagination UI
+    if (boardsPaginationInfo) boardsPaginationInfo.textContent = `Showing ${startIdx + 1}–${endIdx} of ${filtered.length} boards`;
+    if (boardsPageIndicator) boardsPageIndicator.textContent = `Page ${currentBoardPage} of ${totalPages}`;
+    if (boardsPrevPageBtn) boardsPrevPageBtn.disabled = currentBoardPage <= 1;
+    if (boardsNextPageBtn) boardsNextPageBtn.disabled = currentBoardPage >= totalPages;
+  }
+
+  // --- Snapshot History Log Table Renderer ---
+
+  function renderSnapshotsLogTable() {
+    if (!snapshotsTableBody) return;
+    if (snapshotsCountBadge) snapshotsCountBadge.textContent = `${snapshotsList.length} ${snapshotsList.length === 1 ? 'Snapshot' : 'Snapshots'}`;
+
+    if (!snapshotsList || snapshotsList.length === 0) {
+      snapshotsTableBody.innerHTML = `
+        <tr>
+          <td colspan="6" class="py-12 text-center text-xs text-muted-foreground">
+            No historical snapshots recorded yet for this competitor.
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    // Sort chronologically ascending to calculate deltas
+    const chronoSorted = [...snapshotsList].sort((a, b) => new Date(a.recorded_at).getTime() - new Date(b.recorded_at).getTime());
+
+    // Build display list descending (newest first)
+    const displayList = [...chronoSorted].reverse();
+
+    snapshotsTableBody.innerHTML = displayList
+      .map((s) => {
+        const chronoIdx = chronoSorted.findIndex(item => item.id === s.id);
+        const prevSnap = chronoIdx > 0 ? chronoSorted[chronoIdx - 1] : null;
+
+        const reachDiff = prevSnap ? (s.profile_reach || 0) - (prevSnap.profile_reach || 0) : 0;
+        const viewsDiff = prevSnap ? (s.profile_views || 0) - (prevSnap.profile_views || 0) : 0;
+        const followersDiff = prevSnap ? (s.follower_count || 0) - (prevSnap.follower_count || 0) : 0;
+        const pinsDiff = prevSnap ? (s.pin_count || 0) - (prevSnap.pin_count || 0) : 0;
+
+        const formatDeltaSpan = (diff: number) => {
+          if (!prevSnap || diff === 0) return '';
+          const isPos = diff > 0;
+          return `<span class="ml-1.5 font-semibold text-[10px] ${isPos ? 'text-emerald-500' : 'text-rose-500'}">(${isPos ? '+' : ''}${formatNumber(diff)})</span>`;
+        };
+
+        return `
+          <tr class="hover:bg-muted/30 transition-colors">
+            <td class="py-4 px-6 font-medium text-foreground">
+              ${formatDate(s.recorded_at, true)}
+            </td>
+            <td class="py-4 px-4 font-bold text-foreground">
+              ${formatNumber(s.profile_reach || 0)}${formatDeltaSpan(reachDiff)}
+            </td>
+            <td class="py-4 px-4 font-semibold text-foreground">
+              ${formatNumber(s.profile_views || 0)}${formatDeltaSpan(viewsDiff)}
+            </td>
+            <td class="py-4 px-4 text-foreground font-medium">
+              ${formatNumber(s.follower_count || 0)}${formatDeltaSpan(followersDiff)}
+            </td>
+            <td class="py-4 px-4 font-bold text-primary">
+              ${formatNumber(s.pin_count || 0)}${formatDeltaSpan(pinsDiff)}
+            </td>
+            <td class="py-4 px-6 text-right">
+              <button
+                data-delete-snapshot-id="${s.id}"
+                class="delete-snapshot-btn inline-flex items-center gap-1 rounded-lg border border-rose-500/20 bg-rose-500/10 px-2.5 py-1 text-[11px] font-semibold text-rose-500 hover:bg-rose-500/20 transition-all"
+                title="Delete Snapshot Record"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                <span>Delete</span>
+              </button>
+            </td>
+          </tr>
+        `;
+      })
+      .join('');
+
+    // Attach event listeners to delete snapshot buttons
+    document.querySelectorAll('.delete-snapshot-btn').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        const snapId = (e.currentTarget as HTMLElement).getAttribute('data-delete-snapshot-id');
+        if (!snapId) return;
+
+        if (confirm('Are you sure you want to delete this snapshot entry from history?')) {
+          try {
+            await deleteCompetitorSnapshot(snapId, competitorId);
+            showStatus('Snapshot record deleted successfully.');
+            await loadDetails();
+          } catch (err: any) {
+            showStatus(`Failed to delete snapshot: ${err.message}`, true);
+          }
+        }
+      });
+    });
+  }
+
+  // --- Event Listeners for Filter & Pagination Controls ---
 
   rangeBtns.forEach(btn => {
     btn.addEventListener('click', () => {
@@ -823,6 +1115,39 @@ export async function getStaticPaths() {
   if (momMonthASelect && momMonthBSelect) {
     momMonthASelect.addEventListener('change', renderMoMComparison);
     momMonthBSelect.addEventListener('change', renderMoMComparison);
+  }
+
+  // Boards Search & Sort Listeners
+  if (boardSearchInput) {
+    boardSearchInput.addEventListener('input', () => {
+      boardSearchQuery = boardSearchInput.value.trim();
+      currentBoardPage = 1;
+      renderBoardsTable();
+    });
+  }
+
+  if (boardSortSelect) {
+    boardSortSelect.addEventListener('change', () => {
+      boardSortKey = boardSortSelect.value;
+      currentBoardPage = 1;
+      renderBoardsTable();
+    });
+  }
+
+  if (boardsPrevPageBtn) {
+    boardsPrevPageBtn.addEventListener('click', () => {
+      if (currentBoardPage > 1) {
+        currentBoardPage--;
+        renderBoardsTable();
+      }
+    });
+  }
+
+  if (boardsNextPageBtn) {
+    boardsNextPageBtn.addEventListener('click', () => {
+      currentBoardPage++;
+      renderBoardsTable();
+    });
   }
 
   // --- Main Data Loader ---
@@ -898,63 +1223,9 @@ export async function getStaticPaths() {
       renderMoMComparison();
     }
 
-    // Render Boards Table
+    // Render Boards Table & Snapshots Log Table
     renderBoardsTable();
-  }
-
-  function renderBoardsTable() {
-    if (!boardsTableBody) return;
-    if (boardsCountBadge) boardsCountBadge.textContent = `${boardsList.length} ${boardsList.length === 1 ? 'Board' : 'Boards'}`;
-
-    if (boardsList.length === 0) {
-      boardsTableBody.innerHTML = `
-        <tr>
-          <td colspan="6" class="py-12 text-center text-xs text-muted-foreground">
-            No Pinterest boards recorded yet for this competitor. Click <span class="font-semibold text-foreground">Paste DevTools Payload</span> to ingest boards from Pinterest DevTools!
-          </td>
-        </tr>
-      `;
-      return;
-    }
-
-    boardsTableBody.innerHTML = boardsList
-      .map((b) => {
-        const boardUrl = b.url ? (b.url.startsWith('http') ? b.url : `https://www.pinterest.com${b.url}`) : `https://www.pinterest.com/${competitorData?.username}/`;
-        return `
-          <tr class="hover:bg-muted/30 transition-colors">
-            <td class="py-4 px-6">
-              <div class="flex flex-col min-w-0">
-                <span class="text-xs font-bold text-foreground truncate">${b.name}</span>
-                <p class="text-[11px] text-muted-foreground line-clamp-2 max-w-md">${b.description || 'No description'}</p>
-              </div>
-            </td>
-            <td class="py-4 px-4 font-semibold text-foreground">
-              ${formatDate(b.board_created_at)}
-            </td>
-            <td class="py-4 px-4 text-muted-foreground">
-              ${formatDate(b.last_pinned_at)}
-            </td>
-            <td class="py-4 px-4 font-bold text-primary">
-              ${formatNumber(b.pin_count || 0)}
-            </td>
-            <td class="py-4 px-4 font-semibold text-foreground">
-              ${formatNumber(b.follower_count || 0)}
-            </td>
-            <td class="py-4 px-6 text-right">
-              <a
-                href="${boardUrl}"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-semibold text-foreground hover:bg-muted hover:text-primary transition-all"
-              >
-                <span>Board</span>
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-              </a>
-            </td>
-          </tr>
-        `;
-      })
-      .join('');
+    renderSnapshotsLogTable();
   }
 
   // Modal Handlers
