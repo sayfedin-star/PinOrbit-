@@ -1,6 +1,5 @@
 ---
 import Layout from '../../layouts/Layout.astro';
-import SectionHeader from '../../components/ui/SectionHeader.astro';
 import { getCompetitors } from '../../lib/competitors';
 
 export async function getStaticPaths() {
@@ -15,8 +14,8 @@ export async function getStaticPaths() {
 }
 ---
 
-<Layout title="Competitor Deep-Dive" description="Detailed board history timeline, strategy age, and snapshot growth tracking for Pinterest competitor.">
-  <!-- Back Button & Breadcrumbs -->
+<Layout title="Competitor Deep-Dive & Analytics Engine" description="Historical growth trajectory, Month-over-Month comparisons, pinning velocity, and board timeline analytics.">
+  <!-- Back Button & Action Controls Header -->
   <div class="mb-4 flex items-center justify-between">
     <a href="/competitors" class="inline-flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors">
       <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
@@ -111,7 +110,130 @@ export async function getStaticPaths() {
     </div>
   </div>
 
-  <!-- Historical Growth Delta Cards Grid -->
+  <!-- Analytics Engine Filter & Controls Bar -->
+  <div class="rounded-2xl border border-border bg-card p-4 shadow-sm mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+    <!-- Quick Time Range Filter Buttons -->
+    <div class="flex items-center gap-1.5 flex-wrap">
+      <span class="text-xs font-semibold text-muted-foreground mr-2 flex items-center gap-1">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span>Time Range:</span>
+      </span>
+      <button data-range="7D" class="time-range-btn rounded-lg px-3 py-1.5 text-xs font-semibold bg-muted text-muted-foreground hover:text-foreground transition-all">7D</button>
+      <button data-range="30D" class="time-range-btn rounded-lg px-3 py-1.5 text-xs font-semibold bg-muted text-muted-foreground hover:text-foreground transition-all">30D</button>
+      <button data-range="90D" class="time-range-btn rounded-lg px-3 py-1.5 text-xs font-semibold bg-muted text-muted-foreground hover:text-foreground transition-all">90D</button>
+      <button data-range="YTD" class="time-range-btn rounded-lg px-3 py-1.5 text-xs font-semibold bg-muted text-muted-foreground hover:text-foreground transition-all">YTD</button>
+      <button data-range="ALL" class="time-range-btn rounded-lg px-3 py-1.5 text-xs font-semibold bg-primary text-primary-foreground transition-all shadow-xs">ALL</button>
+    </div>
+
+    <!-- Month Picker & MoM Comparison Toggle -->
+    <div class="flex items-center gap-3 flex-wrap">
+      <div class="flex items-center gap-1.5">
+        <label for="snapshot-month-select" class="text-xs font-semibold text-muted-foreground">Month:</label>
+        <select id="snapshot-month-select" class="rounded-xl border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground focus:border-primary focus:outline-none">
+          <option value="all">All Months</option>
+        </select>
+      </div>
+
+      <button
+        id="toggle-comparison-mode-btn"
+        class="inline-flex items-center gap-1.5 rounded-xl border border-border bg-muted/50 px-3.5 py-1.5 text-xs font-semibold text-foreground hover:bg-muted transition-all"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        <span>Compare Months</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Month-over-Month Comparison Panel (Toggleable) -->
+  <div id="mom-comparison-panel" class="hidden rounded-2xl border border-primary/30 bg-primary/5 p-6 shadow-sm mb-6 space-y-4">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-primary/15 pb-4">
+      <div class="flex items-center gap-2">
+        <div class="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        </div>
+        <div>
+          <h3 class="text-sm font-bold text-foreground">Month-over-Month Comparison Engine</h3>
+          <p class="text-xs text-muted-foreground">Select two distinct months to compute exact growth deltas and percentage shifts.</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3 flex-wrap">
+        <div class="flex items-center gap-1.5">
+          <label for="mom-month-a" class="text-xs font-semibold text-muted-foreground">Base Month (A):</label>
+          <select id="mom-month-a" class="rounded-xl border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground focus:border-primary focus:outline-none"></select>
+        </div>
+        <span class="text-xs font-bold text-muted-foreground">vs</span>
+        <div class="flex items-center gap-1.5">
+          <label for="mom-month-b" class="text-xs font-semibold text-muted-foreground">Target Month (B):</label>
+          <select id="mom-month-b" class="rounded-xl border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground focus:border-primary focus:outline-none"></select>
+        </div>
+      </div>
+    </div>
+
+    <!-- MoM Results Grid -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" id="mom-comparison-grid">
+      <!-- Populated via Client JS -->
+    </div>
+  </div>
+
+  <!-- Growth Chart & Pinning Velocity Grid -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Visual Growth Chart Card (2 Cols) -->
+    <div class="lg:col-span-2 rounded-2xl border border-border bg-card p-6 shadow-sm space-y-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <h3 class="text-sm font-bold text-foreground">Historical Growth Trajectory</h3>
+          <p class="text-xs text-muted-foreground">Line chart of Monthly Reach & Profile Views over time.</p>
+        </div>
+        <div class="flex items-center gap-4 text-xs font-medium">
+          <div class="flex items-center gap-1.5">
+            <span class="h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
+            <span class="text-foreground font-semibold">Monthly Reach</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="h-2.5 w-2.5 rounded-full bg-sky-500"></span>
+            <span class="text-foreground font-semibold">Profile Views</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- SVG Line Chart Canvas -->
+      <div class="relative w-full overflow-hidden" id="chart-container">
+        <svg id="growth-chart-svg" class="w-full h-56" viewBox="0 0 800 220" preserveAspectRatio="none">
+          <!-- Rendered via JavaScript -->
+        </svg>
+      </div>
+    </div>
+
+    <!-- Pinning Velocity Metric Card (1 Col) -->
+    <div class="rounded-2xl border border-border bg-card p-6 shadow-sm flex flex-col justify-between space-y-4">
+      <div>
+        <div class="flex items-center justify-between mb-1">
+          <span class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Pinning Velocity</span>
+          <span class="rounded-full bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-bold text-amber-600 dark:text-amber-400">⚡ Output Speed</span>
+        </div>
+        <div class="text-3xl font-extrabold text-foreground tracking-tight" id="pinning-velocity-val">0.0 Pins/Day</div>
+        <p class="text-xs text-muted-foreground mt-1" id="pinning-velocity-sub">Average daily pin creation rate based on snapshot deltas.</p>
+      </div>
+
+      <div class="border-t border-border pt-4 space-y-3">
+        <div class="flex items-center justify-between text-xs">
+          <span class="text-muted-foreground">Pins Added (Selected Range):</span>
+          <span class="font-bold text-foreground" id="velocity-pins-added">+0</span>
+        </div>
+        <div class="flex items-center justify-between text-xs">
+          <span class="text-muted-foreground">Time Horizon Evaluated:</span>
+          <span class="font-bold text-foreground" id="velocity-days-span">0 days</span>
+        </div>
+        <div class="flex items-center justify-between text-xs">
+          <span class="text-muted-foreground">Pacing Estimate:</span>
+          <span class="font-bold text-primary" id="velocity-monthly-rate">~0 pins/mo</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Primary Metric Stat Cards -->
   <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
     <div class="rounded-xl border border-border bg-card p-5 shadow-sm space-y-2">
       <div class="flex items-center justify-between">
@@ -256,7 +378,8 @@ export async function getStaticPaths() {
     parsePinterestPayload,
     ingestDevToolsPayload,
   } from '../../lib/competitors';
-  import type { Competitor, CompetitorBoard, CompetitorDeltaStats } from '../../lib/types';
+  import type { Competitor, CompetitorBoard, CompetitorSnapshot, CompetitorDeltaStats } from '../../lib/types';
+  import { formatNumber } from '../../lib/ui-helpers';
 
   // Get Competitor ID from URL pathname
   const pathname = window.location.pathname;
@@ -279,9 +402,15 @@ export async function getStaticPaths() {
 
   let competitorData: Competitor | null = null;
   let boardsList: CompetitorBoard[] = [];
+  let snapshotsList: CompetitorSnapshot[] = [];
   let deltasData: CompetitorDeltaStats | null = null;
 
-  // DOM Elements
+  // Analytics Engine Filter State
+  let activeTimeRange = 'ALL';
+  let selectedMonth = 'all';
+  let isComparisonMode = false;
+
+  // DOM Elements - Profile Header
   const competitorAvatar = document.getElementById('competitor-avatar') as HTMLImageElement;
   const competitorFullname = document.getElementById('competitor-fullname') as HTMLElement;
   const competitorHandle = document.getElementById('competitor-handle') as HTMLElement;
@@ -291,7 +420,7 @@ export async function getStaticPaths() {
   const strategyAgeVal = document.getElementById('strategy-age-val') as HTMLElement;
   const oldestBoardDateStr = document.getElementById('oldest-board-date-str') as HTMLElement;
 
-  // Deltas
+  // DOM Elements - Primary Deltas
   const currentReach = document.getElementById('current-reach') as HTMLElement;
   const currentViews = document.getElementById('current-views') as HTMLElement;
   const currentFollowers = document.getElementById('current-followers') as HTMLElement;
@@ -307,16 +436,31 @@ export async function getStaticPaths() {
   const deltaFollowersSub = document.getElementById('delta-followers-sub') as HTMLElement;
   const deltaPinsSub = document.getElementById('delta-pins-sub') as HTMLElement;
 
-  // Boards table
+  // DOM Elements - Analytics Controls & Velocity
+  const rangeBtns = document.querySelectorAll<HTMLButtonElement>('.time-range-btn');
+  const snapshotMonthSelect = document.getElementById('snapshot-month-select') as HTMLSelectElement;
+  const toggleComparisonBtn = document.getElementById('toggle-comparison-mode-btn') as HTMLButtonElement;
+  const momComparisonPanel = document.getElementById('mom-comparison-panel') as HTMLElement;
+  const momMonthASelect = document.getElementById('mom-month-a') as HTMLSelectElement;
+  const momMonthBSelect = document.getElementById('mom-month-b') as HTMLSelectElement;
+  const momComparisonGrid = document.getElementById('mom-comparison-grid') as HTMLElement;
+
+  const pinningVelocityVal = document.getElementById('pinning-velocity-val') as HTMLElement;
+  const pinningVelocitySub = document.getElementById('pinning-velocity-sub') as HTMLElement;
+  const velocityPinsAdded = document.getElementById('velocity-pins-added') as HTMLElement;
+  const velocityDaysSpan = document.getElementById('velocity-days-span') as HTMLElement;
+  const velocityMonthlyRate = document.getElementById('velocity-monthly-rate') as HTMLElement;
+
+  // DOM Elements - Chart & Boards table
+  const growthChartSvg = document.getElementById('growth-chart-svg') as unknown as SVGElement;
   const boardsTableBody = document.getElementById('boards-table-body') as HTMLElement;
   const boardsCountBadge = document.getElementById('boards-count-badge') as HTMLElement;
 
-  // Status banner
+  // DOM Elements - Status & Modal
   const statusBanner = document.getElementById('deepdive-status-banner') as HTMLElement;
   const statusText = document.getElementById('deepdive-status-text') as HTMLElement;
   const dismissStatusBtn = document.getElementById('dismiss-deepdive-status') as HTMLElement;
 
-  // Modal
   const modal = document.getElementById('deepdive-payload-modal') as HTMLElement;
   const openModalBtn = document.getElementById('open-deepdive-paste-modal') as HTMLElement;
   const closeModalBtn = document.getElementById('close-deepdive-modal') as HTMLElement;
@@ -325,11 +469,6 @@ export async function getStaticPaths() {
   const modalError = document.getElementById('deepdive-modal-error') as HTMLElement;
   const modalTextarea = document.getElementById('deepdive-payload-textarea') as HTMLTextAreaElement;
   const modalDetectedSpan = document.getElementById('deepdive-detected-type') as HTMLElement;
-
-  function formatNumber(num: number | null | undefined): string {
-    if (num === null || num === undefined || isNaN(num)) return '0';
-    return num.toLocaleString('en-US');
-  }
 
   function formatDate(isoStr?: string | null): string {
     if (!isoStr) return 'N/A';
@@ -370,10 +509,308 @@ export async function getStaticPaths() {
     dismissStatusBtn.addEventListener('click', () => statusBanner.classList.add('hidden'));
   }
 
+  // --- Core Analytics Logic ---
+
+  function getFilteredSnapshots(): CompetitorSnapshot[] {
+    if (!snapshotsList || snapshotsList.length === 0) return [];
+    
+    // Sort chronologically
+    const sorted = [...snapshotsList].sort((a, b) => new Date(a.recorded_at).getTime() - new Date(b.recorded_at).getTime());
+    const now = Date.now();
+
+    let filtered = sorted;
+
+    // Filter by Time Range
+    if (activeTimeRange === '7D') {
+      filtered = sorted.filter(s => now - new Date(s.recorded_at).getTime() <= 7 * 86400000);
+    } else if (activeTimeRange === '30D') {
+      filtered = sorted.filter(s => now - new Date(s.recorded_at).getTime() <= 30 * 86400000);
+    } else if (activeTimeRange === '90D') {
+      filtered = sorted.filter(s => now - new Date(s.recorded_at).getTime() <= 90 * 86400000);
+    } else if (activeTimeRange === 'YTD') {
+      const yearStart = new Date(new Date().getFullYear(), 0, 1).getTime();
+      filtered = sorted.filter(s => new Date(s.recorded_at).getTime() >= yearStart);
+    }
+
+    // Filter by Specific Month Dropdown
+    if (selectedMonth !== 'all') {
+      filtered = filtered.filter(s => {
+        const d = new Date(s.recorded_at);
+        const mKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        return mKey === selectedMonth;
+      });
+    }
+
+    return filtered.length > 0 ? filtered : sorted;
+  }
+
+  function renderVisualGrowthChart(snapshots: CompetitorSnapshot[]) {
+    if (!growthChartSvg) return;
+
+    if (!snapshots || snapshots.length === 0) {
+      growthChartSvg.innerHTML = `
+        <text x="400" y="110" text-anchor="middle" fill="currentColor" class="text-xs text-muted-foreground font-sans">
+          No historical snapshot data recorded yet.
+        </text>
+      `;
+      return;
+    }
+
+    // Prepare SVG canvas bounds
+    const width = 800;
+    const height = 220;
+    const paddingLeft = 60;
+    const paddingRight = 30;
+    const paddingTop = 20;
+    const paddingBottom = 40;
+
+    const chartWidth = width - paddingLeft - paddingRight;
+    const chartHeight = height - paddingTop - paddingBottom;
+
+    // Determine min/max values
+    const reaches = snapshots.map(s => s.profile_reach || 0);
+    const views = snapshots.map(s => s.profile_views || 0);
+
+    const maxReach = Math.max(...reaches, ...views, 100);
+    const minReach = 0;
+
+    // Map point coordinates
+    const points = snapshots.map((s, idx) => {
+      const x = paddingLeft + (snapshots.length === 1 ? chartWidth / 2 : (idx / (snapshots.length - 1)) * chartWidth);
+      const reachY = paddingTop + chartHeight - (((s.profile_reach || 0) - minReach) / (maxReach - minReach)) * chartHeight;
+      const viewsY = paddingTop + chartHeight - (((s.profile_views || 0) - minReach) / (maxReach - minReach)) * chartHeight;
+      const dateLabel = new Date(s.recorded_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      return { x, reachY, viewsY, s, dateLabel };
+    });
+
+    // Generate Path Strings
+    let reachPathStr = '';
+    let viewsPathStr = '';
+
+    if (points.length === 1) {
+      reachPathStr = `M ${paddingLeft} ${points[0].reachY} L ${width - paddingRight} ${points[0].reachY}`;
+      viewsPathStr = `M ${paddingLeft} ${points[0].viewsY} L ${width - paddingRight} ${points[0].viewsY}`;
+    } else {
+      reachPathStr = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.reachY}`).join(' ');
+      viewsPathStr = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.viewsY}`).join(' ');
+    }
+
+    // Grid Lines & Labels
+    const gridLines = [0, 0.33, 0.66, 1].map(ratio => {
+      const y = paddingTop + chartHeight * (1 - ratio);
+      const val = Math.round(minReach + ratio * (maxReach - minReach));
+      return `
+        <line x1="${paddingLeft}" y1="${y}" x2="${width - paddingRight}" y2="${y}" stroke="currentColor" class="text-border" stroke-dasharray="3,3" stroke-opacity="0.6"/>
+        <text x="${paddingLeft - 8}" y="${y + 4}" text-anchor="end" font-size="9" fill="currentColor" class="text-muted-foreground">${formatNumber(val)}</text>
+      `;
+    }).join('');
+
+    // X-Axis Date Labels
+    const xLabels = points.map(p => `
+      <text x="${p.x}" y="${height - 12}" text-anchor="middle" font-size="9" fill="currentColor" class="text-muted-foreground">${p.dateLabel}</text>
+    `).join('');
+
+    // Data Circles (Reach = Emerald, Views = Sky)
+    const circles = points.map(p => `
+      <circle cx="${p.x}" cy="${p.reachY}" r="4" class="fill-emerald-500 stroke-card stroke-2">
+        <title>Date: ${p.dateLabel}&#10;Reach: ${formatNumber(p.s.profile_reach)}</title>
+      </circle>
+      <circle cx="${p.x}" cy="${p.viewsY}" r="4" class="fill-sky-500 stroke-card stroke-2">
+        <title>Date: ${p.dateLabel}&#10;Views: ${formatNumber(p.s.profile_views)}</title>
+      </circle>
+    `).join('');
+
+    growthChartSvg.innerHTML = `
+      ${gridLines}
+      <path d="${reachPathStr}" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="${viewsPathStr}" fill="none" stroke="#0284c7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4,4"/>
+      ${circles}
+      ${xLabels}
+    `;
+  }
+
+  function calculatePinningVelocity(snapshots: CompetitorSnapshot[]) {
+    if (!pinningVelocityVal || !pinningVelocitySub) return;
+
+    if (!snapshots || snapshots.length < 2) {
+      // Fallback display if not enough snapshots
+      const pins = competitorData?.pin_count || 0;
+      pinningVelocityVal.textContent = '0.0 Pins/Day';
+      if (velocityPinsAdded) velocityPinsAdded.textContent = '+0';
+      if (velocityDaysSpan) velocityDaysSpan.textContent = '1 day';
+      if (velocityMonthlyRate) velocityMonthlyRate.textContent = '~0 pins/mo';
+      return;
+    }
+
+    const earliest = snapshots[0];
+    const latest = snapshots[snapshots.length - 1];
+
+    const earliestTime = new Date(earliest.recorded_at).getTime();
+    const latestTime = new Date(latest.recorded_at).getTime();
+
+    const diffDays = Math.max(1, Math.round((latestTime - earliestTime) / (1000 * 60 * 60 * 24)));
+    const pinsAdded = (latest.pin_count || 0) - (earliest.pin_count || 0);
+    const pinsPerDay = pinsAdded > 0 ? (pinsAdded / diffDays).toFixed(1) : '0.0';
+    const estimatedMonthly = Math.round((pinsAdded / diffDays) * 30);
+
+    pinningVelocityVal.textContent = `${pinsPerDay} Pins/Day`;
+    pinningVelocitySub.textContent = `Pacing based on snapshot deltas over ${diffDays} day(s).`;
+
+    if (velocityPinsAdded) velocityPinsAdded.textContent = `${pinsAdded >= 0 ? '+' : ''}${formatNumber(pinsAdded)}`;
+    if (velocityDaysSpan) velocityDaysSpan.textContent = `${diffDays} days`;
+    if (velocityMonthlyRate) velocityMonthlyRate.textContent = `~${formatNumber(estimatedMonthly)} pins/mo`;
+  }
+
+  function populateMonthDropdowns() {
+    if (!snapshotsList || snapshotsList.length === 0) return;
+
+    // Extract unique YYYY-MM keys
+    const monthsMap = new Map<string, string>();
+    snapshotsList.forEach(s => {
+      const d = new Date(s.recorded_at);
+      if (!isNaN(d.getTime())) {
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        const label = d.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+        monthsMap.set(key, label);
+      }
+    });
+
+    const monthsArr = Array.from(monthsMap.entries()).sort((a, b) => b[0].localeCompare(a[0]));
+
+    // Populate Snapshot Filter Select Month Dropdown
+    if (snapshotMonthSelect) {
+      snapshotMonthSelect.innerHTML = `<option value="all">All Months</option>` +
+        monthsArr.map(([key, label]) => `<option value="${key}">${label}</option>`).join('');
+    }
+
+    // Populate Month-over-Month Comparison Dropdowns
+    if (momMonthASelect && momMonthBSelect) {
+      const optionsHtml = monthsArr.map(([key, label]) => `<option value="${key}">${label}</option>`).join('');
+      momMonthASelect.innerHTML = optionsHtml;
+      momMonthBSelect.innerHTML = optionsHtml;
+
+      if (monthsArr.length >= 2) {
+        momMonthASelect.value = monthsArr[1][0]; // Previous month
+        momMonthBSelect.value = monthsArr[0][0]; // Current month
+      }
+    }
+  }
+
+  function renderMoMComparison() {
+    if (!momComparisonGrid || !snapshotsList || snapshotsList.length === 0) return;
+
+    const monthAKey = momMonthASelect?.value;
+    const monthBKey = momMonthBSelect?.value;
+
+    if (!monthAKey || !monthBKey) return;
+
+    // Get latest snapshot for Month A and Month B
+    const snapshotsA = snapshotsList.filter(s => {
+      const d = new Date(s.recorded_at);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === monthAKey;
+    }).sort((a, b) => new Date(b.recorded_at).getTime() - new Date(a.recorded_at).getTime());
+
+    const snapshotsB = snapshotsList.filter(s => {
+      const d = new Date(s.recorded_at);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === monthBKey;
+    }).sort((a, b) => new Date(b.recorded_at).getTime() - new Date(a.recorded_at).getTime());
+
+    const snapA = snapshotsA[0] || snapshotsList[0];
+    const snapB = snapshotsB[0] || snapshotsList[snapshotsList.length - 1];
+
+    // Compute Deltas between Month A and Month B
+    const reachChange = (snapB.profile_reach || 0) - (snapA.profile_reach || 0);
+    const reachPct = (snapA.profile_reach || 0) > 0 ? (reachChange / snapA.profile_reach) * 100 : 0;
+
+    const viewsChange = (snapB.profile_views || 0) - (snapA.profile_views || 0);
+    const viewsPct = (snapA.profile_views || 0) > 0 ? (viewsChange / snapA.profile_views) * 100 : 0;
+
+    const followersChange = (snapB.follower_count || 0) - (snapA.follower_count || 0);
+    const followersPct = (snapA.follower_count || 0) > 0 ? (followersChange / snapA.follower_count) * 100 : 0;
+
+    const pinsChange = (snapB.pin_count || 0) - (snapA.pin_count || 0);
+    const pinsPct = (snapA.pin_count || 0) > 0 ? (pinsChange / snapA.pin_count) * 100 : 0;
+
+    const createMetricCard = (title: string, valA: number, valB: number, change: number, pct: number) => {
+      const isPos = change > 0;
+      const badgeStyle = isPos 
+        ? 'bg-emerald-500/15 text-emerald-500' 
+        : change < 0 ? 'bg-rose-500/15 text-rose-500' : 'bg-muted text-muted-foreground';
+
+      return `
+        <div class="rounded-xl border border-border bg-card p-4 shadow-sm space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">${title}</span>
+            <span class="rounded px-2 py-0.5 text-[11px] font-bold ${badgeStyle}">${change >= 0 ? '+' : ''}${pct.toFixed(1)}%</span>
+          </div>
+          <div class="text-xl font-bold text-foreground">${formatNumber(valB)}</div>
+          <div class="flex items-center justify-between text-[11px] text-muted-foreground pt-1 border-t border-border/50">
+            <span>Base (${monthAKey}): ${formatNumber(valA)}</span>
+            <span class="font-semibold ${isPos ? 'text-emerald-500' : change < 0 ? 'text-rose-500' : ''}">${change >= 0 ? '+' : ''}${formatNumber(change)}</span>
+          </div>
+        </div>
+      `;
+    };
+
+    momComparisonGrid.innerHTML = `
+      ${createMetricCard('Monthly Reach', snapA.profile_reach || 0, snapB.profile_reach || 0, reachChange, reachPct)}
+      ${createMetricCard('Profile Views', snapA.profile_views || 0, snapB.profile_views || 0, viewsChange, viewsPct)}
+      ${createMetricCard('Followers', snapA.follower_count || 0, snapB.follower_count || 0, followersChange, followersPct)}
+      ${createMetricCard('Total Pins', snapA.pin_count || 0, snapB.pin_count || 0, pinsChange, pinsPct)}
+    `;
+  }
+
+  // --- Event Listeners for Filter Controls ---
+
+  rangeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      rangeBtns.forEach(b => {
+        b.className = 'time-range-btn rounded-lg px-3 py-1.5 text-xs font-semibold bg-muted text-muted-foreground hover:text-foreground transition-all';
+      });
+      btn.className = 'time-range-btn rounded-lg px-3 py-1.5 text-xs font-semibold bg-primary text-primary-foreground transition-all shadow-xs';
+      
+      activeTimeRange = btn.dataset.range || 'ALL';
+      const filtered = getFilteredSnapshots();
+      renderVisualGrowthChart(filtered);
+      calculatePinningVelocity(filtered);
+    });
+  });
+
+  if (snapshotMonthSelect) {
+    snapshotMonthSelect.addEventListener('change', () => {
+      selectedMonth = snapshotMonthSelect.value;
+      const filtered = getFilteredSnapshots();
+      renderVisualGrowthChart(filtered);
+      calculatePinningVelocity(filtered);
+    });
+  }
+
+  if (toggleComparisonBtn && momComparisonPanel) {
+    toggleComparisonBtn.addEventListener('click', () => {
+      isComparisonMode = !isComparisonMode;
+      if (isComparisonMode) {
+        momComparisonPanel.classList.remove('hidden');
+        toggleComparisonBtn.className = 'inline-flex items-center gap-1.5 rounded-xl border border-primary bg-primary text-primary-foreground px-3.5 py-1.5 text-xs font-semibold transition-all shadow-sm';
+        renderMoMComparison();
+      } else {
+        momComparisonPanel.classList.add('hidden');
+        toggleComparisonBtn.className = 'inline-flex items-center gap-1.5 rounded-xl border border-border bg-muted/50 px-3.5 py-1.5 text-xs font-semibold text-foreground hover:bg-muted transition-all';
+      }
+    });
+  }
+
+  if (momMonthASelect && momMonthBSelect) {
+    momMonthASelect.addEventListener('change', renderMoMComparison);
+    momMonthBSelect.addEventListener('change', renderMoMComparison);
+  }
+
+  // --- Main Data Loader ---
+
   async function loadDetails() {
     const details = await getCompetitorDetails(competitorId);
     competitorData = details.competitor;
     boardsList = details.boards;
+    snapshotsList = details.snapshots || [];
     deltasData = details.deltas;
 
     if (!competitorData) {
@@ -381,7 +818,7 @@ export async function getStaticPaths() {
       return;
     }
 
-    // Populate header
+    // Populate Header
     if (competitorAvatar) competitorAvatar.src = competitorData.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&h=200&q=80';
     if (competitorFullname) competitorFullname.textContent = competitorData.full_name || competitorData.username;
     if (competitorHandle) competitorHandle.textContent = `@${competitorData.username}`;
@@ -396,7 +833,7 @@ export async function getStaticPaths() {
     if (strategyAgeVal) strategyAgeVal.textContent = competitorData.strategy_age_days ? `${competitorData.strategy_age_days} Days` : 'Unknown';
     if (oldestBoardDateStr) oldestBoardDateStr.textContent = competitorData.oldest_board_date ? `Oldest board: ${formatDate(competitorData.oldest_board_date)}` : 'No boards recorded yet';
 
-    // Metrics & Deltas
+    // Primary Metrics & Deltas (Full Number Formatting)
     if (currentReach) currentReach.textContent = formatNumber(competitorData.profile_reach || 0);
     if (currentViews) currentViews.textContent = formatNumber(competitorData.profile_views || 0);
     if (currentFollowers) currentFollowers.textContent = formatNumber(competitorData.follower_count || 0);
@@ -407,6 +844,16 @@ export async function getStaticPaths() {
       renderDeltaBadge(deltaViewsBadge, deltaViewsSub, deltasData.viewsChange, deltasData.viewsPercent);
       renderDeltaBadge(deltaFollowersBadge, deltaFollowersSub, deltasData.followersChange, deltasData.followersPercent);
       renderDeltaBadge(deltaPinsBadge, deltaPinsSub, deltasData.pinsChange, deltasData.pinsPercent);
+    }
+
+    // Populate Dropdowns & Render Analytics Engine Cards
+    populateMonthDropdowns();
+    const filteredSnapshots = getFilteredSnapshots();
+    renderVisualGrowthChart(filteredSnapshots);
+    calculatePinningVelocity(filteredSnapshots);
+
+    if (isComparisonMode) {
+      renderMoMComparison();
     }
 
     // Render Boards Table
