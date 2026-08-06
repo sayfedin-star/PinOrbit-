@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from './supabase';
+import { supabase, isSupabaseConfigured, createAstroServerClient } from './supabase';
 import type { Workspace } from './types';
 
 export const ACTIVE_WORKSPACE_COOKIE = 'pinorbit_active_workspace_id';
@@ -21,15 +21,38 @@ export function getDefaultWorkspaceId(): string {
 
 /**
  * Fetches all available workspaces for the current user/admin session.
- * Safe to call from Astro frontmatter. Falls back to Default Workspace if unconfigured.
+ * Safe to call from Astro frontmatter (SSR) and client side.
+ * Uses official @supabase/ssr request-scoped server client when Astro cookies or request objects are provided in SSR.
  */
-export async function getWorkspaces(): Promise<Workspace[]> {
-  if (!isSupabaseConfigured || !supabase) {
+export async function getWorkspaces(
+  cookiesOrClient?: any,
+  request?: Request,
+  responseHeaders?: Headers | any
+): Promise<Workspace[]> {
+  if (!isSupabaseConfigured) {
+    return [DEFAULT_WORKSPACE];
+  }
+
+  let activeClient = supabase;
+
+  // 1. If passed an explicit Supabase client instance
+  if (cookiesOrClient && typeof cookiesOrClient.from === 'function') {
+    activeClient = cookiesOrClient;
+  }
+  // 2. If passed Astro cookies or Request in SSR, create a request-scoped @supabase/ssr server client
+  else if (cookiesOrClient && (typeof cookiesOrClient.get === 'function' || typeof cookiesOrClient.headers !== 'undefined')) {
+    const serverClient = createAstroServerClient(cookiesOrClient, request, responseHeaders);
+    if (serverClient) {
+      activeClient = serverClient;
+    }
+  }
+
+  if (!activeClient) {
     return [DEFAULT_WORKSPACE];
   }
 
   try {
-    const { data, error } = await supabase
+    const { data, error } = await activeClient
       .from('workspaces')
       .select('*')
       .order('created_at', { ascending: true });
