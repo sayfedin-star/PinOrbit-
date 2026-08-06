@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { escapeHtml, formatDate, formatTime, maskWebhookUrl, renderStatusBadge } from '../ui-helpers';
+import { escapeHtml, formatDate, formatNumber, formatTime, maskWebhookUrl, renderStatusBadge } from '../ui-helpers';
 
 describe('ui-helpers test suite', () => {
   describe('escapeHtml', () => {
@@ -93,6 +93,20 @@ describe('ui-helpers test suite', () => {
       const rendered = renderStatusBadge('pending', customLabel);
       expect(rendered).not.toContain('<img');
       expect(rendered).toContain('&lt;img src=x onerror=alert(1)&gt;');
+    });
+  });
+
+  describe('formatNumber', () => {
+    it('formats numbers with commas and avoids compact M/k notation', () => {
+      expect(formatNumber(4256456)).toBe('4,256,456');
+      expect(formatNumber(1450)).toBe('1,450');
+      expect(formatNumber(0)).toBe('0');
+    });
+
+    it('handles null, undefined, and NaN gracefully', () => {
+      expect(formatNumber(null)).toBe('0');
+      expect(formatNumber(undefined)).toBe('0');
+      expect(formatNumber(NaN)).toBe('0');
     });
   });
 });

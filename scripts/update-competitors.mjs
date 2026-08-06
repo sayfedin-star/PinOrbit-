@@ -126,19 +126,20 @@ async function updateCompetitors() {
     }
 
     // =========================================================================
-    // STEP 2: Fetch Boards via BoardsResource Endpoint
+    // STEP 2: Fetch Boards via BoardsResource Endpoint (Detailed Fieldset)
     // =========================================================================
-    const boardsDataParam = encodeURIComponent(JSON.stringify({
+    const boardsOptions = {
       options: {
-        page_size: 50,
+        username: username,
+        field_set_key: "detailed",
         privacy_filter: "all",
         sort: "last_pinned_to",
-        username: username
+        page_size: 50
       },
       context: {}
-    }));
+    };
 
-    const boardsUrl = `https://www.pinterest.com/resource/BoardsResource/get/?source_url=%2F${username}%2F&data=${boardsDataParam}&_=${Date.now()}`;
+    const boardsUrl = `https://www.pinterest.com/resource/BoardsResource/get/?source_url=%2F${username}%2F&data=${encodeURIComponent(JSON.stringify(boardsOptions))}&_=${Date.now()}`;
 
     try {
       const boardsRes = await fetch(boardsUrl, { method: "GET", headers: getHeaders(username) });
@@ -155,6 +156,8 @@ async function updateCompetitors() {
               ? (b.url.startsWith('http') ? b.url : `https://www.pinterest.com${b.url}`)
               : `https://www.pinterest.com/${username}/`;
 
+            const boardCreatedAt = b.created_at || b.board_created_at || now;
+
             return {
               competitor_id: comp.id,
               board_id: String(b.id || b.node_id),
@@ -163,7 +166,8 @@ async function updateCompetitors() {
               pin_count: b.pin_count || 0,
               follower_count: b.follower_count || 0,
               url: boardUrl,
-              created_at: b.created_at || now,
+              board_created_at: boardCreatedAt,
+              created_at: boardCreatedAt,
               last_pinned_at: b.last_pinned_by_owner_at || b.last_pinned_at || now
             };
           });
@@ -175,7 +179,7 @@ async function updateCompetitors() {
           if (boardError) {
             console.warn(`⚠️ Boards Upsert Warning for @${username}:`, boardError.message);
           } else {
-            console.log(`📋 Ingested ${boardsToUpsert.length} Board(s) successfully for @${username}.`);
+            console.log(`📋 Ingested ${boardsToUpsert.length} Board(s) with full details for @${username}.`);
           }
         } else {
           console.log(`ℹ️ No public boards returned for @${username}.`);

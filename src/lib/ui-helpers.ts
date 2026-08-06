@@ -81,6 +81,11 @@ export function maskWebhookUrl(url: string | null | undefined): string {
   }
 }
 
+export function formatNumber(num: number | null | undefined): string {
+  if (num === null || num === undefined || isNaN(num)) return '0';
+  return num.toLocaleString('en-US');
+}
+
 export function escapeHtml(str: string): string {
   return (str || '')
     .replace(/&/g, '&amp;')
