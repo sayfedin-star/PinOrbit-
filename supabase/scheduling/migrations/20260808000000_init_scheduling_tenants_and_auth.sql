@@ -1,6 +1,6 @@
 -- ==============================================================================
 -- Migration: 20260808000000_init_scheduling_tenants_and_auth.sql
--- Project: Project 1 (Scheduling / Auth Authority) - Ref: eygdoetdwqllvsxpvoex
+-- Project: Project 1 (Scheduling / Auth Authority)
 -- Domain: Core Auth, Workspaces, Memberships, Admin Roles, and Tenant Security
 -- ==============================================================================
 

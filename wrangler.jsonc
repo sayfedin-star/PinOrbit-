@@ -6,7 +6,7 @@
     "directory": "./dist"
   },
   "vars": {
-    "PUBLIC_SUPABASE_URL": "https://zeryyrmhdueezzwyodhq.supabase.co",
-    "PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inplcnl5cm1oZHVlZXp6d3lvZGhxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU3MTA0MTQsImV4cCI6MjEwMTI4NjQxNH0.5erFNHK-KOc-cNVmz8VdTPPUs8B4IkObOt0NToRH-Q4"
+    "PUBLIC_SUPABASE_URL": "https://your-project-1.supabase.co",
+    "PUBLIC_SUPABASE_ANON_KEY": "your_project_1_publishable_key"
   }
 }

@@ -1,6 +1,6 @@
 -- ==============================================================================
 -- Migration: 20260808000001_init_scheduling_accounts_boards_pins.sql
--- Project: Project 1 (Scheduling / Auth Authority) - Ref: eygdoetdwqllvsxpvoex
+-- Project: Project 1 (Scheduling / Auth Authority)
 -- Domain: Accounts, Webhooks, Posting Windows, Boards, and Pin Queue
 -- ==============================================================================
 

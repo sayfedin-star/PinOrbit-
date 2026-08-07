@@ -13,8 +13,8 @@ SELECT cron.schedule(
   '0 2 * * *',
   $$
   SELECT net.http_post(
-    url := 'https://zeryyrmhdueezzwyodhq.supabase.co/functions/v1/update-competitors',
-    headers := '{"Content-Type": "application/json", "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inplcnl5cm1oZHVlZXp6d3lvZGhxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU3MTA0MTQsImV4cCI6MjEwMTI4NjQxNH0.5erFNHK-KOc-cNVmz8VdTPPUs8B4IkObOt0NToRH-Q4"}'::jsonb,
+    url := 'https://your-project-ref.supabase.co/functions/v1/update-competitors',
+    headers := '{"Content-Type": "application/json", "Authorization": "Bearer your-anon-key"}'::jsonb,
     body := '{}'::jsonb
   );
   $$

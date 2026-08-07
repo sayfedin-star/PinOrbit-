@@ -803,7 +803,9 @@ const { id } = Astro.params;
       navigator.clipboard.writeText(idStr);
       showFeedbackBanner(`Account ID (${idStr}) copied to clipboard.`, 'success');
     });
-    document.getElementById('btn-open-create-board-modal')?.addEventListener('click', openCreateBoardModal);
+    document.getElementById('btn-open-create-board-modal')?.addEventListener('click', () => {
+      window.location.href = '/boards';
+    });
     document.getElementById('btn-edit-limit')?.addEventListener('click', openLimitModal);
     document.getElementById('btn-toggle-active')?.addEventListener('click', handleToggleActive);
   }
@@ -1294,7 +1296,7 @@ const { id } = Astro.params;
       const createBoardBtn = target.closest('#btn-open-create-board-modal');
       if (createBoardBtn) {
         e.preventDefault();
-        openCreateBoardModal();
+        window.location.href = '/boards';
         return;
       }
 
@@ -1308,7 +1310,7 @@ const { id } = Astro.params;
       const webhooksBtn = target.closest('#open-webhooks-modal-btn');
       if (webhooksBtn) {
         e.preventDefault();
-        openManageWebhooksModal();
+        window.location.href = '/accounts';
         return;
       }
 

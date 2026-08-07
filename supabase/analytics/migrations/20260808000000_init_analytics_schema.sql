@@ -1,6 +1,6 @@
 -- ==============================================================================
 -- Migration: 20260808000000_init_analytics_schema.sql
--- Project: Project 3 (Analytics - Server-Only Database) - Ref: jxdkbwnwtjelznmauwpc
+-- Project: Project 3 (Analytics - Server-Only Database)
 -- Domain: Import Sessions, Pin Metrics, URL Performance, Board Analytics, and Daily Rollups
 -- ==============================================================================
 

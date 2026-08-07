@@ -73,12 +73,12 @@ export function createAstroServerClient(
         // 2. Apply Cache-Control / Response headers passed by @supabase/ssr during token refresh
         if (headersToSet && responseHeaders && typeof responseHeaders.set === 'function') {
           try {
-            if (typeof headersToSet.forEach === 'function') {
-              headersToSet.forEach((val: string, key: string) => {
+            if (typeof (headersToSet as any).forEach === 'function') {
+              (headersToSet as any).forEach((val: string, key: string) => {
                 responseHeaders.set(key, val);
               });
             } else if (Array.isArray(headersToSet)) {
-              headersToSet.forEach(({ name, value }: any) => {
+              (headersToSet as any[]).forEach(({ name, value }: any) => {
                 responseHeaders.set(name, value);
               });
             }

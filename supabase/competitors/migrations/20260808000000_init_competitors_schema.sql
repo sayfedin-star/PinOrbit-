@@ -1,6 +1,6 @@
 -- ==============================================================================
 -- Migration: 20260808000000_init_competitors_schema.sql
--- Project: Project 2 (Competitors - Server-Only Database) - Ref: guycnhvwfzdzbpgsnavg
+-- Project: Project 2 (Competitors - Server-Only Database)
 -- Domain: Competitor Profiles, Boards, Time-Series Snapshots, and Daily Rollups
 -- ==============================================================================
 

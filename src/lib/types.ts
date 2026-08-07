@@ -51,8 +51,8 @@ export interface Account {
   pinning_started_at?: string | null;
   posting_window_start?: string | null;
   posting_window_end?: string | null;
-  posting_interval_minutes?: number;
-  random_delay_minutes?: number;
+  posting_interval_minutes?: number | null;
+  random_delay_minutes?: number | null;
   timezone?: string;
   created_at: string;
   boards_count?: number;

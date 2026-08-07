@@ -5,10 +5,22 @@ dist/
 # dependencies
 node_modules/
 
-# environment variables
+# environment variables & local secrets
 .env
 .env.local
 .env.*.local
+.dev.vars
+*.local
+secrets/
+local-secrets.*
+
+# database dumps & temporary exports
+dumps/
+*.dump
+*.sql.gz
+exports/
+temp-exports/
+*.csv.tmp
 
 # logs
 npm-debug.log*

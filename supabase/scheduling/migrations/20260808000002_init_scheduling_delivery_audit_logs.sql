@@ -1,6 +1,6 @@
 -- ==============================================================================
 -- Migration: 20260808000002_init_scheduling_delivery_audit_logs.sql
--- Project: Project 1 (Scheduling / Auth Authority) - Ref: eygdoetdwqllvsxpvoex
+-- Project: Project 1 (Scheduling / Auth Authority)
 -- Domain: Delivery Logs, Operational System Logs, and Audit Trail
 -- ==============================================================================
 
