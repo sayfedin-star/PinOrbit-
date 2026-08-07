@@ -3,13 +3,14 @@ import { createServerClient } from '@supabase/ssr';
 import type { AstroCookies } from 'astro';
 import type { Account, Board, Pin, Log, AuditLog, AccountWebhook, ImportSession, DashboardKPIs, AccountPinStats, AccountWebhookSummary, PinDeliveryLog } from './types';
 
-const supabaseUrl = import.meta.env.PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY || '';
+const supabaseUrl = import.meta.env.SCHEDULING_SUPABASE_URL || import.meta.env.PUBLIC_SUPABASE_URL || '';
+const supabaseAnonKey = import.meta.env.SCHEDULING_SUPABASE_PUBLISHABLE_KEY || import.meta.env.PUBLIC_SUPABASE_ANON_KEY || '';
 
 export const isSupabaseConfigured = Boolean(
   supabaseUrl &&
   supabaseAnonKey &&
-  supabaseUrl !== 'https://your-project-id.supabase.co'
+  supabaseUrl !== 'https://your-project-id.supabase.co' &&
+  supabaseUrl !== 'https://your-project-1.supabase.co'
 );
 
 export const supabase = isSupabaseConfigured

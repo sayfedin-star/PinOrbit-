@@ -1,12 +1,14 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "pinorbit",
+  "name": "pinorbit-v2",
   "compatibility_date": "2026-08-03",
   "assets": {
     "directory": "./dist"
   },
   "vars": {
-    "PUBLIC_SUPABASE_URL": "https://your-project-1.supabase.co",
-    "PUBLIC_SUPABASE_ANON_KEY": "your_project_1_publishable_key"
+    "SCHEDULING_SUPABASE_URL": "https://eygdoetdwqllvsxpvoex.supabase.co",
+    "SCHEDULING_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_efxKrwXCOaj9CM5oxD-WjA_jqvB5iGD",
+    "COMPETITORS_SUPABASE_URL": "https://guycnhvwfzdzbpgsnavg.supabase.co",
+    "ANALYTICS_SUPABASE_URL": "https://jxdkbwnwtjelznmauwpc.supabase.co"
   }
 }
