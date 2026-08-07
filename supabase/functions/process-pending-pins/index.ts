@@ -416,6 +416,23 @@ Deno.serve(async (req: Request) => {
 
       const currentPin = claimedPins[0] as Pin;
 
+      // Log 'queued' event when claimed for processing
+      try {
+        await supabase.rpc('append_pin_delivery_log', {
+          p_pin_id: currentPin.id,
+          p_attempt_no: ((currentPin as any).retry_count || 0) + 1,
+          p_event_type: 'queued',
+          p_provider: account.account_name,
+          p_metadata: {
+            account_id: account.id,
+            scheduled_for: currentPin.scheduled_for || null,
+            claimed_at: nowIso,
+          },
+        });
+      } catch (_logErr) {
+        console.warn("Failed to append queued delivery log:", _logErr);
+      }
+
       // 8. Board Matching Validation
       const matchedBoard = await findMatchingBoard(supabase, account.id, currentPin.board_name);
 
@@ -493,6 +510,19 @@ Deno.serve(async (req: Request) => {
       };
 
       try {
+        // Log 'dispatched' event
+        try {
+          await supabase.rpc('append_pin_delivery_log', {
+            p_pin_id: currentPin.id,
+            p_attempt_no: ((currentPin as any).retry_count || 0) + 1,
+            p_event_type: 'dispatched',
+            p_provider: targetWebhook.label || 'Webhook Provider',
+            p_metadata: { webhook_id: targetWebhook.id || null, webhook_url: targetWebhook.webhook_url },
+          });
+        } catch (_logErr) {
+          console.warn("Failed to append dispatched delivery log:", _logErr);
+        }
+
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 15000);
 
@@ -528,6 +558,21 @@ Deno.serve(async (req: Request) => {
             webhook_used: targetWebhook.webhook_url,
           });
 
+          // Log 'published' event in pin_delivery_logs
+          try {
+            await supabase.rpc('append_pin_delivery_log', {
+              p_pin_id: currentPin.id,
+              p_attempt_no: ((currentPin as any).retry_count || 0) + 1,
+              p_event_type: 'published',
+              p_provider: targetWebhook.label || 'Webhook Provider',
+              p_http_status: webhookResponse.status,
+              p_response_excerpt: 'Published successfully via webhook',
+              p_metadata: { webhook_id: targetWebhook.id || null, posted_at: postedTimestamp },
+            });
+          } catch (_logErr) {
+            console.warn("Failed to append published delivery log:", _logErr);
+          }
+
           if (targetWebhook.id) {
             await supabase
               .from("account_webhooks")
@@ -556,6 +601,28 @@ Deno.serve(async (req: Request) => {
           const currentRetryCount = (currentPin as any).retry_count || 0;
           const maxRetries = (currentPin as any).max_retries || 3;
           const isEligibleForRetry = !isPermanent && currentRetryCount < maxRetries;
+          const deliveryEventType = status === 429 ? 'rate_limited' : (isEligibleForRetry ? 'provider_error' : 'failed');
+
+          // Log delivery failure event in pin_delivery_logs
+          try {
+            await supabase.rpc('append_pin_delivery_log', {
+              p_pin_id: currentPin.id,
+              p_attempt_no: currentRetryCount + 1,
+              p_event_type: deliveryEventType,
+              p_provider: targetWebhook.label || 'Webhook Provider',
+              p_http_status: status,
+              p_error_code: status,
+              p_error_message: errorMessage,
+              p_response_excerpt: responseText.slice(0, 4000),
+              p_metadata: {
+                webhook_id: targetWebhook.id || null,
+                failure_type: failureType,
+                is_eligible_for_retry: isEligibleForRetry,
+              },
+            });
+          } catch (_logErr) {
+            console.warn("Failed to append delivery log event:", _logErr);
+          }
 
           if (isEligibleForRetry) {
             const nextRetryCount = currentRetryCount + 1;
@@ -629,6 +696,25 @@ Deno.serve(async (req: Request) => {
         const currentRetryCount = (currentPin as any).retry_count || 0;
         const maxRetries = (currentPin as any).max_retries || 3;
         const isEligibleForRetry = currentRetryCount < maxRetries;
+        const deliveryEventType = isEligibleForRetry ? 'provider_error' : 'failed';
+
+        // Log delivery error event in pin_delivery_logs
+        try {
+          await supabase.rpc('append_pin_delivery_log', {
+            p_pin_id: currentPin.id,
+            p_attempt_no: currentRetryCount + 1,
+            p_event_type: deliveryEventType,
+            p_provider: targetWebhook.label || 'Webhook Provider',
+            p_http_status: 504,
+            p_error_message: errorMessage,
+            p_metadata: {
+              webhook_id: targetWebhook.id || null,
+              is_abort: isAbort,
+            },
+          });
+        } catch (_logErr) {
+          console.warn("Failed to append delivery error log:", _logErr);
+        }
 
         if (isEligibleForRetry) {
           const nextRetryCount = currentRetryCount + 1;
@@ -688,6 +774,11 @@ Deno.serve(async (req: Request) => {
               last_failed_at: new Date().toISOString(),
               last_failure_reason: errorMessage,
             })
+            .eq("id", targetWebhook.id);
+        }
+
+        failedCount++;
+      }
             .eq("id", targetWebhook.id);
         }
 

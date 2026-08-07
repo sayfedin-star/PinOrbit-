@@ -3,11 +3,11 @@ import Layout from '../layouts/Layout.astro';
 import SectionHeader from '../components/ui/SectionHeader.astro';
 ---
 
-<Layout title="System Logs" description="Detailed audit log of all automation executions, webhook responses, and error traces.">
-  <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-2">
+<Layout title="System Logs" description="Detailed operational delivery events, automation executions, and diagnostic error traces.">
+  <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-4">
     <SectionHeader
-      title="Execution Logs"
-      description="Detailed audit log of all automation executions, webhook responses, and error traces."
+      title="Execution & Delivery Logs"
+      description="Operational delivery stream, per-attempt diagnostics, and system automation execution traces."
     />
 
     <button
@@ -21,45 +21,226 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
     </button>
   </div>
 
+  <!-- Tab Switcher -->
+  <div class="mb-6 flex gap-2 border-b border-border pb-2">
+    <button
+      id="tab-delivery-stream"
+      class="inline-flex items-center gap-2 rounded-lg bg-primary/10 px-4 py-2 text-xs font-bold text-primary transition-all border border-primary/20"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+      </svg>
+      <span>Pin Delivery Stream</span>
+    </button>
+
+    <button
+      id="tab-system-logs"
+      class="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-medium text-muted-foreground transition-all hover:bg-muted"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 8h10"/><path d="M7 12h10"/><path d="M7 16h6"/>
+      </svg>
+      <span>System Audit Logs</span>
+    </button>
+  </div>
+
   <div id="logs-container">
     <div class="overflow-hidden rounded-xl border border-border bg-card p-12 text-center text-xs text-muted-foreground animate-pulse">
-      Loading execution logs...
+      Loading delivery log stream...
     </div>
   </div>
 </Layout>
 
 <script>
   import { requireAuth } from '../lib/auth';
-  import { getLogs } from '../lib/supabase';
+  import { getLogs, getPinDeliveryLogs } from '../lib/supabase';
   import { renderStatusBadge, formatDate, renderEmptyStateHTML, escapeHtml, maskWebhookUrl } from '../lib/ui-helpers';
-  import type { Log } from '../lib/types';
+  import type { Log, PinDeliveryLog } from '../lib/types';
 
-  let currentLogs: Log[] = [];
+  let currentTab: 'delivery' | 'system' = 'delivery';
+  let currentSystemLogs: Log[] = [];
+  let currentDeliveryLogs: PinDeliveryLog[] = [];
 
   async function init() {
     const isAuth = await requireAuth();
     if (!isAuth) return;
+    setupTabs();
     setupExportButton();
-    await loadLogs();
+    await loadCurrentTab();
   }
 
-  async function loadLogs() {
+  function setupTabs() {
+    const btnDelivery = document.getElementById('tab-delivery-stream');
+    const btnSystem = document.getElementById('tab-system-logs');
+
+    btnDelivery?.addEventListener('click', () => {
+      if (currentTab === 'delivery') return;
+      currentTab = 'delivery';
+
+      btnDelivery.className = "inline-flex items-center gap-2 rounded-lg bg-primary/10 px-4 py-2 text-xs font-bold text-primary transition-all border border-primary/20";
+      btnSystem!.className = "inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-medium text-muted-foreground transition-all hover:bg-muted";
+
+      loadCurrentTab();
+    });
+
+    btnSystem?.addEventListener('click', () => {
+      if (currentTab === 'system') return;
+      currentTab = 'system';
+
+      btnSystem.className = "inline-flex items-center gap-2 rounded-lg bg-primary/10 px-4 py-2 text-xs font-bold text-primary transition-all border border-primary/20";
+      btnDelivery!.className = "inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-medium text-muted-foreground transition-all hover:bg-muted";
+
+      loadCurrentTab();
+    });
+  }
+
+  async function loadCurrentTab() {
+    if (currentTab === 'delivery') {
+      await loadDeliveryLogs();
+    } else {
+      await loadSystemLogs();
+    }
+  }
+
+  function renderEventBadge(eventType: string) {
+    switch (eventType) {
+      case 'published':
+      case 'success':
+        return `<span class="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"><span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>Published</span>`;
+      case 'rate_limited':
+        return `<span class="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2.5 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400 border border-amber-500/20"><span class="h-1.5 w-1.5 rounded-full bg-amber-500"></span>Rate Limited (429)</span>`;
+      case 'provider_error':
+      case 'transient':
+        return `<span class="inline-flex items-center gap-1 rounded-full bg-orange-500/10 px-2.5 py-0.5 text-xs font-semibold text-orange-600 dark:text-orange-400 border border-orange-500/20"><span class="h-1.5 w-1.5 rounded-full bg-orange-500"></span>Provider Error</span>`;
+      case 'failed':
+        return `<span class="inline-flex items-center gap-1 rounded-full bg-rose-500/10 px-2.5 py-0.5 text-xs font-semibold text-rose-600 dark:text-rose-400 border border-rose-500/20"><span class="h-1.5 w-1.5 rounded-full bg-rose-500"></span>Failed</span>`;
+      case 'dispatched':
+        return `<span class="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2.5 py-0.5 text-xs font-semibold text-blue-600 dark:text-blue-400 border border-blue-500/20"><span class="h-1.5 w-1.5 rounded-full bg-blue-500"></span>Dispatched</span>`;
+      case 'queued':
+      default:
+        return `<span class="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-xs font-semibold text-muted-foreground border border-border"><span class="h-1.5 w-1.5 rounded-full bg-muted-foreground"></span>${escapeHtml(eventType)}</span>`;
+    }
+  }
+
+  async function loadDeliveryLogs() {
     const container = document.getElementById('logs-container');
     if (!container) return;
 
-    try {
-      currentLogs = await getLogs(100);
+    container.innerHTML = `
+      <div class="overflow-hidden rounded-xl border border-border bg-card p-12 text-center text-xs text-muted-foreground animate-pulse">
+        Loading delivery log stream...
+      </div>
+    `;
 
-      if (!currentLogs || currentLogs.length === 0) {
+    try {
+      currentDeliveryLogs = await getPinDeliveryLogs(100);
+
+      if (!currentDeliveryLogs || currentDeliveryLogs.length === 0) {
         container.innerHTML = renderEmptyStateHTML(
-          'No Logs Available',
-          'Logs will record every webhook execution attempt from the Supabase Edge Function.',
+          'No Delivery Events Recorded',
+          'Pin delivery events will stream here automatically whenever pins are dispatched by the Edge Function worker.',
           'alert-circle'
         );
         return;
       }
 
-      const rowsHtml = currentLogs
+      const rowsHtml = currentDeliveryLogs
+        .map((log) => {
+          const statusText = log.http_status ? `HTTP ${log.http_status}` : (log.error_code ? `Error ${log.error_code}` : 'N/A');
+          const details = log.error_message || log.response_excerpt || 'Event recorded successfully.';
+
+          return `
+            <tr class="transition-colors hover:bg-muted/40">
+              <td class="px-6 py-4 whitespace-nowrap">
+                ${renderEventBadge(log.event_type)}
+              </td>
+              <td class="px-6 py-4 font-medium text-foreground">
+                <span class="max-w-xs block truncate" title="${escapeHtml(log.pin_title || log.pin_id)}">
+                  ${escapeHtml(log.pin_title || log.pin_id)}
+                </span>
+              </td>
+              <td class="px-6 py-4 text-xs font-semibold text-muted-foreground whitespace-nowrap">
+                ${escapeHtml(log.account_name || 'System Account')}
+              </td>
+              <td class="px-6 py-4 font-mono text-xs text-foreground whitespace-nowrap">
+                <span class="rounded bg-muted/60 px-2 py-1">
+                  Attempt #${log.attempt_no}
+                </span>
+              </td>
+              <td class="px-6 py-4 text-xs font-medium text-muted-foreground whitespace-nowrap">
+                <div class="flex flex-col">
+                  <span>${escapeHtml(log.provider || 'Webhook Provider')}</span>
+                  <span class="text-[10px] font-mono text-muted-foreground/80">${statusText}</span>
+                </div>
+              </td>
+              <td class="px-6 py-4 text-xs text-foreground">
+                <p class="max-w-xs line-clamp-2 leading-relaxed" title="${escapeHtml(details)}">
+                  ${escapeHtml(details)}
+                </p>
+              </td>
+              <td class="px-6 py-4 text-xs text-muted-foreground whitespace-nowrap">
+                ${formatDate(log.created_at)}
+              </td>
+            </tr>
+          `;
+        })
+        .join('');
+
+      container.innerHTML = `
+        <div class="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+              <thead class="border-b border-border bg-muted/50 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th class="px-6 py-3.5">Event Type</th>
+                  <th class="px-6 py-3.5">Target Pin</th>
+                  <th class="px-6 py-3.5">Account</th>
+                  <th class="px-6 py-3.5">Attempt</th>
+                  <th class="px-6 py-3.5">Provider / Status</th>
+                  <th class="px-6 py-3.5">Diagnostics / Excerpt</th>
+                  <th class="px-6 py-3.5">Timestamp</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-border">
+                ${rowsHtml}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    } catch (err) {
+      console.error('Failed to load delivery logs:', err);
+      container.innerHTML = renderEmptyStateHTML(
+        'Error Loading Delivery Logs',
+        'Could not fetch delivery log stream. Please try refreshing.',
+        'alert-circle'
+      );
+    }
+  }
+
+  async function loadSystemLogs() {
+    const container = document.getElementById('logs-container');
+    if (!container) return;
+
+    container.innerHTML = `
+      <div class="overflow-hidden rounded-xl border border-border bg-card p-12 text-center text-xs text-muted-foreground animate-pulse">
+        Loading system audit logs...
+      </div>
+    `;
+
+    try {
+      currentSystemLogs = await getLogs(100);
+
+      if (!currentSystemLogs || currentSystemLogs.length === 0) {
+        container.innerHTML = renderEmptyStateHTML(
+          'No System Logs Available',
+          'Audit logs will record automation executions from the Supabase Edge Function.',
+          'alert-circle'
+        );
+        return;
+      }
+
+      const rowsHtml = currentSystemLogs
         .map((log) => {
           const masked = log.webhook_used ? maskWebhookUrl(log.webhook_used) : null;
 
@@ -122,7 +303,7 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
         </div>
       `;
     } catch (err) {
-      console.error('Failed to load logs client-side:', err);
+      console.error('Failed to load system logs:', err);
       container.innerHTML = renderEmptyStateHTML(
         'Error Loading Logs',
         'Could not fetch audit logs. Please try refreshing.',
@@ -133,27 +314,45 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
 
   function setupExportButton() {
     document.getElementById('btn-export-logs')?.addEventListener('click', () => {
-      if (!currentLogs || currentLogs.length === 0) return;
-
-      const headers = ['Status', 'Pin Title', 'Account', 'Message', 'Webhook Endpoint', 'Timestamp'];
-      const rows = currentLogs.map((l) => [
-        l.status,
-        `"${(l.pin_title || '').replace(/"/g, '""')}"`,
-        `"${(l.account_name || '').replace(/"/g, '""')}"`,
-        `"${(l.message || '').replace(/"/g, '""')}"`,
-        `"${l.webhook_used ? maskWebhookUrl(l.webhook_used) : ''}"`,
-        l.created_at,
-      ]);
-
-      const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.setAttribute('download', `pinorbit_execution_logs_${new Date().toISOString().slice(0, 10)}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      if (currentTab === 'delivery') {
+        if (!currentDeliveryLogs || currentDeliveryLogs.length === 0) return;
+        const headers = ['Event Type', 'Pin Title', 'Account', 'Attempt No', 'Provider', 'HTTP Status', 'Diagnostics', 'Timestamp'];
+        const rows = currentDeliveryLogs.map((l) => [
+          l.event_type,
+          `"${(l.pin_title || '').replace(/"/g, '""')}"`,
+          `"${(l.account_name || '').replace(/"/g, '""')}"`,
+          l.attempt_no,
+          `"${(l.provider || '').replace(/"/g, '""')}"`,
+          l.http_status || '',
+          `"${(l.error_message || l.response_excerpt || '').replace(/"/g, '""')}"`,
+          l.created_at,
+        ]);
+        exportCsv('pinorbit_pin_delivery_logs', headers, rows);
+      } else {
+        if (!currentSystemLogs || currentSystemLogs.length === 0) return;
+        const headers = ['Status', 'Pin Title', 'Account', 'Message', 'Webhook Endpoint', 'Timestamp'];
+        const rows = currentSystemLogs.map((l) => [
+          l.status,
+          `"${(l.pin_title || '').replace(/"/g, '""')}"`,
+          `"${(l.account_name || '').replace(/"/g, '""')}"`,
+          `"${(l.message || '').replace(/"/g, '""')}"`,
+          `"${l.webhook_used ? maskWebhookUrl(l.webhook_used) : ''}"`,
+          l.created_at,
+        ]);
+        exportCsv('pinorbit_system_logs', headers, rows);
+      }
     });
+  }
+
+  function exportCsv(filenamePrefix: string, headers: string[], rows: any[][]) {
+    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.setAttribute('download', `${filenamePrefix}_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   }
 
   init();

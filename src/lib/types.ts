@@ -133,6 +133,22 @@ export interface Log {
   webhook_label?: string;
 }
 
+export interface PinDeliveryLog {
+  id: string;
+  pin_id: string;
+  attempt_no: number;
+  event_type: 'queued' | 'dispatched' | 'published' | 'rate_limited' | 'provider_error' | 'failed' | string;
+  provider?: string | null;
+  http_status?: number | null;
+  error_code?: number | null;
+  error_message?: string | null;
+  response_excerpt?: string | null;
+  metadata?: Record<string, any>;
+  created_at: string;
+  pin_title?: string;
+  account_name?: string;
+}
+
 export interface AuditLog {
   id: string;
   table_name: string;

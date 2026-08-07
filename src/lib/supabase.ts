@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { createServerClient } from '@supabase/ssr';
 import type { AstroCookies } from 'astro';
-import type { Account, Board, Pin, Log, AuditLog, AccountWebhook, ImportSession, DashboardKPIs, AccountPinStats, AccountWebhookSummary } from './types';
+import type { Account, Board, Pin, Log, AuditLog, AccountWebhook, ImportSession, DashboardKPIs, AccountPinStats, AccountWebhookSummary, PinDeliveryLog } from './types';
 
 const supabaseUrl = import.meta.env.PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY || '';
@@ -725,6 +725,63 @@ export async function getLogs(limit = 50, workspaceId?: string): Promise<Log[]> 
   } catch (err) {
     console.warn('Supabase fetch logs error, using fallback:', err);
     return mockLogs.slice(0, limit);
+  }
+}
+
+// 5b. Fetch Pin Delivery Logs (Typed Read Helper for pin_delivery_logs table)
+export async function getPinDeliveryLogs(limit = 50, pinId?: string, workspaceId?: string): Promise<PinDeliveryLog[]> {
+  if (!supabase) return [];
+  try {
+    let query = supabase
+      .from('pin_delivery_logs')
+      .select('*, pins(title, account_id, accounts(account_name))')
+      .order('created_at', { ascending: false });
+
+    if (pinId) {
+      query = query.eq('pin_id', pinId);
+    }
+
+    query = query.limit(limit);
+
+    const { data, error } = await query;
+
+    if (error) {
+      // Fallback simple query if joins fail
+      let basicQuery = supabase
+        .from('pin_delivery_logs')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (pinId) {
+        basicQuery = basicQuery.eq('pin_id', pinId);
+      }
+
+      basicQuery = basicQuery.limit(limit);
+
+      const { data: basicData, error: basicErr } = await basicQuery;
+      if (basicErr || !basicData) throw basicErr || new Error('No delivery log data');
+      return basicData as PinDeliveryLog[];
+    }
+
+    if (!data) return [];
+    return data.map((item: any) => ({
+      id: item.id,
+      pin_id: item.pin_id,
+      attempt_no: item.attempt_no,
+      event_type: item.event_type,
+      provider: item.provider,
+      http_status: item.http_status,
+      error_code: item.error_code,
+      error_message: item.error_message,
+      response_excerpt: item.response_excerpt,
+      metadata: item.metadata,
+      created_at: item.created_at,
+      pin_title: item.pins?.title || 'Pin #' + item.pin_id.slice(0, 8),
+      account_name: item.pins?.accounts?.account_name || 'System Account',
+    }));
+  } catch (err) {
+    console.warn('Supabase fetch pin delivery logs error:', err);
+    return [];
   }
 }
 
