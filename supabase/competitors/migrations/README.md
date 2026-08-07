@@ -1,0 +1,2 @@
+-- Project 2 (Competitors) Migrations
+-- Server-only schema migrations

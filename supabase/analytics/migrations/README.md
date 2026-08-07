@@ -1,0 +1,2 @@
+-- Project 3 (Analytics) Migrations
+-- Server-only schema migrations
