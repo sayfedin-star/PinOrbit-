@@ -3,8 +3,28 @@ import { createServerClient } from '@supabase/ssr';
 import type { AstroCookies } from 'astro';
 import type { Account, Board, Pin, Log, AuditLog, AccountWebhook, ImportSession, DashboardKPIs, AccountPinStats, AccountWebhookSummary, PinDeliveryLog } from './types';
 
-const supabaseUrl = import.meta.env.SCHEDULING_SUPABASE_URL || import.meta.env.PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.SCHEDULING_SUPABASE_PUBLISHABLE_KEY || import.meta.env.PUBLIC_SUPABASE_ANON_KEY || '';
+function getSchedulingUrl(): string {
+  if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.SCHEDULING_SUPABASE_URL) {
+    return import.meta.env.SCHEDULING_SUPABASE_URL;
+  }
+  if (typeof process !== 'undefined' && process.env && process.env.SCHEDULING_SUPABASE_URL) {
+    return process.env.SCHEDULING_SUPABASE_URL;
+  }
+  return 'https://eygdoetdwqllvsxpvoex.supabase.co';
+}
+
+function getSchedulingPublishableKey(): string {
+  if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.SCHEDULING_SUPABASE_PUBLISHABLE_KEY) {
+    return import.meta.env.SCHEDULING_SUPABASE_PUBLISHABLE_KEY;
+  }
+  if (typeof process !== 'undefined' && process.env && process.env.SCHEDULING_SUPABASE_PUBLISHABLE_KEY) {
+    return process.env.SCHEDULING_SUPABASE_PUBLISHABLE_KEY;
+  }
+  return 'sb_publishable_efxKrwXCOaj9CM5oxD-WjA_jqvB5iGD';
+}
+
+export const supabaseUrl = getSchedulingUrl();
+export const supabaseAnonKey = getSchedulingPublishableKey();
 
 export const isSupabaseConfigured = Boolean(
   supabaseUrl &&

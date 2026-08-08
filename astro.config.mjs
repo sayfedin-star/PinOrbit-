@@ -9,4 +9,7 @@ export default defineConfig({
     imageService: 'passthrough',
   }),
   output: 'server',
+  vite: {
+    envPrefix: ['PUBLIC_', 'SCHEDULING_'],
+  },
 });
