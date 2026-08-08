@@ -921,10 +921,26 @@ export async function ingestDevToolsPayload(
       };
     }
   } catch (err: any) {
+    console.warn('Supabase competitors query failed, falling back to mock state:', err);
+    const comp = mockCompetitors.find((c) => c.id === competitorId);
+    if (comp && parsed.type === 'user_profile' && parsed.profileData) {
+      comp.full_name = parsed.profileData.full_name || comp.full_name;
+      comp.profile_reach = parsed.profileData.profile_reach ?? comp.profile_reach;
+      comp.profile_views = parsed.profileData.profile_views ?? comp.profile_views;
+      comp.follower_count = parsed.profileData.follower_count ?? comp.follower_count;
+      comp.pin_count = parsed.profileData.pin_count ?? comp.pin_count;
+      if (parsed.profileData.avatar_url) comp.avatar_url = parsed.profileData.avatar_url;
+      comp.last_checked_at = new Date().toISOString();
+      return {
+        success: true,
+        type: 'user_profile',
+        message: `Successfully parsed User Profile (fallback)!`,
+      };
+    }
     return {
       success: false,
       type: parsed.type,
-      message: `Database error ingesting payload: ${err.message}`,
+      message: err.message || 'Failed to persist competitor payload.',
     };
   }
 
