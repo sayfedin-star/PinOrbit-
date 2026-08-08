@@ -173,14 +173,17 @@ export const dbClients = {
    * Returns a request-scoped client for Project 1 (Scheduling / Auth)
    * used in Astro SSR pages and API endpoints.
    */
-  getSchedulingSSR(context: {
-    cookies: {
-      get: (key: string) => { value: string } | undefined;
-      set: (key: string, value: string, options: Record<string, unknown>) => void;
-      delete: (key: string, options: Record<string, unknown>) => void;
-    };
-  }): SupabaseClient {
-    return createSchedulingSSRClient(context);
+  getSchedulingSSR(
+    context: {
+      cookies: {
+        get: (key: string) => any;
+        set: (key: string, value: string, options?: Record<string, unknown>) => void;
+        delete: (key: string, options?: Record<string, unknown>) => void;
+      };
+    },
+    runtimeEnv?: Record<string, any>
+  ): SupabaseClient {
+    return createSchedulingSSRClient(context, runtimeEnv);
   },
 
   /**

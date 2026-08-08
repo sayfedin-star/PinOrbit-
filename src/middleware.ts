@@ -16,7 +16,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
         const c = context.cookies.get(key);
         return c?.value;
       },
-      set(key: string, value: string, options: Record<string, unknown>) {
+      set(key: string, value: string, options?: Record<string, unknown>) {
         context.cookies.set(key, value, {
           path: '/',
           sameSite: 'lax',
@@ -24,7 +24,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
           ...options,
         });
       },
-      delete(key: string, options: Record<string, unknown>) {
+      delete(key: string, options?: Record<string, unknown>) {
         context.cookies.delete(key, {
           path: '/',
           ...options,
