@@ -1,5 +1,9 @@
 ---
 import '../styles/global.css';
+
+if (Astro.locals.isAuthenticated) {
+  return Astro.redirect('/dashboard');
+}
 ---
 
 <!DOCTYPE html>

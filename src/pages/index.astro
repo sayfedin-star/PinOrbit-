@@ -1,3 +1,7 @@
 ---
-return Astro.redirect('/dashboard');
+if (Astro.locals.isAuthenticated) {
+  return Astro.redirect('/dashboard');
+} else {
+  return Astro.redirect('/login');
+}
 ---
