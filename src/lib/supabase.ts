@@ -39,8 +39,16 @@ export const isSupabaseConfigured = Boolean(
   supabaseUrl !== 'https://your-project-1.supabase.co'
 );
 
-export const supabase = isSupabaseConfigured
-  ? createClient(supabaseUrl, supabaseAnonKey)
+export const supabase: SupabaseClient | null = isSupabaseConfigured
+  ? (typeof window !== 'undefined'
+      ? createBrowserClient(supabaseUrl, supabaseAnonKey, {
+          cookieOptions: {
+            path: '/',
+            sameSite: 'lax',
+            secure: typeof window !== 'undefined' && window.location.protocol === 'https:',
+          },
+        })
+      : createClient(supabaseUrl, supabaseAnonKey))
   : null;
 
 /**

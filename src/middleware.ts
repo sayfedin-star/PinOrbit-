@@ -13,13 +13,22 @@ export const onRequest = defineMiddleware(async (context, next) => {
   const supabase = dbClients.getSchedulingSSR({
     cookies: {
       get(key: string) {
-        return context.cookies.get(key);
+        const c = context.cookies.get(key);
+        return c?.value;
       },
       set(key: string, value: string, options: Record<string, unknown>) {
-        context.cookies.set(key, value, options);
+        context.cookies.set(key, value, {
+          path: '/',
+          sameSite: 'lax',
+          secure: true,
+          ...options,
+        });
       },
       delete(key: string, options: Record<string, unknown>) {
-        context.cookies.delete(key, options);
+        context.cookies.delete(key, {
+          path: '/',
+          ...options,
+        });
       },
     },
   });
@@ -37,17 +46,32 @@ export const onRequest = defineMiddleware(async (context, next) => {
     context.locals.activeWorkspaceId = workspaceCookie;
   }
 
-  // Enforce server-side route guards for protected paths
   const url = new URL(context.request.url);
-  const isProtectedPath = url.pathname.startsWith('/dashboard') || 
-                          url.pathname.startsWith('/accounts') || 
-                          url.pathname.startsWith('/competitors') || 
-                          url.pathname.startsWith('/imports') || 
-                          url.pathname.startsWith('/logs') || 
-                          url.pathname.startsWith('/audit');
+  const pathname = url.pathname;
+
+  // 1. Explicitly allow public routes, auth endpoints, and static assets
+  const isPublicRoute =
+    pathname === '/login' ||
+    pathname.startsWith('/api/admin/bootstrap') ||
+    pathname.startsWith('/api/auth') ||
+    pathname.startsWith('/_astro') ||
+    pathname === '/favicon.svg';
+
+  if (isPublicRoute) {
+    return next();
+  }
+
+  // 2. Protected paths requiring authentication
+  const isProtectedPath =
+    pathname.startsWith('/dashboard') || 
+    pathname.startsWith('/accounts') || 
+    pathname.startsWith('/competitors') || 
+    pathname.startsWith('/imports') || 
+    pathname.startsWith('/logs') || 
+    pathname.startsWith('/audit');
 
   if (isProtectedPath && !session.isAuthenticated) {
-    return context.redirect(`/login?redirect=${encodeURIComponent(url.pathname)}`);
+    return context.redirect(`/login?redirect=${encodeURIComponent(pathname)}`);
   }
 
   return next();

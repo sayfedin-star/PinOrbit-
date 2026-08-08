@@ -54,25 +54,39 @@ export function getServerEnv(runtimeEnv?: Record<string, any>): ServerEnvConfig 
  * Creates a request-scoped Supabase client for Project 1 (Scheduling / Auth Authority).
  * Compatible with Astro SSR cookies for identity and session management.
  */
-export function createSchedulingSSRClient(context: {
-  cookies: {
-    get: (key: string) => { value: string } | undefined;
-    set: (key: string, value: string, options: Record<string, unknown>) => void;
-    delete: (key: string, options: Record<string, unknown>) => void;
-  };
-}): SupabaseClient {
-  const env = getServerEnv();
+export function createSchedulingSSRClient(
+  context: {
+    cookies: {
+      get: (key: string) => any;
+      set: (key: string, value: string, options?: Record<string, unknown>) => void;
+      delete: (key: string, options?: Record<string, unknown>) => void;
+    };
+  },
+  runtimeEnv?: Record<string, any>
+): SupabaseClient {
+  const env = getServerEnv(runtimeEnv);
 
   return createServerClient(env.SCHEDULING_SUPABASE_URL, env.SCHEDULING_SUPABASE_PUBLISHABLE_KEY, {
     cookies: {
       get(key: string) {
-        return context.cookies.get(key)?.value;
+        const raw = context.cookies.get(key);
+        if (typeof raw === 'string') return raw;
+        if (raw && typeof raw === 'object' && 'value' in raw) return raw.value;
+        return undefined;
       },
       set(key: string, value: string, options: CookieOptionsWithName) {
-        context.cookies.set(key, value, options as Record<string, unknown>);
+        context.cookies.set(key, value, {
+          path: '/',
+          sameSite: 'lax',
+          secure: true,
+          ...options,
+        });
       },
       remove(key: string, options: CookieOptionsWithName) {
-        context.cookies.delete(key, options as Record<string, unknown>);
+        context.cookies.delete(key, {
+          path: '/',
+          ...options,
+        });
       },
     },
     auth: {
