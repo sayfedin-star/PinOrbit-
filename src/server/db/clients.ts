@@ -18,14 +18,14 @@ export interface ServerEnvConfig {
 export function getServerEnv(): ServerEnvConfig {
   const env = (typeof process !== 'undefined' ? process.env : {}) as Record<string, string | undefined>;
 
-  const SCHEDULING_SUPABASE_URL = env.SCHEDULING_SUPABASE_URL || 'https://your-project-1.supabase.co';
-  const SCHEDULING_SUPABASE_PUBLISHABLE_KEY = env.SCHEDULING_SUPABASE_PUBLISHABLE_KEY || 'your_project_1_publishable_key';
+  const SCHEDULING_SUPABASE_URL = env.SCHEDULING_SUPABASE_URL || env.PUBLIC_SCHEDULING_SUPABASE_URL || 'https://eygdoetdwqllvsxpvoex.supabase.co';
+  const SCHEDULING_SUPABASE_PUBLISHABLE_KEY = env.SCHEDULING_SUPABASE_PUBLISHABLE_KEY || env.PUBLIC_SCHEDULING_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_efxKrwXCOaj9CM5oxD-WjA_jqvB5iGD';
   const SCHEDULING_SUPABASE_SECRET_KEY = env.SCHEDULING_SUPABASE_SECRET_KEY || '';
 
-  const COMPETITORS_SUPABASE_URL = env.COMPETITORS_SUPABASE_URL || 'https://your-project-2.supabase.co';
+  const COMPETITORS_SUPABASE_URL = env.COMPETITORS_SUPABASE_URL || 'https://guycnhvwfzdzbpgsnavg.supabase.co';
   const COMPETITORS_SUPABASE_SECRET_KEY = env.COMPETITORS_SUPABASE_SECRET_KEY || '';
 
-  const ANALYTICS_SUPABASE_URL = env.ANALYTICS_SUPABASE_URL || 'https://your-project-3.supabase.co';
+  const ANALYTICS_SUPABASE_URL = env.ANALYTICS_SUPABASE_URL || 'https://jxdkbwnwtjelznmauwpc.supabase.co';
   const ANALYTICS_SUPABASE_SECRET_KEY = env.ANALYTICS_SUPABASE_SECRET_KEY || '';
 
   return {

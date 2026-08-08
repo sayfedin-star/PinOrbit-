@@ -9,6 +9,8 @@
     "binding": "ASSETS"
   },
   "vars": {
+    "PUBLIC_SCHEDULING_SUPABASE_URL": "https://eygdoetdwqllvsxpvoex.supabase.co",
+    "PUBLIC_SCHEDULING_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_efxKrwXCOaj9CM5oxD-WjA_jqvB5iGD",
     "SCHEDULING_SUPABASE_URL": "https://eygdoetdwqllvsxpvoex.supabase.co",
     "SCHEDULING_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_efxKrwXCOaj9CM5oxD-WjA_jqvB5iGD",
     "COMPETITORS_SUPABASE_URL": "https://guycnhvwfzdzbpgsnavg.supabase.co",
