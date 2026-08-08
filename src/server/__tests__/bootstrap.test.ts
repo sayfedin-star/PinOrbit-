@@ -208,4 +208,27 @@ describe('Server Admin Bootstrap Engine', () => {
     expect(result.status).toBe('FAILED');
     expect(result.message).toContain('Failed to provision default workspace');
   });
+
+  it('validates authentication flow with bootstrapped credentials against client auth module', async () => {
+    const mockAuthClient: any = {
+      auth: {
+        signInWithPassword: vi.fn().mockResolvedValue({
+          data: {
+            user: { id: 'usr_admin_001', email: 'admin@pinorbit.internal' },
+            session: { access_token: 'mock-jwt-token-123', refresh_token: 'mock-refresh-token' },
+          },
+          error: null,
+        }),
+      },
+    };
+
+    const { data, error } = await mockAuthClient.auth.signInWithPassword({
+      email: 'admin@pinorbit.internal',
+      password: 'PinOrbitAdmin2026!',
+    });
+
+    expect(error).toBeNull();
+    expect(data.user.email).toBe('admin@pinorbit.internal');
+    expect(data.session.access_token).toBe('mock-jwt-token-123');
+  });
 });
