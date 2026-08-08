@@ -287,3 +287,208 @@ export interface ParsedPinterestPayload {
   }>;
   rawJson?: any;
 }
+
+// ==============================================================================
+// Pinner Analytics Types (V11/V12 Locked)
+// ==============================================================================
+
+export type PinnerSortBy = 'IMPRESSION' | 'OUTBOUND_CLICK' | 'SAVE' | 'ENGAGEMENT' | 'PIN_CLICK';
+
+export type PinnerMetricName =
+  | 'ENGAGEMENT'
+  | 'ENGAGEMENT_RATE'
+  | 'IMPRESSION'
+  | 'OUTBOUND_CLICK'
+  | 'OUTBOUND_CLICK_RATE'
+  | 'PIN_CLICK'
+  | 'PIN_CLICK_RATE'
+  | 'SAVE'
+  | 'SAVE_RATE'
+  | 'VIDEO_10S_VIEW'
+  | 'VIDEO_AVG_WATCH_TIME'
+  | 'VIDEO_MRC_VIEW'
+  | 'VIDEO_START'
+  | 'VIDEO_V50_WATCH_TIME'
+  | 'QUARTILE_95_PERCENT_VIEW';
+
+export interface PinnerRawMetrics {
+  ENGAGEMENT?: number;
+  ENGAGEMENT_RATE?: number;
+  IMPRESSION?: number;
+  OUTBOUND_CLICK?: number;
+  OUTBOUND_CLICK_RATE?: number;
+  PIN_CLICK?: number;
+  PIN_CLICK_RATE?: number;
+  SAVE?: number;
+  SAVE_RATE?: number;
+  VIDEO_10S_VIEW?: number;
+  VIDEO_AVG_WATCH_TIME?: number;
+  VIDEO_MRC_VIEW?: number;
+  VIDEO_START?: number;
+  VIDEO_V50_WATCH_TIME?: number;
+  QUARTILE_95_PERCENT_VIEW?: number;
+  [key: string]: any;
+}
+
+export interface TopPinSnapshot {
+  id: string;
+  workspace_id: string;
+  connection_id: string;
+  window_start: string;
+  window_end: string;
+  sort_by: PinnerSortBy;
+  rank_position: number;
+  pin_id: string;
+  recorded_at: string;
+  impressions: number;
+  engagement: number;
+  outbound_clicks: number;
+  pin_clicks: number;
+  saves: number;
+  video_10s_view: number;
+  video_mrc_view: number;
+  video_start: number;
+  quartile_95_percent_view: number;
+  engagement_rate: number;
+  outbound_click_rate: number;
+  pin_click_rate: number;
+  save_rate: number;
+  video_avg_watch_time: number;
+  video_v50_watch_time: number;
+  data_status: Record<string, string>;
+  date_availability?: {
+    is_realtime?: boolean;
+    latest_available_timestamp?: number;
+  } | null;
+  title?: string | null;
+  destination_url?: string | null;
+  image_url?: string | null;
+  pin_metadata?: Record<string, any> | null;
+  raw_metrics?: Record<string, any> | null;
+  raw_pin?: Record<string, any> | null;
+  raw_headers?: Record<string, any> | null;
+  created_at: string;
+}
+
+export interface AccountAnalyticsDaily {
+  id: string;
+  workspace_id: string;
+  connection_id: string;
+  window_start: string;
+  window_end: string;
+  metric_date: string;
+  data_status: string;
+  impressions: number;
+  engagements: number;
+  outbound_clicks: number;
+  pin_clicks: number;
+  saves: number;
+  video_10s_view: number;
+  video_mrc_view: number;
+  video_start: number;
+  quartile_95_percent_view: number;
+  engagement_rate: number;
+  outbound_click_rate: number;
+  pin_click_rate: number;
+  save_rate: number;
+  video_avg_watch_time?: number | null;
+  video_v50_watch_time?: number | null;
+  profile_visits?: number | null;
+  closeups?: number | null;
+  raw_metrics?: Record<string, any> | null;
+  recorded_at: string;
+  created_at: string;
+}
+
+export interface AccountAnalyticsSummary {
+  id: string;
+  workspace_id: string;
+  connection_id: string;
+  window_start: string;
+  window_end: string;
+  summary_impressions: number;
+  summary_engagements: number;
+  summary_outbound_clicks: number;
+  summary_pin_clicks: number;
+  summary_saves: number;
+  summary_video_10s_view: number;
+  summary_video_mrc_view: number;
+  summary_video_start: number;
+  summary_quartile_95_percent_view: number;
+  summary_engagement_rate: number;
+  summary_outbound_click_rate: number;
+  summary_pin_click_rate: number;
+  summary_save_rate: number;
+  summary_profile_visits?: number | null;
+  summary_closeups?: number | null;
+  summary_video_avg_watch_time?: number | null;
+  summary_video_v50_watch_time?: number | null;
+  raw_summary?: Record<string, any> | null;
+  recorded_at: string;
+  created_at: string;
+}
+
+export interface DailyWorkspaceMetric {
+  id: string;
+  workspace_id: string;
+  metric_date: string;
+  total_impressions: number;
+  total_engagements: number;
+  total_saves: number;
+  total_outbound_clicks: number;
+  total_pin_clicks: number;
+  total_profile_visits: number;
+  top_pin_impressions: number;
+  top_pin_outbound_clicks: number;
+  top_pin_saves: number;
+  active_top_pins_count: number;
+  recorded_at: string;
+  created_at: string;
+}
+
+export interface PinnerMakeRequestContext {
+  start_date: string;
+  end_date: string;
+  sort_modes?: string[] | string;
+  job_type?: string;
+}
+
+export interface PinnerErrorDetails {
+  http_status?: number | null;
+  error_code?: string | null;
+  error_message?: string | null;
+  failed_module?: string | null;
+}
+
+export interface PinnerIngestPayload {
+  success: boolean;
+  request_id?: string;
+  workspace_id: string;
+  connection_id: string;
+  request_context?: PinnerMakeRequestContext;
+  account_analytics?: any;
+  top_pins_analytics?: {
+    [key in PinnerSortBy]?: any;
+  } & Record<string, any>;
+  raw_headers?: Record<string, any>;
+  error_details?: PinnerErrorDetails;
+}
+
+export interface PinnerOverviewKPIs {
+  impressions: number;
+  engagements: number;
+  pinClicks: number;
+  outboundClicks: number;
+  saves: number;
+  engagementRate: number;
+  outboundClickRate: number;
+  pinClickRate: number;
+  saveRate: number;
+  activeTopPinsCount: number;
+  windowStart: string;
+  windowEnd: string;
+  lastIngestedAt?: string | null;
+  connectionId: string;
+  workspaceId: string;
+}
+

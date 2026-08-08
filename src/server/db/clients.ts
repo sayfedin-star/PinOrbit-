@@ -9,6 +9,8 @@ export interface ServerEnvConfig {
   COMPETITORS_SUPABASE_SECRET_KEY: string;
   ANALYTICS_SUPABASE_URL: string;
   ANALYTICS_SUPABASE_SECRET_KEY: string;
+  INGEST_SECRET_KEY: string;
+  SNITCH_WEBHOOK_URL: string;
 }
 
 /**
@@ -39,6 +41,9 @@ export function getServerEnv(runtimeEnv?: Record<string, any>): ServerEnvConfig 
     env.ANALYTICS_SUPABASE_URL || 'https://jxdkbwnwtjelznmauwpc.supabase.co';
   const ANALYTICS_SUPABASE_SECRET_KEY = env.ANALYTICS_SUPABASE_SECRET_KEY || '';
 
+  const INGEST_SECRET_KEY = env.INGEST_SECRET_KEY || 'pinorbit_ingest_secret_dev';
+  const SNITCH_WEBHOOK_URL = env.SNITCH_WEBHOOK_URL || '';
+
   return {
     SCHEDULING_SUPABASE_URL,
     SCHEDULING_SUPABASE_PUBLISHABLE_KEY,
@@ -47,6 +52,8 @@ export function getServerEnv(runtimeEnv?: Record<string, any>): ServerEnvConfig 
     COMPETITORS_SUPABASE_SECRET_KEY,
     ANALYTICS_SUPABASE_URL,
     ANALYTICS_SUPABASE_SECRET_KEY,
+    INGEST_SECRET_KEY,
+    SNITCH_WEBHOOK_URL,
   };
 }
 

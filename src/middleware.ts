@@ -49,10 +49,11 @@ export const onRequest = defineMiddleware(async (context, next) => {
   const url = new URL(context.request.url);
   const pathname = url.pathname;
 
-  // 1. Explicitly allow public routes, auth endpoints, and static assets
+  // 1. Explicitly allow public routes, auth endpoints, internal webhook endpoints, and static assets
   const isPublicRoute =
     pathname === '/login' ||
     pathname.startsWith('/api/admin/bootstrap') ||
+    pathname.startsWith('/api/internal/') ||
     pathname.startsWith('/api/auth') ||
     pathname.startsWith('/_astro') ||
     pathname === '/favicon.svg';
@@ -64,9 +65,12 @@ export const onRequest = defineMiddleware(async (context, next) => {
   // 2. Protected paths requiring authentication
   const isProtectedPath =
     pathname.startsWith('/dashboard') || 
+    pathname.startsWith('/analytics') ||
     pathname.startsWith('/accounts') || 
     pathname.startsWith('/competitors') || 
     pathname.startsWith('/imports') || 
+    pathname.startsWith('/boards') ||
+    pathname.startsWith('/pins') ||
     pathname.startsWith('/logs') || 
     pathname.startsWith('/audit');
 
