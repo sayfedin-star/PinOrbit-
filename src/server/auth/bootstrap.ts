@@ -27,16 +27,24 @@ export interface BootstrapResult {
  * Provisions the first admin user and default workspace if and only if
  * the Scheduling/Auth authority project is uninitialized.
  */
-export async function bootstrapAdminUser(options?: BootstrapOptions): Promise<BootstrapResult> {
+export async function bootstrapAdminUser(
+  options?: BootstrapOptions,
+  runtimeEnv?: Record<string, any>
+): Promise<BootstrapResult> {
   const timestamp = new Date().toISOString();
+  const envSource = {
+    ...(typeof process !== 'undefined' ? process.env : {}),
+    ...(runtimeEnv || {}),
+  } as Record<string, string | undefined>;
 
   // 1. Resolve Project 1 service role credentials
   const supabaseUrl =
     options?.supabaseUrl ||
-    (typeof process !== 'undefined' ? process.env.SCHEDULING_SUPABASE_URL : undefined);
+    envSource.SCHEDULING_SUPABASE_URL ||
+    envSource.PUBLIC_SCHEDULING_SUPABASE_URL;
   const supabaseSecretKey =
     options?.supabaseSecretKey ||
-    (typeof process !== 'undefined' ? process.env.SCHEDULING_SUPABASE_SECRET_KEY : undefined);
+    envSource.SCHEDULING_SUPABASE_SECRET_KEY;
 
   let adminClient: SupabaseClient;
   if (options?.client) {
@@ -65,12 +73,8 @@ export async function bootstrapAdminUser(options?: BootstrapOptions): Promise<Bo
   }
 
   // 2. Resolve admin bootstrap credentials
-  const email =
-    options?.email ||
-    (typeof process !== 'undefined' ? process.env.BOOTSTRAP_ADMIN_EMAIL : undefined);
-  const password =
-    options?.password ||
-    (typeof process !== 'undefined' ? process.env.BOOTSTRAP_ADMIN_PASSWORD : undefined);
+  const email = options?.email || envSource.BOOTSTRAP_ADMIN_EMAIL;
+  const password = options?.password || envSource.BOOTSTRAP_ADMIN_PASSWORD;
 
   if (!email || !password) {
     return {

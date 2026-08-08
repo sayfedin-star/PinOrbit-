@@ -161,7 +161,24 @@ if (Astro.locals.isAuthenticated) {
           window.location.href = decodeURIComponent(redirect);
         } catch (err: any) {
           if (errorBanner && errorMessage) {
-            errorMessage.textContent = err.message || 'Authentication failed. Please verify your credentials.';
+            let errorText = 'Authentication failed. Please verify your credentials.';
+            if (typeof err === 'string' && err.trim().length > 0) {
+              errorText = err;
+            } else if (err?.message && typeof err.message === 'string' && err.message.trim().length > 0) {
+              errorText = err.message;
+            } else if (err?.error_description && typeof err.error_description === 'string') {
+              errorText = err.error_description;
+            } else if (err?.error && typeof err.error === 'string') {
+              errorText = err.error;
+            } else if (err && typeof err === 'object') {
+              try {
+                const serialized = JSON.stringify(err);
+                if (serialized && serialized !== '{}' && serialized !== '[]') {
+                  errorText = serialized;
+                }
+              } catch {}
+            }
+            errorMessage.textContent = errorText;
             errorBanner.classList.remove('hidden');
           }
         } finally {

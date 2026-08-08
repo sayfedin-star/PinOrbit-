@@ -3,6 +3,12 @@ import { dbClients } from './server/db/clients';
 import { validateUserSession } from './server/auth/session';
 
 export const onRequest = defineMiddleware(async (context, next) => {
+  // Merge Cloudflare Worker runtime secrets into process.env if available
+  const runtimeEnv = (context.locals as any)?.runtime?.env;
+  if (runtimeEnv && typeof process !== 'undefined' && process.env) {
+    Object.assign(process.env, runtimeEnv);
+  }
+
   // Initialize request-scoped Project 1 Scheduling / Auth client
   const supabase = dbClients.getSchedulingSSR({
     cookies: {

@@ -15,17 +15,28 @@ export interface ServerEnvConfig {
  * Validates and extracts server-only environment configuration.
  * Uses modern Supabase publishable/secret key naming conventions.
  */
-export function getServerEnv(): ServerEnvConfig {
-  const env = (typeof process !== 'undefined' ? process.env : {}) as Record<string, string | undefined>;
+export function getServerEnv(runtimeEnv?: Record<string, any>): ServerEnvConfig {
+  const env = {
+    ...(typeof process !== 'undefined' ? process.env : {}),
+    ...(runtimeEnv || {}),
+  } as Record<string, string | undefined>;
 
-  const SCHEDULING_SUPABASE_URL = env.SCHEDULING_SUPABASE_URL || env.PUBLIC_SCHEDULING_SUPABASE_URL || 'https://eygdoetdwqllvsxpvoex.supabase.co';
-  const SCHEDULING_SUPABASE_PUBLISHABLE_KEY = env.SCHEDULING_SUPABASE_PUBLISHABLE_KEY || env.PUBLIC_SCHEDULING_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_efxKrwXCOaj9CM5oxD-WjA_jqvB5iGD';
+  const SCHEDULING_SUPABASE_URL =
+    env.SCHEDULING_SUPABASE_URL ||
+    env.PUBLIC_SCHEDULING_SUPABASE_URL ||
+    'https://eygdoetdwqllvsxpvoex.supabase.co';
+  const SCHEDULING_SUPABASE_PUBLISHABLE_KEY =
+    env.SCHEDULING_SUPABASE_PUBLISHABLE_KEY ||
+    env.PUBLIC_SCHEDULING_SUPABASE_PUBLISHABLE_KEY ||
+    'sb_publishable_efxKrwXCOaj9CM5oxD-WjA_jqvB5iGD';
   const SCHEDULING_SUPABASE_SECRET_KEY = env.SCHEDULING_SUPABASE_SECRET_KEY || '';
 
-  const COMPETITORS_SUPABASE_URL = env.COMPETITORS_SUPABASE_URL || 'https://guycnhvwfzdzbpgsnavg.supabase.co';
+  const COMPETITORS_SUPABASE_URL =
+    env.COMPETITORS_SUPABASE_URL || 'https://guycnhvwfzdzbpgsnavg.supabase.co';
   const COMPETITORS_SUPABASE_SECRET_KEY = env.COMPETITORS_SUPABASE_SECRET_KEY || '';
 
-  const ANALYTICS_SUPABASE_URL = env.ANALYTICS_SUPABASE_URL || 'https://jxdkbwnwtjelznmauwpc.supabase.co';
+  const ANALYTICS_SUPABASE_URL =
+    env.ANALYTICS_SUPABASE_URL || 'https://jxdkbwnwtjelznmauwpc.supabase.co';
   const ANALYTICS_SUPABASE_SECRET_KEY = env.ANALYTICS_SUPABASE_SECRET_KEY || '';
 
   return {

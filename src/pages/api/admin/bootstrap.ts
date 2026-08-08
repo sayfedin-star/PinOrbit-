@@ -7,9 +7,11 @@ import { bootstrapAdminUser, type BootstrapOptions } from '../../../server/auth/
  * Server-only administrative bootstrap endpoint.
  * Requires explicit 'x-bootstrap-secret' authorization header on every request.
  */
-export const POST: APIRoute = async ({ request }) => {
+export const POST: APIRoute = async ({ request, locals }) => {
+  const runtimeEnv = (locals as any)?.runtime?.env || {};
   const expectedSecret =
-    typeof process !== 'undefined' ? process.env.BOOTSTRAP_SECRET_KEY : undefined;
+    runtimeEnv.BOOTSTRAP_SECRET_KEY ||
+    (typeof process !== 'undefined' ? process.env.BOOTSTRAP_SECRET_KEY : undefined);
 
   if (!expectedSecret) {
     return new Response(
@@ -61,7 +63,7 @@ export const POST: APIRoute = async ({ request }) => {
   }
 
   try {
-    const result = await bootstrapAdminUser(bodyOptions);
+    const result = await bootstrapAdminUser(bodyOptions, runtimeEnv);
 
     let statusCode = 200;
     if (result.status === 'CONFIG_ERROR') {
