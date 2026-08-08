@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { createServerClient } from '@supabase/ssr';
+import { createServerClient, createBrowserClient } from '@supabase/ssr';
 import type { AstroCookies } from 'astro';
 import type { Account, Board, Pin, Log, AuditLog, AccountWebhook, ImportSession, DashboardKPIs, AccountPinStats, AccountWebhookSummary, PinDeliveryLog } from './types';
 
