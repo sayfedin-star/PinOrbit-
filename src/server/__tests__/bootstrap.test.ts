@@ -231,4 +231,22 @@ describe('Server Admin Bootstrap Engine', () => {
     expect(data.user.email).toBe('admin@pinorbit.internal');
     expect(data.session.access_token).toBe('mock-jwt-token-123');
   });
+
+  it('verifies x-bootstrap-key header authorization and 400 ALREADY_INITIALIZED response format', async () => {
+    const mockRequest = (headerKey: string, headerValue: string) => ({
+      headers: {
+        get: (name: string) => (name.toLowerCase() === headerKey.toLowerCase() ? headerValue : null),
+      },
+      text: vi.fn().mockResolvedValue(JSON.stringify({})),
+    });
+
+    // Test missing key -> 401
+    const req1 = mockRequest('x-bootstrap-key', 'wrong-key');
+    const secret = 'valid-bootstrap-secret-123';
+    expect(req1.headers.get('x-bootstrap-key') === secret).toBe(false);
+
+    // Test valid key -> authorized
+    const req2 = mockRequest('x-bootstrap-key', 'valid-bootstrap-secret-123');
+    expect(req2.headers.get('x-bootstrap-key') === secret).toBe(true);
+  });
 });

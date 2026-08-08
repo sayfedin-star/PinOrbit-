@@ -27,13 +27,16 @@ export const POST: APIRoute = async ({ request, locals }) => {
     );
   }
 
-  const providedSecret = request.headers.get('x-bootstrap-secret');
+  const providedSecret =
+    request.headers.get('x-bootstrap-key') ||
+    request.headers.get('x-bootstrap-secret');
+
   if (!providedSecret || providedSecret !== expectedSecret) {
     return new Response(
       JSON.stringify({
         success: false,
         status: 'UNAUTHORIZED',
-        error: 'Unauthorized: missing or invalid x-bootstrap-secret header.',
+        error: 'Unauthorized: missing or invalid x-bootstrap-key header.',
       }),
       {
         status: 401,
@@ -66,7 +69,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const result = await bootstrapAdminUser(bodyOptions, runtimeEnv);
 
     let statusCode = 200;
-    if (result.status === 'CONFIG_ERROR') {
+    if (result.status === 'ALREADY_INITIALIZED' || result.status === 'CONFIG_ERROR') {
       statusCode = 400;
     } else if (result.status === 'FAILED') {
       statusCode = 500;
