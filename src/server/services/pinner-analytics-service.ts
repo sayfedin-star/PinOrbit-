@@ -7,6 +7,7 @@ import type {
   TopPinSnapshot,
   AccountAnalyticsDaily,
   PinnerOverviewKPIs,
+  AnalyticsIngestionRun,
 } from '../../lib/types';
 
 export interface ServiceResponse<T> {
@@ -22,7 +23,8 @@ export interface BackfillChunk {
 
 /**
  * High-level server-only service for Pinner Analytics.
- * Mandatory Guard: Every method calls assertWorkspaceAccess against Project 1 before touching Project 3.
+ * Mandatory Guard: Every method calls assertWorkspaceAccess against Project 1 session before querying Project 3.
+ * All DB operations are strictly against Project 3.
  */
 export const pinnerAnalyticsService = {
   /**
@@ -54,58 +56,25 @@ export const pinnerAnalyticsService = {
     const startDate = startDateObj.toISOString().split('T')[0];
     const endDate = now.toISOString().split('T')[0];
 
-    const [summary, dailyRows, topPins] = await Promise.all([
-      analyticsDb.getAccountSummary(workspaceId, connectionId),
-      analyticsDb.getAccountDailyMetrics(workspaceId, connectionId, startDate, endDate),
-      analyticsDb.getTopPinsSnapshots(workspaceId, connectionId, 'IMPRESSION', 50),
+    const [overview, topPins] = await Promise.all([
+      analyticsDb.getAccountOverviewMetrics(workspaceId, connectionId, windowDays),
+      analyticsDb.getRankedTopPins(workspaceId, connectionId, 'IMPRESSION', 50),
     ]);
 
-    let impressions = 0;
-    let engagements = 0;
-    let pinClicks = 0;
-    let outboundClicks = 0;
-    let saves = 0;
-
-    // Use daily aggregation if available, or summary as fallback
-    if (dailyRows.length > 0) {
-      for (const row of dailyRows) {
-        impressions += Number(row.impressions || 0);
-        engagements += Number(row.engagements || 0);
-        pinClicks += Number(row.pin_clicks || 0);
-        outboundClicks += Number(row.outbound_clicks || 0);
-        saves += Number(row.saves || 0);
-      }
-    } else if (summary) {
-      impressions = Number(summary.summary_impressions || 0);
-      engagements = Number(summary.summary_engagements || 0);
-      pinClicks = Number(summary.summary_pin_clicks || 0);
-      outboundClicks = Number(summary.summary_outbound_clicks || 0);
-      saves = Number(summary.summary_saves || 0);
-    }
-
-    const engagementRate =
-      impressions > 0 ? parseFloat((engagements / impressions).toFixed(6)) : 0.0;
-    const outboundClickRate =
-      impressions > 0 ? parseFloat((outboundClicks / impressions).toFixed(6)) : 0.0;
-    const pinClickRate =
-      impressions > 0 ? parseFloat((pinClicks / impressions).toFixed(6)) : 0.0;
-    const saveRate =
-      impressions > 0 ? parseFloat((saves / impressions).toFixed(6)) : 0.0;
-
     const result: PinnerOverviewKPIs = {
-      impressions,
-      engagements,
-      pinClicks,
-      outboundClicks,
-      saves,
-      engagementRate,
-      outboundClickRate,
-      pinClickRate,
-      saveRate,
+      impressions: overview.impressions,
+      engagements: overview.engagements,
+      pinClicks: overview.pinClicks,
+      outboundClicks: overview.outboundClicks,
+      saves: overview.saves,
+      engagementRate: overview.engagementRate,
+      outboundClickRate: overview.outboundClickRate,
+      pinClickRate: overview.pinClickRate,
+      saveRate: overview.saveRate,
       activeTopPinsCount: topPins.length,
       windowStart: startDate,
       windowEnd: endDate,
-      lastIngestedAt: dailyRows[dailyRows.length - 1]?.recorded_at || summary?.recorded_at || null,
+      lastIngestedAt: overview.lastIngestedAt,
       connectionId,
       workspaceId,
     };
@@ -143,7 +112,7 @@ export const pinnerAnalyticsService = {
       };
     }
 
-    const snapshots = await analyticsDb.getTopPinsSnapshots(
+    const snapshots = await analyticsDb.getRankedTopPins(
       workspaceId,
       connectionId,
       sortBy,
@@ -166,13 +135,12 @@ export const pinnerAnalyticsService = {
     userId: string,
     workspaceId: string,
     connectionId: string,
-    startDate?: string,
-    endDate?: string,
+    windowDays = 30,
     kvNamespace?: any
   ): Promise<ServiceResponse<AccountAnalyticsDaily[]>> {
     await assertWorkspaceAccess(schedulingClient, workspaceId, userId);
 
-    const cacheKey = `${edgeCache.keys.timeseries(workspaceId, connectionId)}:${startDate || 'all'}:${endDate || 'all'}`;
+    const cacheKey = `${edgeCache.keys.timeseries(workspaceId, connectionId)}:${windowDays}`;
     const cached = await edgeCache.get<AccountAnalyticsDaily[]>(cacheKey, kvNamespace);
 
     if (cached.status === 'HIT' && cached.data) {
@@ -182,11 +150,10 @@ export const pinnerAnalyticsService = {
       };
     }
 
-    const dailyRows = await analyticsDb.getAccountDailyMetrics(
+    const dailyRows = await analyticsDb.getDailyTimeSeries(
       workspaceId,
       connectionId,
-      startDate,
-      endDate
+      windowDays
     );
 
     await edgeCache.set(cacheKey, dailyRows, kvNamespace);
@@ -243,8 +210,8 @@ export const pinnerAnalyticsService = {
     userId: string,
     workspaceId: string,
     connectionId?: string
-  ) {
+  ): Promise<AnalyticsIngestionRun[]> {
     await assertWorkspaceAccess(schedulingClient, workspaceId, userId);
-    return analyticsDb.listImportSessions(workspaceId, connectionId, 10);
+    return analyticsDb.listIngestionRuns(workspaceId, connectionId, 10);
   },
 };

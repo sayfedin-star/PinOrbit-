@@ -70,11 +70,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
     );
   }
 
-  if (!payload.workspace_id || !payload.connection_id) {
+  if (!payload.connection_id) {
     return new Response(
       JSON.stringify({
         success: false,
-        error: 'Validation Error: workspace_id and connection_id are required in payload.',
+        error: 'Validation Error: connection_id is required in payload.',
       }),
       {
         status: 422,
@@ -92,16 +92,21 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const kvNamespace = (locals as any)?.runtime?.env?.ANALYTICS_KV;
     const result = await pinnerETL.processIngestionPayload(payload, kvNamespace);
 
+    const isNotFound = result.error?.includes('not registered');
+    const isValidation = result.error?.includes('Validation Error');
+
+    const statusCode = result.success ? 200 : isNotFound ? 404 : isValidation ? 422 : 200;
+
     return new Response(JSON.stringify(result), {
-      status: 200,
+      status: statusCode,
       headers: { 'Content-Type': 'application/json' },
     });
   } catch (err: any) {
-    console.error('[IngestAPI] Fatal ETL processing error:', err);
+    console.error('[IngestAPI] Fatal ETL processing error in Project 3:', err);
     return new Response(
       JSON.stringify({
         success: false,
-        error: err.message || 'Internal server error during ingestion processing.',
+        error: 'Internal ETL pipeline error: ' + (err.message || 'Unknown error'),
       }),
       {
         status: 500,

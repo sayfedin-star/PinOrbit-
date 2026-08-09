@@ -5,11 +5,10 @@ import { analyticsDb } from '../db/analytics';
 vi.mock('../db/analytics', () => ({
   analyticsDb: {
     getWorkspaceConnection: vi.fn(),
-    recordOperationalImportSession: vi.fn().mockResolvedValue({ id: 'import-1' }),
   },
 }));
 
-describe('Manual Trigger & Test Ping Sync Suite (V16)', () => {
+describe('Manual Trigger & Test Ping Sync Suite (V17 Standalone)', () => {
   const workspaceId = '00000000-0000-0000-0000-000000000001';
   const connectionId = 'a1b2c3d4-e5f6-7890-1234-56789abcdef0';
 
@@ -46,14 +45,6 @@ describe('Manual Trigger & Test Ping Sync Suite (V16)', () => {
     expect(sentPayload.start_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(sentPayload.end_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(sentPayload.sort_modes).toBeUndefined();
-
-    expect(analyticsDb.recordOperationalImportSession).toHaveBeenCalledWith(
-      workspaceId,
-      expect.objectContaining({
-        account_id: connectionId,
-        source_type: 'manual_analytics',
-      })
-    );
 
     fetchSpy.mockRestore();
   });

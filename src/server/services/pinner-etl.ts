@@ -19,6 +19,7 @@ export interface ETLProcessingResult {
   persisted: boolean;
   workspaceId: string;
   connectionId: string;
+  runId?: string;
   dailyRowsIngested: number;
   summarySaved: boolean;
   topPinsIngested: number;
@@ -50,83 +51,102 @@ function normalizeMetrics(raw: PinnerRawMetrics = {}) {
   const parseTiming = (v: any): number => {
     if (v === undefined || v === null) return 0.0;
     const n = Number(v);
-    if (isNaN(n)) return 0.0;
-    return parseFloat(n.toFixed(3));
+    return isNaN(n) || n < 0 ? 0.0 : parseFloat(n.toFixed(2));
   };
 
+  const impressions = parseCount(raw.IMPRESSION);
+  const engagements = parseCount(raw.ENGAGEMENT);
+  const saves = parseCount(raw.SAVE);
+  const pinClicks = parseCount(raw.PIN_CLICK);
+  const outboundClicks = parseCount(raw.OUTBOUND_CLICK);
+
+  // Derived or provided rates
+  const engagementRate =
+    raw.ENGAGEMENT_RATE !== undefined
+      ? parseRate(raw.ENGAGEMENT_RATE)
+      : impressions > 0
+      ? parseRate(engagements / impressions)
+      : 0.0;
+
+  const outboundClickRate =
+    raw.OUTBOUND_CLICK_RATE !== undefined
+      ? parseRate(raw.OUTBOUND_CLICK_RATE)
+      : impressions > 0
+      ? parseRate(outboundClicks / impressions)
+      : 0.0;
+
+  const pinClickRate =
+    raw.PIN_CLICK_RATE !== undefined
+      ? parseRate(raw.PIN_CLICK_RATE)
+      : impressions > 0
+      ? parseRate(pinClicks / impressions)
+      : 0.0;
+
+  const saveRate =
+    raw.SAVE_RATE !== undefined
+      ? parseRate(raw.SAVE_RATE)
+      : impressions > 0
+      ? parseRate(saves / impressions)
+      : 0.0;
+
   return {
-    impressions: parseCount(raw.IMPRESSION),
-    engagements: parseCount(raw.ENGAGEMENT),
-    outbound_clicks: parseCount(raw.OUTBOUND_CLICK),
-    pin_clicks: parseCount(raw.PIN_CLICK),
-    saves: parseCount(raw.SAVE),
-    video_10s_view: parseCount(raw.VIDEO_10S_VIEW),
-    video_mrc_view: parseCount(raw.VIDEO_MRC_VIEW),
-    video_start: parseCount(raw.VIDEO_START),
-    quartile_95_percent_view: parseCount(raw.QUARTILE_95_PERCENT_VIEW),
-    engagement_rate: parseRate(raw.ENGAGEMENT_RATE),
-    outbound_click_rate: parseRate(raw.OUTBOUND_CLICK_RATE),
-    pin_click_rate: parseRate(raw.PIN_CLICK_RATE),
-    save_rate: parseRate(raw.SAVE_RATE),
+    impressions,
+    engagements,
+    engagement_rate: engagementRate,
+    outbound_clicks: outboundClicks,
+    outbound_click_rate: outboundClickRate,
+    pin_clicks: pinClicks,
+    pin_click_rate: pinClickRate,
+    saves,
+    save_rate: saveRate,
+    video_mrc_views: parseCount(raw.VIDEO_MRC_VIEW),
     video_avg_watch_time: parseTiming(raw.VIDEO_AVG_WATCH_TIME),
     video_v50_watch_time: parseTiming(raw.VIDEO_V50_WATCH_TIME),
+    total_comments: parseCount(raw.TOTAL_COMMENTS),
+    total_reactions: parseCount(raw.TOTAL_REACTIONS),
   };
 }
 
-/**
- * Pinner Analytics ETL & Ingestion Processing Engine.
- * Directives:
- * 1. Zero 429 retry logic in Astro SSR: Rate limiting is handled in Make.com proxy policies.
- * 2. On 401 UNAUTHORIZED: Immediately revoke/deactivate connection in Project 1.
- * 3. Dead Man's Snitch: Fire notification when ingestion fails for 2+ consecutive attempts.
- * 4. Respect Data Status: Exclude days with data_status != 'READY' from workspace rollup KPIs.
- * 5. Derive rank_position strictly from pins[] array index + 1.
- */
 export const pinnerETL = {
   /**
-   * Resets the failure streak for a workspace.
+   * Resets failure tracker for a workspace (useful for tests).
    */
   resetFailureStreak(workspaceId: string) {
     failureStreakTracker.delete(workspaceId);
   },
 
   /**
-   * Gets current consecutive failure count for a workspace.
-   */
-  getFailureStreak(workspaceId: string): number {
-    return failureStreakTracker.get(workspaceId)?.count || 0;
-  },
-
-  /**
-   * Dispatches Dead Man's Snitch notification to configured webhook.
+   * Triggers Dead Man's Snitch webhook on consecutive failures.
    */
   async triggerDeadManSnitch(
     workspaceId: string,
     connectionId: string,
     streakCount: number,
-    errorDetails?: any
+    lastError?: any
   ): Promise<boolean> {
     const env = dbClients.getConfig();
     const snitchUrl = env.SNITCH_WEBHOOK_URL;
-    if (!snitchUrl) return false;
+    if (!snitchUrl) {
+      console.warn('[DeadManSnitch] No SNITCH_WEBHOOK_URL configured.');
+      return false;
+    }
 
     try {
-      const response = await fetch(snitchUrl, {
+      const res = await fetch(snitchUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          alert_type: 'pinner_analytics_ingestion_failure',
-          severity: 'CRITICAL',
+          event: 'pinner_ingestion_failure_streak',
           workspace_id: workspaceId,
           connection_id: connectionId,
           consecutive_failures: streakCount,
+          error_details: lastError || null,
           timestamp: new Date().toISOString(),
-          error_details: errorDetails,
-          message: `[Dead Man's Snitch] Pinterest ingestion has failed for ${streakCount} consecutive attempts on workspace ${workspaceId}.`,
         }),
         signal: AbortSignal.timeout(5000),
       });
-      return response.ok;
+
+      return res.ok;
     } catch (e) {
       console.warn('[DeadManSnitch] Webhook dispatch error:', e);
       return false;
@@ -134,42 +154,31 @@ export const pinnerETL = {
   },
 
   /**
-   * Handles 401 Unauthorized revocation in Project 1 (Scheduling).
+   * Handles 401 Unauthorized revocation strictly in Project 3.
    */
   async handleAccountRevocation(
     workspaceId: string,
     connectionId: string,
-    errorDetails?: any
+    _errorDetails?: any
   ): Promise<void> {
     try {
-      // 1. Deactivate in Project 3 analytics_connections
       const analyticsClient = dbClients.getAnalytics();
       await analyticsClient
         .from('analytics_connections')
         .update({
           analytics_enabled: false,
+          revoked_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })
         .eq('id', connectionId)
         .eq('workspace_id', workspaceId);
-
-      // 2. Log revocation event in Project 1 operational logs
-      const schedulingAdmin = dbClients.getSchedulingAdmin();
-      await schedulingAdmin.from('logs').insert({
-        account_id: connectionId,
-        status: 'error',
-        message: `Pinterest account connection revoked (401 Unauthorized). Automation halted. Reason: ${errorDetails?.error_message || 'Token expired or access revoked'}`,
-        event_type: 'account_revoked',
-        http_status: 401,
-        created_at: new Date().toISOString(),
-      });
     } catch (e) {
-      console.error('[PinnerETL] Account revocation handler error:', e);
+      console.error('[PinnerETL] Account revocation handler error in Project 3:', e);
     }
   },
 
   /**
-   * Main Ingestion Pipeline: Processes normalized payload from Make.com proxy.
+   * Main Ingestion Pipeline: Processes normalized payload from Make.com proxy entirely in Project 3.
    */
   async processIngestionPayload(
     payload: PinnerIngestPayload,
@@ -225,6 +234,22 @@ export const pinnerETL = {
     }
 
     const workspaceId = payload.workspace_id || connRow.workspace_id;
+    const channel = (payload.channel === 'top_pins' || (payload.top_pins_analytics && !payload.account_analytics))
+      ? 'top_pins'
+      : 'account_analytics';
+    const jobType = (requestContext?.job_type || 'daily_sync') as 'daily_sync' | 'manual_sync' | 'backfill' | 'ping';
+
+    // Insert operational run log into Project 3 analytics_ingestion_runs
+    const runRecord = await analyticsDb.createIngestionRun({
+      workspace_id: workspaceId,
+      connection_id: connectionId,
+      channel,
+      job_type: jobType,
+      status: success ? 'processing' : 'failed',
+      request_context: requestContext || null,
+      error_details: errorDetails || null,
+    });
+
     const nowIso = new Date().toISOString();
 
     // =========================================================================
@@ -235,20 +260,13 @@ export const pinnerETL = {
       const currentStreak = (failureStreakTracker.get(workspaceId)?.count || 0) + 1;
       failureStreakTracker.set(workspaceId, { count: currentStreak, lastFailedAt: nowIso });
 
-      // 2. Record operational failure in Project 1 import_sessions
-      await analyticsDb.recordOperationalImportSession(workspaceId, {
-        account_id: connectionId,
-        source_type: 'pinterest_api_sync',
-        source_label: requestContext?.job_type || 'daily_sync',
-        total_rows: 0,
-        valid_rows: 0,
-        invalid_rows: 0,
-        imported_rows: 0,
-        status: 'failed',
-        error_details: errorDetails || { message: 'Make.com ingestion reported failure' },
-      });
+      // 2. Fail run in Project 3
+      await analyticsDb.failIngestionRun(
+        runRecord.id,
+        errorDetails || { message: 'Make.com ingestion reported failure' }
+      );
 
-      // 3. Handle 401 Revocation
+      // 3. Handle 401 Revocation in Project 3
       let isRevoked = false;
       if (
         errorDetails?.http_status === 401 ||
@@ -261,7 +279,8 @@ export const pinnerETL = {
 
       // 4. Trigger Dead Man's Snitch if 2+ consecutive failures
       let snitchFired = false;
-      if (currentStreak >= 2) {
+      const isDbConsecutiveFail = await analyticsDb.checkConsecutiveFailures(connectionId, channel, 2);
+      if (currentStreak >= 2 || isDbConsecutiveFail) {
         snitchFired = await this.triggerDeadManSnitch(
           workspaceId,
           connectionId,
@@ -275,237 +294,151 @@ export const pinnerETL = {
         persisted: false,
         workspaceId,
         connectionId,
+        runId: runRecord.id,
         dailyRowsIngested: 0,
         summarySaved: false,
         topPinsIngested: 0,
         workspaceRollupsUpdated: 0,
         revoked: isRevoked,
         snitchAlerted: snitchFired,
-        error: errorDetails?.error_message || 'Ingestion failed in Make.com proxy',
-        details: errorDetails,
+        error: errorDetails?.error_message || 'Make.com ingestion failed',
+        details: { streak: currentStreak, rawHeaders },
       };
     }
 
     // =========================================================================
-    // Case 2: Ingestion Succeeded — Parse, Validate & Persist to Project 3
+    // Case 2: Ingestion Succeeded — Parse & Transform Data
     // =========================================================================
-    // Reset failure streak on success
-    this.resetFailureStreak(workspaceId);
+    const hasAccountAnalytics = Boolean(payload.account_analytics);
+    const hasTopPinsAnalytics = Boolean(payload.top_pins_analytics);
 
-    // Normalize safely if account_analytics or top_pins_analytics are JSON strings
-    let accountAnalytics = payload.account_analytics;
-    if (typeof accountAnalytics === 'string') {
-      try {
-        accountAnalytics = JSON.parse(accountAnalytics);
-      } catch {
-        accountAnalytics = null;
-      }
-    }
-
-    let topPinsAnalytics = payload.top_pins_analytics;
-    if (typeof topPinsAnalytics === 'string') {
-      try {
-        topPinsAnalytics = JSON.parse(topPinsAnalytics);
-      } catch {
-        topPinsAnalytics = null;
-      }
-    }
-
-    const hasAccountAnalytics = Boolean(
-      accountAnalytics &&
-        (accountAnalytics?.all?.daily_metrics?.length > 0 ||
-          accountAnalytics?.all?.summary_metrics)
-    );
-
-    const hasTopPinsAnalytics = Boolean(
-      topPinsAnalytics &&
-        Object.keys(topPinsAnalytics).length > 0 &&
-        Object.values(topPinsAnalytics).some(
-          (val: any) => Array.isArray(val?.pins) && val.pins.length > 0
-        )
-    );
-
-    // Strict V15 rule: At least one channel must be non-null on success
     if (!hasAccountAnalytics && !hasTopPinsAnalytics) {
+      await analyticsDb.failIngestionRun(runRecord.id, {
+        message: 'At least one analytics channel payload must be present when success=true',
+      });
+
       return {
         success: false,
         persisted: false,
         workspaceId,
         connectionId,
+        runId: runRecord.id,
         dailyRowsIngested: 0,
         summarySaved: false,
         topPinsIngested: 0,
         workspaceRollupsUpdated: 0,
         revoked: false,
         snitchAlerted: false,
-        error:
-          'Payload rejected: At least one analytics channel (account_analytics or top_pins_analytics) must be provided when success is true.',
+        error: 'Validation Error: At least one analytics channel (account_analytics or top_pins_analytics) must be provided when success=true.',
       };
     }
 
-    // Dates for window
-    const windowStart = requestContext?.start_date
-      ? new Date(requestContext.start_date).toISOString()
-      : nowIso;
-    const windowEnd = requestContext?.end_date
-      ? new Date(requestContext.end_date).toISOString()
-      : nowIso;
+    // Reset failure streak on success
+    failureStreakTracker.delete(workspaceId);
 
-    // --- 1. Account Daily Metrics Parsing ---
-    const dailyMetricsRaw = accountAnalytics?.all?.daily_metrics || [];
-    const dailyRows: Partial<AccountAnalyticsDaily>[] = [];
-
-    for (const item of dailyMetricsRaw) {
-      if (!item.date) continue;
-      const normalized = normalizeMetrics(item.metrics);
-
-      dailyRows.push({
-        workspace_id: workspaceId,
-        connection_id: connectionId,
-        window_start: windowStart,
-        window_end: windowEnd,
-        metric_date: item.date,
-        data_status: item.data_status || 'READY',
-        impressions: normalized.impressions,
-        engagements: normalized.engagements,
-        outbound_clicks: normalized.outbound_clicks,
-        pin_clicks: normalized.pin_clicks,
-        saves: normalized.saves,
-        video_10s_view: normalized.video_10s_view,
-        video_mrc_view: normalized.video_mrc_view,
-        video_start: normalized.video_start,
-        quartile_95_percent_view: normalized.quartile_95_percent_view,
-        engagement_rate: normalized.engagement_rate,
-        outbound_click_rate: normalized.outbound_click_rate,
-        pin_click_rate: normalized.pin_click_rate,
-        save_rate: normalized.save_rate,
-        video_avg_watch_time: normalized.video_avg_watch_time,
-        video_v50_watch_time: normalized.video_v50_watch_time,
-        raw_metrics: item.metrics || {},
-        recorded_at: nowIso,
-      });
-    }
-
-    // --- 2. Account Summary Parsing ---
-    const summaryMetricsRaw = accountAnalytics?.all?.summary_metrics || null;
-    let summaryRow: Partial<AccountAnalyticsSummary> | null = null;
-    if (summaryMetricsRaw) {
-      const normalizedSummary = normalizeMetrics(summaryMetricsRaw);
-      summaryRow = {
-        workspace_id: workspaceId,
-        connection_id: connectionId,
-        window_start: windowStart,
-        window_end: windowEnd,
-        summary_impressions: normalizedSummary.impressions,
-        summary_engagements: normalizedSummary.engagements,
-        summary_outbound_clicks: normalizedSummary.outbound_clicks,
-        summary_pin_clicks: normalizedSummary.pin_clicks,
-        summary_saves: normalizedSummary.saves,
-        summary_video_10s_view: normalizedSummary.video_10s_view,
-        summary_video_mrc_view: normalizedSummary.video_mrc_view,
-        summary_video_start: normalizedSummary.video_start,
-        summary_quartile_95_percent_view: normalizedSummary.quartile_95_percent_view,
-        summary_engagement_rate: normalizedSummary.engagement_rate,
-        summary_outbound_click_rate: normalizedSummary.outbound_click_rate,
-        summary_pin_click_rate: normalizedSummary.pin_click_rate,
-        summary_save_rate: normalizedSummary.save_rate,
-        summary_video_avg_watch_time: normalizedSummary.video_avg_watch_time,
-        summary_video_v50_watch_time: normalizedSummary.video_v50_watch_time,
-        raw_summary: summaryMetricsRaw,
-        recorded_at: nowIso,
-      };
-    }
-
-    // --- 3. Top Pins Snapshots Parsing (5 Sort Modes) ---
-    const sortModes: PinnerSortBy[] = [
-      'IMPRESSION',
-      'OUTBOUND_CLICK',
-      'SAVE',
-      'ENGAGEMENT',
-      'PIN_CLICK',
-    ];
-    const topPinRows: Partial<TopPinSnapshot>[] = [];
+    const dailyRows: AccountAnalyticsDaily[] = [];
+    let summaryRow: AccountAnalyticsSummary | null = null;
+    const topPinRows: TopPinSnapshot[] = [];
     const destinationUrlsToTrack: Array<{
+      account_id: string;
       destination_url: string;
-      period_date: string;
-      total_clicks?: number;
-      total_impressions?: number;
+      window_days: number;
+      total_impressions: number;
+      total_outbound_clicks: number;
+      total_saves: number;
+      total_pins: number;
     }> = [];
 
-    for (const sortBy of sortModes) {
-      let sortPayload = topPinsAnalytics?.[sortBy];
-      if (typeof sortPayload === 'string') {
-        try {
-          sortPayload = JSON.parse(sortPayload);
-        } catch {
-          sortPayload = null;
+    // -------------------------------------------------------------------------
+    // Parse Pipeline A: Account Daily Time Series & Summaries
+    // -------------------------------------------------------------------------
+    if (payload.account_analytics) {
+      const { all } = payload.account_analytics;
+
+      // Parse daily metrics array
+      if (all?.daily_metrics && Array.isArray(all.daily_metrics)) {
+        for (const item of all.daily_metrics) {
+          if (!item.data_status || item.data_status === 'READY') {
+            const metrics = normalizeMetrics(item.metrics);
+            dailyRows.push({
+              workspace_id: workspaceId,
+              account_id: connectionId,
+              metric_date: item.date,
+              data_status: item.data_status || 'READY',
+              ...metrics,
+              updated_at: nowIso,
+            });
+          }
         }
       }
 
-      if (!sortPayload || !Array.isArray(sortPayload.pins)) continue;
+      // Parse summary metrics
+      if (all?.summary_metrics) {
+        const metrics = normalizeMetrics(all.summary_metrics);
+        const windowStart = requestContext?.start_date || (dailyRows[0]?.metric_date ?? nowIso.split('T')[0]);
+        const windowEnd = requestContext?.end_date || (dailyRows[dailyRows.length - 1]?.metric_date ?? nowIso.split('T')[0]);
 
-      const dateAvailability = sortPayload.date_availability || null;
-      const pinsList = sortPayload.pins.slice(0, 50); // Pinterest max 50
-
-      pinsList.forEach((pin: any, index: number) => {
-        if (!pin.pin_id) return;
-        const normalized = normalizeMetrics(pin.metrics);
-        const rankPosition = index + 1; // Derived from array index + 1
-
-        topPinRows.push({
+        summaryRow = {
           workspace_id: workspaceId,
-          connection_id: connectionId,
+          account_id: connectionId,
           window_start: windowStart,
           window_end: windowEnd,
-          sort_by: sortBy,
-          rank_position: rankPosition,
-          pin_id: String(pin.pin_id),
-          recorded_at: nowIso,
-          impressions: normalized.impressions,
-          engagement: normalized.engagements,
-          outbound_clicks: normalized.outbound_clicks,
-          pin_clicks: normalized.pin_clicks,
-          saves: normalized.saves,
-          video_10s_view: normalized.video_10s_view,
-          video_mrc_view: normalized.video_mrc_view,
-          video_start: normalized.video_start,
-          quartile_95_percent_view: normalized.quartile_95_percent_view,
-          engagement_rate: normalized.engagement_rate,
-          outbound_click_rate: normalized.outbound_click_rate,
-          pin_click_rate: normalized.pin_click_rate,
-          save_rate: normalized.save_rate,
-          video_avg_watch_time: normalized.video_avg_watch_time,
-          video_v50_watch_time: normalized.video_v50_watch_time,
-          data_status: pin.data_status || {},
-          date_availability: dateAvailability,
-          title: pin.title || null,
-          destination_url: pin.destination_url || pin.link || null,
-          image_url: pin.image_url || pin.media_url || null,
-          pin_metadata: pin.pin_metadata || null,
-          raw_metrics: pin.metrics || {},
-          raw_pin: pin,
-          raw_headers: rawHeaders || {},
-        });
-
-        if (pin.destination_url || pin.link) {
-          destinationUrlsToTrack.push({
-            destination_url: pin.destination_url || pin.link,
-            period_date: windowEnd.split('T')[0],
-            total_clicks: normalized.outbound_clicks,
-            total_impressions: normalized.impressions,
-          });
-        }
-      });
+          ...metrics,
+          updated_at: nowIso,
+        };
+      }
     }
 
-    // --- 4. Derived Workspace Metrics Rollup ---
-    const workspaceDailyMap = new Map<string, Partial<DailyWorkspaceMetric>>();
+    // -------------------------------------------------------------------------
+    // Parse Pipeline B: Ranked Top Pins Snapshots
+    // -------------------------------------------------------------------------
+    const windowEnd = requestContext?.end_date || nowIso.split('T')[0];
+
+    if (payload.top_pins_analytics && payload.top_pins_analytics.pins_by_sort_mode) {
+      const { pins_by_sort_mode } = payload.top_pins_analytics;
+
+      for (const [sortByRaw, pinsArray] of Object.entries(pins_by_sort_mode)) {
+        const sortBy = sortByRaw.toUpperCase() as PinnerSortBy;
+        if (!Array.isArray(pinsArray)) continue;
+
+        pinsArray.forEach((pin, index) => {
+          const metrics = normalizeMetrics(pin.metrics);
+          topPinRows.push({
+            workspace_id: workspaceId,
+            account_id: connectionId,
+            pin_id: pin.pin_id,
+            title: pin.title || null,
+            image_url: pin.image_url || null,
+            destination_url: pin.destination_url || null,
+            sort_by: sortBy,
+            rank_position: index + 1,
+            window_end: windowEnd,
+            ...metrics,
+            data_status: pin.data_status || 'READY',
+            recorded_at: nowIso,
+          });
+
+          if (pin.destination_url) {
+            destinationUrlsToTrack.push({
+              account_id: connectionId,
+              destination_url: pin.destination_url,
+              window_days: 30,
+              total_impressions: metrics.impressions,
+              total_outbound_clicks: metrics.outbound_clicks,
+              total_saves: metrics.saves,
+              total_pins: 1,
+            });
+          }
+        });
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // Derive Workspace Rollups (daily_workspace_metrics)
+    // -------------------------------------------------------------------------
+    const workspaceDailyMap = new Map<string, DailyWorkspaceMetric>();
 
     for (const daily of dailyRows) {
-      if (!daily.metric_date) continue;
-      // Strict rule: Exclude non-READY days from workspace aggregations
-      if (daily.data_status !== 'READY') continue;
-
       const dateKey = daily.metric_date;
       const existing = workspaceDailyMap.get(dateKey) || {
         workspace_id: workspaceId,
@@ -572,7 +505,7 @@ export const pinnerETL = {
     const workspaceRollupRows = Array.from(workspaceDailyMap.values());
 
     // =========================================================================
-    // Persist to Project 3 Tables
+    // Persistence Layer (Project 3 Upserts)
     // =========================================================================
     let dailyUpsertCount = 0;
     if (dailyRows.length > 0) {
@@ -609,21 +542,10 @@ export const pinnerETL = {
     }
 
     // =========================================================================
-    // Operational Tracking in Project 1
+    // Operational Ingestion Run Completion in Project 3
     // =========================================================================
     const totalRowsCount = dailyRows.length + topPinRows.length + (summaryRow ? 1 : 0);
-    const channelName = payload.channel || (hasAccountAnalytics && hasTopPinsAnalytics ? 'full_sync' : hasAccountAnalytics ? 'account_analytics' : 'top_pins');
-
-    await analyticsDb.recordOperationalImportSession(workspaceId, {
-      account_id: connectionId,
-      source_type: `pinterest_${channelName}`,
-      source_label: requestContext?.job_type || 'daily_sync',
-      total_rows: totalRowsCount,
-      valid_rows: totalRowsCount,
-      invalid_rows: 0,
-      imported_rows: totalRowsCount,
-      status: 'completed',
-    });
+    await analyticsDb.completeIngestionRun(runRecord.id, totalRowsCount);
 
     // =========================================================================
     // Edge Cache Invalidation & Post-Persistence Warmup
@@ -636,6 +558,7 @@ export const pinnerETL = {
       persisted: true,
       workspaceId,
       connectionId,
+      runId: runRecord.id,
       dailyRowsIngested: dailyUpsertCount,
       summarySaved: true,
       topPinsIngested: topPinsUpsertCount,

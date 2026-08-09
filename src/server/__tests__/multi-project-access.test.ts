@@ -121,18 +121,16 @@ describe('Phase 3 — Server-Only Multi-Project Access & Authorization Guards', 
       }),
     } as any;
 
-    const listImportsSpy = vi.spyOn(analyticsDb, 'listImportSessions').mockResolvedValue([
+    const listImportsSpy = vi.spyOn(analyticsDb, 'listIngestionRuns').mockResolvedValue([
       {
-        id: 'session-1',
-        account_id: 'acc-1',
-        source_type: 'google_sheets',
-        source_label: 'Sheet 1',
-        total_rows: 100,
-        valid_rows: 100,
-        invalid_rows: 0,
-        imported_rows: 100,
-        created_by: 'user-owner',
-        created_at: new Date().toISOString(),
+        id: 'run-1',
+        workspace_id: 'ws-owner',
+        connection_id: 'acc-1',
+        channel: 'account_analytics',
+        job_type: 'daily_sync',
+        status: 'completed',
+        rows_processed: 100,
+        started_at: new Date().toISOString(),
       },
     ]);
 
@@ -145,7 +143,7 @@ describe('Phase 3 — Server-Only Multi-Project Access & Authorization Guards', 
 
     expect(listImportsSpy).toHaveBeenCalledWith('ws-owner', 'acc-1');
     expect(result.length).toBe(1);
-    expect(result[0].id).toBe('session-1');
+    expect(result[0].id).toBe('run-1');
   });
 
   it('queueService enforces Project 1 authorization before modifying pin status', async () => {

@@ -59,6 +59,7 @@ export const GET: APIRoute = async ({ params, locals }) => {
     const responseData: AnalyticsConnectionSettingsResponse = {
       id: connection.id,
       display_name: connection.display_name,
+      revoked_at: connection.revoked_at || null,
       analytics_webhook_url: connection.analytics_webhook_url || null,
       analytics_sync_time: connection.analytics_sync_time || '04:00',
       analytics_cron_expression: connection.analytics_cron_expression || '0 4 * * *',
@@ -232,6 +233,7 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
     const responseData: AnalyticsConnectionSettingsResponse = {
       id: updated.id,
       display_name: updated.display_name,
+      revoked_at: updated.revoked_at || null,
       analytics_webhook_url: updated.analytics_webhook_url || null,
       analytics_sync_time: updated.analytics_sync_time,
       analytics_cron_expression: updated.analytics_cron_expression,

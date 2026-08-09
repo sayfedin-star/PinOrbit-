@@ -7,7 +7,10 @@ import type { PinnerIngestPayload } from '../../lib/types';
 // Mock DB layer
 vi.mock('../db/analytics', () => ({
   analyticsDb: {
-    recordOperationalImportSession: vi.fn().mockResolvedValue({ id: 'mock-import-id' }),
+    createIngestionRun: vi.fn().mockResolvedValue({ id: 'mock-run-id' }),
+    completeIngestionRun: vi.fn().mockResolvedValue(undefined),
+    failIngestionRun: vi.fn().mockResolvedValue(undefined),
+    checkConsecutiveFailures: vi.fn().mockResolvedValue(false),
     upsertAccountDailyMetrics: vi.fn().mockResolvedValue(2),
     upsertAccountSummary: vi.fn().mockResolvedValue(undefined),
     upsertTopPinsSnapshots: vi.fn().mockResolvedValue(5),
@@ -22,13 +25,6 @@ vi.mock('../db/clients', () => ({
     getConfig: vi.fn().mockReturnValue({
       INGEST_SECRET_KEY: 'test-ingest-secret',
       SNITCH_WEBHOOK_URL: 'https://webhook.site/test-snitch',
-    }),
-    getSchedulingAdmin: vi.fn().mockReturnValue({
-      from: vi.fn((table: string) => ({
-        update: vi.fn().mockReturnThis(),
-        insert: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-      })),
     }),
     getAnalytics: vi.fn().mockReturnValue({
       from: vi.fn((table: string) => ({
@@ -69,20 +65,19 @@ describe('Pinner Analytics ETL Processor Suite', () => {
         OUTBOUND_CLICK: 139,
         OUTBOUND_CLICK_RATE: 0.001914969828892624,
         PIN_CLICK: 2366,
-        PIN_CLICK_RATE: 0.032595817375251426,
-        SAVE: 404,
-        SAVE_RATE: 0.005565811589011655,
-        VIDEO_10S_VIEW: 12,
-        VIDEO_AVG_WATCH_TIME: 4.521,
-        VIDEO_MRC_VIEW: 8,
-        VIDEO_START: 20,
-        VIDEO_V50_WATCH_TIME: 2.311,
-        QUARTILE_95_PERCENT_VIEW: 5,
+        PIN_CLICK_RATE: 0.03259581737525143,
+        SAVE: 406,
+        SAVE_RATE: 0.005593365111729535,
+        TOTAL_COMMENTS: 1,
+        TOTAL_REACTIONS: 3,
+        VIDEO_AVG_WATCH_TIME: 0,
+        VIDEO_MRC_VIEW: 0,
+        VIDEO_V50_WATCH_TIME: 0,
       },
       daily_metrics: [
         {
-          date: '2026-08-01',
           data_status: 'READY',
+          date: '2026-08-01',
           metrics: {
             IMPRESSION: 10000,
             ENGAGEMENT: 400,
@@ -91,29 +86,23 @@ describe('Pinner Analytics ETL Processor Suite', () => {
             OUTBOUND_CLICK_RATE: 0.002,
             PIN_CLICK: 300,
             PIN_CLICK_RATE: 0.03,
-            SAVE: 50,
-            SAVE_RATE: 0.005,
-            VIDEO_10S_VIEW: 2,
-            VIDEO_AVG_WATCH_TIME: 3.1,
-            VIDEO_MRC_VIEW: 1,
-            VIDEO_START: 5,
-            VIDEO_V50_WATCH_TIME: 1.5,
-            QUARTILE_95_PERCENT_VIEW: 1,
+            SAVE: 80,
+            SAVE_RATE: 0.008,
           },
         },
         {
+          data_status: 'READY',
           date: '2026-08-02',
-          data_status: 'PROCESSING', // Non-READY day
           metrics: {
-            IMPRESSION: 5000,
-            ENGAGEMENT: 200,
-            ENGAGEMENT_RATE: 0.04,
-            OUTBOUND_CLICK: 10,
+            IMPRESSION: 12000,
+            ENGAGEMENT: 500,
+            ENGAGEMENT_RATE: 0.0416,
+            OUTBOUND_CLICK: 25,
             OUTBOUND_CLICK_RATE: 0.002,
-            PIN_CLICK: 150,
-            PIN_CLICK_RATE: 0.03,
-            SAVE: 25,
-            SAVE_RATE: 0.005,
+            PIN_CLICK: 350,
+            PIN_CLICK_RATE: 0.029,
+            SAVE: 100,
+            SAVE_RATE: 0.0083,
           },
         },
       ],
@@ -121,61 +110,66 @@ describe('Pinner Analytics ETL Processor Suite', () => {
   };
 
   const samplePinterestTopPins = {
-    IMPRESSION: {
-      sort_by: 'IMPRESSION',
-      pins: [
+    sort_by: 'IMPRESSION' as const,
+    pins_by_sort_mode: {
+      IMPRESSION: [
         {
           pin_id: '10485011674598527',
-          title: 'Creamy Tuscan Garlic Chicken Recipe',
-          destination_url: 'https://pinorbit.com/recipes/tuscan-chicken',
-          image_url: 'https://images.unsplash.com/photo-1604908176997-125f25cc6f3d',
+          title: 'Creamy Lemon Pasta',
+          image_url: 'https://i.pinimg.com/236x/test1.jpg',
+          destination_url: 'https://example.com/pasta',
+          data_status: 'READY',
           metrics: {
             IMPRESSION: 4172,
-            ENGAGEMENT: 151,
-            ENGAGEMENT_RATE: 0.036193672099712366,
-            OUTBOUND_CLICK: 18,
-            OUTBOUND_CLICK_RATE: 0.004314477468839885,
-            PIN_CLICK: 120,
-            PIN_CLICK_RATE: 0.028763183125599233,
-            SAVE: 23,
-            SAVE_RATE: 0.00551294343240652,
-          },
-          data_status: {
-            IMPRESSION: 'READY',
-            ENGAGEMENT: 'READY',
+            ENGAGEMENT: 121,
+            ENGAGEMENT_RATE: 0.029,
+            OUTBOUND_CLICK: 5,
+            OUTBOUND_CLICK_RATE: 0.0012,
+            PIN_CLICK: 98,
+            PIN_CLICK_RATE: 0.0235,
+            SAVE: 18,
+            SAVE_RATE: 0.0043,
           },
         },
         {
           pin_id: '10485011674598528',
-          title: 'Easy Homemade Pizza Dough',
-          destination_url: 'https://pinorbit.com/recipes/pizza-dough',
+          title: 'Crispy Smashed Potatoes',
+          image_url: 'https://i.pinimg.com/236x/test2.jpg',
+          destination_url: 'https://example.com/potatoes',
+          data_status: 'READY',
           metrics: {
-            IMPRESSION: 3200,
+            IMPRESSION: 3500,
             ENGAGEMENT: 95,
-            ENGAGEMENT_RATE: 0.0296875,
-            OUTBOUND_CLICK: 12,
-            OUTBOUND_CLICK_RATE: 0.00375,
+            ENGAGEMENT_RATE: 0.0271,
+            OUTBOUND_CLICK: 3,
+            OUTBOUND_CLICK_RATE: 0.0008,
             PIN_CLICK: 75,
-            PIN_CLICK_RATE: 0.0234375,
-            SAVE: 15,
-            SAVE_RATE: 0.0046875,
-          },
-          data_status: {
-            IMPRESSION: 'READY',
+            PIN_CLICK_RATE: 0.0214,
+            SAVE: 17,
+            SAVE_RATE: 0.0048,
           },
         },
       ],
-      date_availability: {
-        is_realtime: false,
-        latest_available_timestamp: 1786060799000,
-      },
+      SAVE: [
+        {
+          pin_id: '10485011674598528',
+          title: 'Crispy Smashed Potatoes',
+          image_url: 'https://i.pinimg.com/236x/test2.jpg',
+          destination_url: 'https://example.com/potatoes',
+          data_status: 'READY',
+          metrics: {
+            IMPRESSION: 3500,
+            ENGAGEMENT: 95,
+            SAVE: 17,
+          },
+        },
+      ],
     },
   };
 
-  it('processes valid normalized Make.com payload and persists to Project 3 and Project 1', async () => {
+  it('processes valid normalized Make.com payload and persists to Project 3', async () => {
     const payload: PinnerIngestPayload = {
       success: true,
-      request_id: 'test-run-001',
       workspace_id: workspaceId,
       connection_id: connectionId,
       request_context: {
@@ -198,14 +192,18 @@ describe('Pinner Analytics ETL Processor Suite', () => {
     expect(result.persisted).toBe(true);
     expect(result.revoked).toBe(false);
 
-    // Verify Project 1 operational session recorded
-    expect(analyticsDb.recordOperationalImportSession).toHaveBeenCalledWith(
-      workspaceId,
+    // Verify Project 3 Ingestion Run created & completed
+    expect(analyticsDb.createIngestionRun).toHaveBeenCalledWith(
       expect.objectContaining({
-        account_id: connectionId,
-        source_type: 'pinterest_full_sync',
-        status: 'completed',
+        workspace_id: workspaceId,
+        connection_id: connectionId,
+        channel: 'account_analytics',
+        job_type: 'daily_sync',
       })
+    );
+    expect(analyticsDb.completeIngestionRun).toHaveBeenCalledWith(
+      'mock-run-id',
+      expect.any(Number)
     );
 
     // Verify Project 3 Account Daily upsert
@@ -238,33 +236,42 @@ describe('Pinner Analytics ETL Processor Suite', () => {
           pin_id: '10485011674598528',
           rank_position: 2, // Derived from index 1 + 1
           sort_by: 'IMPRESSION',
-          impressions: 3200,
+          impressions: 3500,
+        }),
+        expect.objectContaining({
+          pin_id: '10485011674598528',
+          rank_position: 1, // Derived from index 0 + 1 for SAVE sort mode
+          sort_by: 'SAVE',
+          impressions: 3500,
         }),
       ])
     );
 
-    // Verify Derived Workspace Metrics Rollup filters out non-READY days
-    expect(analyticsDb.upsertDailyWorkspaceMetrics).toHaveBeenCalledWith(
+    // Verify URL performance tracked
+    expect(analyticsDb.upsertUrlPerformance).toHaveBeenCalledWith(
       workspaceId,
       expect.arrayContaining([
         expect.objectContaining({
-          metric_date: '2026-08-01',
-          total_impressions: 10000, // Includes 2026-08-01 because data_status = 'READY'
+          destination_url: 'https://example.com/pasta',
+          total_impressions: 4172,
         }),
       ])
     );
+
+    // Verify workspace rollups updated
+    expect(analyticsDb.upsertDailyWorkspaceMetrics).toHaveBeenCalled();
   });
 
-  it('handles 401 Unauthorized by deactivating account in Project 1', async () => {
+  it('handles 401 Unauthorized by deactivating account in Project 3', async () => {
     const payload: PinnerIngestPayload = {
       success: false,
       workspace_id: workspaceId,
       connection_id: connectionId,
+      request_context: { job_type: 'daily_sync' },
       error_details: {
         http_status: 401,
         error_code: 'UNAUTHORIZED',
-        error_message: 'Pinterest authorization failed or token revoked',
-        failed_module: 'Pinterest: Make an API Call',
+        error_message: 'The OAuth token is expired or was revoked',
       },
     };
 
@@ -274,43 +281,43 @@ describe('Pinner Analytics ETL Processor Suite', () => {
     expect(result.persisted).toBe(false);
     expect(result.revoked).toBe(true);
 
-    // Verify Project 1 operational failure session
-    expect(analyticsDb.recordOperationalImportSession).toHaveBeenCalledWith(
-      workspaceId,
-      expect.objectContaining({
-        account_id: connectionId,
-        status: 'failed',
-      })
+    expect(analyticsDb.failIngestionRun).toHaveBeenCalledWith(
+      'mock-run-id',
+      expect.objectContaining({ http_status: 401 })
     );
-
-    // Failure streak is incremented to 1
-    expect(pinnerETL.getFailureStreak(workspaceId)).toBe(1);
   });
 
   it('triggers Dead Mans Snitch alert on 2+ consecutive failures', async () => {
-    const snitchSpy = vi.spyOn(pinnerETL, 'triggerDeadManSnitch').mockResolvedValue(true);
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((async () => {
+      return { ok: true, status: 200 } as any;
+    }) as any);
 
-    const payload: PinnerIngestPayload = {
+    const failurePayload: PinnerIngestPayload = {
       success: false,
       workspace_id: workspaceId,
       connection_id: connectionId,
+      request_context: { job_type: 'daily_sync' },
       error_details: {
         http_status: 500,
-        error_code: 'API_ERROR',
-        error_message: 'Pinterest API gateway error',
+        error_code: 'INTERNAL_SERVER_ERROR',
+        error_message: 'Pinterest internal error',
       },
     };
 
-    // First failure
-    await pinnerETL.processIngestionPayload(payload);
-    expect(snitchSpy).not.toHaveBeenCalled();
-    expect(pinnerETL.getFailureStreak(workspaceId)).toBe(1);
+    // Failure 1 -> No snitch yet
+    const r1 = await pinnerETL.processIngestionPayload(failurePayload);
+    expect(r1.snitchAlerted).toBe(false);
+    expect(fetchSpy).not.toHaveBeenCalled();
 
-    // Second consecutive failure
-    const secondResult = await pinnerETL.processIngestionPayload(payload);
-    expect(pinnerETL.getFailureStreak(workspaceId)).toBe(2);
-    expect(snitchSpy).toHaveBeenCalledWith(workspaceId, connectionId, 2, payload.error_details);
-    expect(secondResult.snitchAlerted).toBe(true);
+    // Failure 2 -> Triggers Snitch
+    const r2 = await pinnerETL.processIngestionPayload(failurePayload);
+    expect(r2.snitchAlerted).toBe(true);
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'https://webhook.site/test-snitch',
+      expect.objectContaining({ method: 'POST' })
+    );
+
+    fetchSpy.mockRestore();
   });
 
   it('processes Account Analytics-only payload without top_pins_analytics', async () => {

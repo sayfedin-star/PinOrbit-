@@ -6,23 +6,9 @@ import type {
   DailyWorkspaceMetric,
   PinnerSortBy,
   WorkspaceAnalyticsSettings,
-  PinnerConnection,
+  AnalyticsConnection,
+  AnalyticsIngestionRun,
 } from '../../lib/types';
-
-export interface ImportSessionRecord {
-  id: string;
-  account_id: string;
-  source_type: string;
-  source_label: string | null;
-  total_rows: number;
-  valid_rows: number;
-  invalid_rows: number;
-  imported_rows: number;
-  created_by: string | null;
-  created_at: string;
-  status?: 'pending' | 'processing' | 'completed' | 'failed';
-  error_details?: any;
-}
 
 export interface MetricSummary {
   workspace_id: string;
@@ -44,388 +30,380 @@ export interface BoardAnalyticsRollup {
 }
 
 /**
- * Server-Only Project 3 (Analytics Data Warehouse) & Operational Ingestion Data Layer.
- * Directives:
+ * Server-Only Project 3 (Analytics Data Warehouse & Standalone Control Plane) Data Layer.
+ * Directives (V17 Final Standalone Edition):
  * 1. Must never be imported from browser code.
- * 2. Every operation MUST enforce workspace_id tenant boundary.
- * 3. Project 1 import_sessions is the operational source of truth for ingestion tracking.
+ * 2. Every analytics query/write uses ONLY Project 3 analyticsClient. Zero Project 1/2 calls.
+ * 3. Operational ingestion history is tracked in public.analytics_ingestion_runs.
  */
 export const analyticsDb = {
   // ============================================================================
-  // Project 1 Operational Tracking
+  // Project 3 Operational Ingestion Run Tracking (V17 Final)
   // ============================================================================
 
   /**
-   * Records an operational import/ingestion session in Project 1 (Operational Truth).
+   * Records the start of an ingestion run in Project 3 (status: processing).
    */
-  async recordOperationalImportSession(
-    workspaceId: string,
-    session: {
-      account_id: string;
-      source_type: string;
-      source_label?: string | null;
-      total_rows: number;
-      valid_rows: number;
-      invalid_rows: number;
-      imported_rows: number;
-      status: 'pending' | 'processing' | 'completed' | 'failed';
-      error_details?: any;
-      created_by?: string | null;
+  async createIngestionRun(
+    run: {
+      workspace_id: string;
+      connection_id: string;
+      channel: 'account_analytics' | 'top_pins';
+      job_type: 'daily_sync' | 'manual_sync' | 'backfill' | 'ping';
+      status?: 'processing' | 'completed' | 'failed';
+      request_context?: Record<string, any> | null;
+      rows_processed?: number;
+      error_details?: Record<string, any> | null;
     }
-  ): Promise<ImportSessionRecord> {
-    if (!workspaceId || !session.account_id) {
-      throw new Error('Tenant Boundary Violation: workspaceId and account_id are required.');
+  ): Promise<AnalyticsIngestionRun> {
+    if (!run.workspace_id || !run.connection_id) {
+      throw new Error('Tenant Boundary Violation: workspace_id and connection_id are required.');
     }
 
-    const schedulingAdmin = dbClients.getSchedulingAdmin();
-    const { data, error } = await schedulingAdmin
-      .from('import_sessions')
+    const analyticsClient = dbClients.getAnalytics();
+    const { data, error } = await analyticsClient
+      .from('analytics_ingestion_runs')
       .insert({
-        workspace_id: workspaceId,
-        account_id: session.account_id,
-        source_type: session.source_type,
-        source_label: session.source_label || null,
-        total_rows: session.total_rows,
-        valid_rows: session.valid_rows,
-        invalid_rows: session.invalid_rows,
-        imported_rows: session.imported_rows,
-        status: session.status,
-        error_details: session.error_details || null,
-        created_by: session.created_by || null,
+        workspace_id: run.workspace_id,
+        connection_id: run.connection_id,
+        channel: run.channel,
+        job_type: run.job_type,
+        status: run.status || 'processing',
+        request_context: run.request_context || null,
+        rows_processed: run.rows_processed || 0,
+        error_details: run.error_details || null,
+        started_at: new Date().toISOString(),
       })
       .select()
       .single();
 
-    if (error) {
-      // Fallback: Also try writing to Project 3 import_sessions if Project 1 had an issue
-      try {
-        const analyticsClient = dbClients.getAnalytics();
-        const fallbackRes = await analyticsClient
-          .from('import_sessions')
-          .insert({
-            workspace_id: workspaceId,
-            account_id: session.account_id,
-            source_type: session.source_type,
-            source_label: session.source_label || null,
-            total_rows: session.total_rows,
-            valid_rows: session.valid_rows,
-            invalid_rows: session.invalid_rows,
-            imported_rows: session.imported_rows,
-            created_by: session.created_by || null,
-          })
-          .select()
-          .single();
-        if (!fallbackRes.error && fallbackRes.data) {
-          return fallbackRes.data as ImportSessionRecord;
-        }
-      } catch {
-        // Ignore fallback failure
-      }
-      throw error;
-    }
-
-    return data as ImportSessionRecord;
+    if (error) throw error;
+    return data as AnalyticsIngestionRun;
   },
 
   /**
-   * Lists historical operational import sessions for an account within an authorized workspace.
+   * Marks an ingestion run as completed in Project 3.
    */
-  async listImportSessions(
+  async completeIngestionRun(
+    runId: string,
+    rowsProcessed: number
+  ): Promise<void> {
+    if (!runId) return;
+    const analyticsClient = dbClients.getAnalytics();
+    const { error } = await analyticsClient
+      .from('analytics_ingestion_runs')
+      .update({
+        status: 'completed',
+        rows_processed: rowsProcessed,
+        completed_at: new Date().toISOString(),
+      })
+      .eq('id', runId);
+
+    if (error) {
+      console.warn('[AnalyticsDb] Failed to complete ingestion run:', runId, error);
+    }
+  },
+
+  /**
+   * Marks an ingestion run as failed in Project 3 with error details.
+   */
+  async failIngestionRun(
+    runId: string,
+    errorDetails: Record<string, any>
+  ): Promise<void> {
+    if (!runId) return;
+    const analyticsClient = dbClients.getAnalytics();
+    const { error } = await analyticsClient
+      .from('analytics_ingestion_runs')
+      .update({
+        status: 'failed',
+        error_details: errorDetails,
+        completed_at: new Date().toISOString(),
+      })
+      .eq('id', runId);
+
+    if (error) {
+      console.warn('[AnalyticsDb] Failed to fail ingestion run:', runId, error);
+    }
+  },
+
+  /**
+   * Lists recent ingestion runs for a connection within a workspace.
+   */
+  async listIngestionRuns(
     workspaceId: string,
-    accountId?: string,
-    limit = 20
-  ): Promise<ImportSessionRecord[]> {
+    connectionId?: string,
+    limit = 10
+  ): Promise<AnalyticsIngestionRun[]> {
     if (!workspaceId) {
-      throw new Error('Tenant Boundary Violation: workspaceId is required for analytics queries.');
+      throw new Error('Tenant Boundary Violation: workspaceId is required.');
     }
 
-    // Try Project 1 first (Operational Truth)
-    try {
-      const schedulingAdmin = dbClients.getSchedulingAdmin();
-      let query = schedulingAdmin
-        .from('import_sessions')
-        .select('*')
-        .eq('workspace_id', workspaceId)
-        .order('created_at', { ascending: false })
-        .limit(limit);
-
-      if (accountId) {
-        query = query.eq('account_id', accountId);
-      }
-
-      const { data, error } = await query;
-      if (!error && data && data.length > 0) {
-        return data as ImportSessionRecord[];
-      }
-    } catch {
-      // Fall back to Project 3 import_sessions
-    }
-
-    // Fallback to Project 3 import_sessions
-    const client = dbClients.getAnalytics();
-    let query = client
-      .from('import_sessions')
+    const analyticsClient = dbClients.getAnalytics();
+    let query = analyticsClient
+      .from('analytics_ingestion_runs')
       .select('*')
       .eq('workspace_id', workspaceId)
-      .order('created_at', { ascending: false })
+      .order('started_at', { ascending: false })
       .limit(limit);
 
-    if (accountId) {
-      query = query.eq('account_id', accountId);
+    if (connectionId) {
+      query = query.eq('connection_id', connectionId);
     }
 
     const { data, error } = await query;
-    if (error) return [];
+    if (error) {
+      console.warn('[AnalyticsDb] Failed to query ingestion runs:', error);
+      return [];
+    }
 
-    return (data as ImportSessionRecord[]) || [];
+    return (data as AnalyticsIngestionRun[]) || [];
   },
 
   /**
-   * Legacy recordImportSession wrapper.
+   * Checks whether the last N consecutive runs for (connection_id, channel) are failed.
    */
-  async recordImportSession(
-    workspaceId: string,
-    session: Omit<ImportSessionRecord, 'id' | 'created_at'>
-  ): Promise<ImportSessionRecord> {
-    return this.recordOperationalImportSession(workspaceId, {
-      account_id: session.account_id,
-      source_type: session.source_type,
-      source_label: session.source_label,
-      total_rows: session.total_rows,
-      valid_rows: session.valid_rows,
-      invalid_rows: session.invalid_rows,
-      imported_rows: session.imported_rows,
-      status: session.status || 'completed',
-      error_details: session.error_details,
-      created_by: session.created_by,
-    });
+  async checkConsecutiveFailures(
+    connectionId: string,
+    channel: 'account_analytics' | 'top_pins',
+    requiredCount = 2
+  ): Promise<boolean> {
+    if (!connectionId) return false;
+
+    const analyticsClient = dbClients.getAnalytics();
+    const { data, error } = await analyticsClient
+      .from('analytics_ingestion_runs')
+      .select('status')
+      .eq('connection_id', connectionId)
+      .eq('channel', channel)
+      .order('started_at', { ascending: false })
+      .limit(requiredCount);
+
+    if (error || !data || data.length < requiredCount) {
+      return false;
+    }
+
+    return data.every((r) => r.status === 'failed');
   },
 
   // ============================================================================
-  // Project 3 Pinner Analytics Persistence (V11/V12 Locked)
+  // Project 3 Ingestion Upserts (Strict Zero-Sum & Clean Upserts)
   // ============================================================================
 
   /**
-   * Batch upserts daily metrics for a Pinterest connection.
+   * Upserts daily account metrics (Project 3 account_analytics_daily).
    */
   async upsertAccountDailyMetrics(
     workspaceId: string,
-    connectionId: string,
-    records: Partial<AccountAnalyticsDaily>[]
+    accountId: string,
+    rows: AccountAnalyticsDaily[]
   ): Promise<number> {
-    if (!workspaceId || !connectionId) {
-      throw new Error('Tenant Boundary Violation: workspaceId and connectionId are required.');
+    if (!workspaceId || !accountId) {
+      throw new Error('Tenant Boundary Violation: workspaceId and accountId are required.');
     }
-    if (!records.length) return 0;
+    if (!rows || rows.length === 0) return 0;
 
-    const client = dbClients.getAnalytics();
-    const rowsToUpsert = records.map((r) => ({
+    const analyticsClient = dbClients.getAnalytics();
+    const payload = rows.map((r) => ({
       ...r,
       workspace_id: workspaceId,
-      connection_id: connectionId,
-      recorded_at: r.recorded_at || new Date().toISOString(),
+      account_id: accountId,
+      updated_at: new Date().toISOString(),
     }));
 
-    const { error } = await client.from('account_analytics_daily').upsert(rowsToUpsert, {
-      onConflict: 'workspace_id,connection_id,metric_date',
-    });
+    const { error } = await analyticsClient
+      .from('account_analytics_daily')
+      .upsert(payload, {
+        onConflict: 'account_id,metric_date',
+        ignoreDuplicates: false,
+      });
 
     if (error) throw error;
-    return rowsToUpsert.length;
+    return rows.length;
   },
 
   /**
-   * Upserts the account analytics summary row.
+   * Upserts precomputed account summary (Project 3 account_analytics_summaries).
    */
   async upsertAccountSummary(
     workspaceId: string,
-    connectionId: string,
-    summary: Partial<AccountAnalyticsSummary>
+    accountId: string,
+    summary: AccountAnalyticsSummary
   ): Promise<void> {
-    if (!workspaceId || !connectionId) {
-      throw new Error('Tenant Boundary Violation: workspaceId and connectionId are required.');
+    if (!workspaceId || !accountId) {
+      throw new Error('Tenant Boundary Violation: workspaceId and accountId are required.');
     }
 
-    const client = dbClients.getAnalytics();
-    const rowToUpsert = {
+    const analyticsClient = dbClients.getAnalytics();
+    const payload = {
       ...summary,
       workspace_id: workspaceId,
-      connection_id: connectionId,
-      recorded_at: summary.recorded_at || new Date().toISOString(),
+      account_id: accountId,
+      updated_at: new Date().toISOString(),
     };
 
-    const { error } = await client.from('account_analytics_summaries').upsert(rowToUpsert, {
-      onConflict: 'workspace_id,connection_id,window_start,window_end',
-    });
+    const { error } = await analyticsClient
+      .from('account_analytics_summaries')
+      .upsert(payload, {
+        onConflict: 'account_id,window_start,window_end',
+        ignoreDuplicates: false,
+      });
 
     if (error) throw error;
   },
 
   /**
-   * Batch upserts ranked top pins snapshots.
+   * Upserts ranked top pin snapshots (Project 3 top_pins_snapshots).
    */
   async upsertTopPinsSnapshots(
     workspaceId: string,
-    connectionId: string,
-    snapshots: Partial<TopPinSnapshot>[]
+    accountId: string,
+    pins: TopPinSnapshot[]
   ): Promise<number> {
-    if (!workspaceId || !connectionId) {
-      throw new Error('Tenant Boundary Violation: workspaceId and connectionId are required.');
+    if (!workspaceId || !accountId) {
+      throw new Error('Tenant Boundary Violation: workspaceId and accountId are required.');
     }
-    if (!snapshots.length) return 0;
+    if (!pins || pins.length === 0) return 0;
 
-    const client = dbClients.getAnalytics();
-    const rowsToUpsert = snapshots.map((s) => ({
-      ...s,
+    const analyticsClient = dbClients.getAnalytics();
+    const payload = pins.map((p) => ({
+      ...p,
       workspace_id: workspaceId,
-      connection_id: connectionId,
-      recorded_at: s.recorded_at || new Date().toISOString(),
+      account_id: accountId,
+      recorded_at: new Date().toISOString(),
     }));
 
-    const { error } = await client.from('top_pins_snapshots').upsert(rowsToUpsert, {
-      onConflict: 'workspace_id,connection_id,pin_id,window_start,window_end,sort_by',
-    });
+    const { error } = await analyticsClient
+      .from('top_pins_snapshots')
+      .upsert(payload, {
+        onConflict: 'account_id,pin_id,sort_by,window_end',
+        ignoreDuplicates: false,
+      });
 
     if (error) throw error;
-    return rowsToUpsert.length;
+    return pins.length;
   },
 
   /**
-   * Batch upserts derived tenant daily metrics.
+   * Upserts derived workspace rollups (Project 3 daily_workspace_metrics).
    */
   async upsertDailyWorkspaceMetrics(
     workspaceId: string,
-    metrics: Partial<DailyWorkspaceMetric>[]
+    metrics: DailyWorkspaceMetric[]
   ): Promise<number> {
     if (!workspaceId) {
       throw new Error('Tenant Boundary Violation: workspaceId is required.');
     }
-    if (!metrics.length) return 0;
+    if (!metrics || metrics.length === 0) return 0;
 
-    const client = dbClients.getAnalytics();
-    const rowsToUpsert = metrics.map((m) => ({
+    const analyticsClient = dbClients.getAnalytics();
+    const payload = metrics.map((m) => ({
       ...m,
       workspace_id: workspaceId,
-      recorded_at: m.recorded_at || new Date().toISOString(),
+      recorded_at: new Date().toISOString(),
     }));
 
-    const { error } = await client.from('daily_workspace_metrics').upsert(rowsToUpsert, {
-      onConflict: 'workspace_id,metric_date',
-    });
+    const { error } = await analyticsClient
+      .from('daily_workspace_metrics')
+      .upsert(payload, {
+        onConflict: 'workspace_id,metric_date',
+        ignoreDuplicates: false,
+      });
 
     if (error) throw error;
-    return rowsToUpsert.length;
+    return metrics.length;
   },
 
   /**
-   * Upserts URL performance records.
+   * Upserts URL performance metrics (Project 3 destination_url_performance).
    */
   async upsertUrlPerformance(
     workspaceId: string,
-    records: Array<{
+    urls: Array<{
+      account_id: string;
       destination_url: string;
-      period_date: string;
-      total_clicks?: number;
-      total_impressions?: number;
-      total_pins_active?: number;
+      window_days: number;
+      total_impressions: number;
+      total_outbound_clicks: number;
+      total_saves: number;
+      total_pins: number;
     }>
   ): Promise<number> {
-    if (!workspaceId || !records.length) return 0;
+    if (!workspaceId) {
+      throw new Error('Tenant Boundary Violation: workspaceId is required.');
+    }
+    if (!urls || urls.length === 0) return 0;
 
-    const client = dbClients.getAnalytics();
-    const rowsToUpsert = records.map((r) => ({
-      ...r,
+    const analyticsClient = dbClients.getAnalytics();
+    const payload = urls.map((u) => ({
+      ...u,
       workspace_id: workspaceId,
-      total_clicks: r.total_clicks ?? 0,
-      total_impressions: r.total_impressions ?? 0,
-      total_pins_active: r.total_pins_active ?? 1,
+      last_synced_at: new Date().toISOString(),
     }));
 
-    const { error } = await client.from('url_performance_history').upsert(rowsToUpsert, {
-      onConflict: 'workspace_id,destination_url,period_date',
-    });
+    const { error } = await analyticsClient
+      .from('destination_url_performance')
+      .upsert(payload, {
+        onConflict: 'account_id,destination_url,window_days',
+        ignoreDuplicates: false,
+      });
 
     if (error) throw error;
-    return rowsToUpsert.length;
+    return urls.length;
   },
 
   // ============================================================================
-  // Project 3 Query Operations (V11/V12 Locked)
+  // Project 3 Query Operations
   // ============================================================================
 
   /**
-   * Retrieves account daily metrics within a date range.
+   * Retrieves daily time-series metrics from Project 3.
    */
-  async getAccountDailyMetrics(
+  async getDailyTimeSeries(
     workspaceId: string,
-    connectionId: string,
-    startDate?: string,
-    endDate?: string
+    accountId: string,
+    windowDays: number
   ): Promise<AccountAnalyticsDaily[]> {
-    if (!workspaceId || !connectionId) {
-      throw new Error('Tenant Boundary Violation: workspaceId and connectionId are required.');
+    if (!workspaceId || !accountId) {
+      throw new Error('Tenant Boundary Violation: workspaceId and accountId are required.');
     }
 
-    const client = dbClients.getAnalytics();
-    let query = client
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - windowDays);
+    const startDateStr = startDate.toISOString().split('T')[0];
+
+    const analyticsClient = dbClients.getAnalytics();
+    const { data, error } = await analyticsClient
       .from('account_analytics_daily')
       .select('*')
       .eq('workspace_id', workspaceId)
-      .eq('connection_id', connectionId)
+      .eq('account_id', accountId)
+      .gte('metric_date', startDateStr)
       .order('metric_date', { ascending: true });
 
-    if (startDate) query = query.gte('metric_date', startDate);
-    if (endDate) query = query.lte('metric_date', endDate);
-
-    const { data, error } = await query;
     if (error) throw error;
     return (data as AccountAnalyticsDaily[]) || [];
   },
 
   /**
-   * Retrieves the latest account summary.
+   * Retrieves ranked top pins for an account from Project 3.
    */
-  async getAccountSummary(
+  async getRankedTopPins(
     workspaceId: string,
-    connectionId: string
-  ): Promise<AccountAnalyticsSummary | null> {
-    if (!workspaceId || !connectionId) {
-      throw new Error('Tenant Boundary Violation: workspaceId and connectionId are required.');
-    }
-
-    const client = dbClients.getAnalytics();
-    const { data, error } = await client
-      .from('account_analytics_summaries')
-      .select('*')
-      .eq('workspace_id', workspaceId)
-      .eq('connection_id', connectionId)
-      .order('window_end', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (error) throw error;
-    return data as AccountAnalyticsSummary | null;
-  },
-
-  /**
-   * Retrieves top pins snapshots for a given sort mode.
-   */
-  async getTopPinsSnapshots(
-    workspaceId: string,
-    connectionId: string,
-    sortBy: PinnerSortBy = 'IMPRESSION',
+    accountId: string,
+    sortBy: PinnerSortBy,
     limit = 50
   ): Promise<TopPinSnapshot[]> {
-    if (!workspaceId || !connectionId) {
-      throw new Error('Tenant Boundary Violation: workspaceId and connectionId are required.');
+    if (!workspaceId || !accountId) {
+      throw new Error('Tenant Boundary Violation: workspaceId and accountId are required.');
     }
 
-    const client = dbClients.getAnalytics();
-    const { data, error } = await client
+    const analyticsClient = dbClients.getAnalytics();
+    const { data, error } = await analyticsClient
       .from('top_pins_snapshots')
       .select('*')
       .eq('workspace_id', workspaceId)
-      .eq('connection_id', connectionId)
+      .eq('account_id', accountId)
       .eq('sort_by', sortBy)
       .order('rank_position', { ascending: true })
       .limit(limit);
@@ -435,47 +413,86 @@ export const analyticsDb = {
   },
 
   /**
-   * Retrieves tenant daily rollup metrics.
+   * Aggregates overview KPI metrics from Project 3 account_analytics_daily.
    */
-  async getWorkspaceDailyMetrics(
+  async getAccountOverviewMetrics(
+    workspaceId: string,
+    accountId: string,
+    windowDays: number
+  ): Promise<{
+    impressions: number;
+    engagements: number;
+    pinClicks: number;
+    outboundClicks: number;
+    saves: number;
+    engagementRate: number;
+    pinClickRate: number;
+    outboundClickRate: number;
+    saveRate: number;
+    lastIngestedAt: string | null;
+  }> {
+    const dailyRows = await this.getDailyTimeSeries(workspaceId, accountId, windowDays);
+
+    let impressions = 0;
+    let engagements = 0;
+    let pinClicks = 0;
+    let outboundClicks = 0;
+    let saves = 0;
+    let lastIngestedAt: string | null = null;
+
+    for (const row of dailyRows) {
+      impressions += Number(row.impressions || 0);
+      engagements += Number(row.engagements || 0);
+      pinClicks += Number(row.pin_clicks || 0);
+      outboundClicks += Number(row.outbound_clicks || 0);
+      saves += Number(row.saves || 0);
+      if (!lastIngestedAt || row.updated_at > lastIngestedAt) {
+        lastIngestedAt = row.updated_at;
+      }
+    }
+
+    const engagementRate = impressions > 0 ? engagements / impressions : 0.0;
+    const pinClickRate = impressions > 0 ? pinClicks / impressions : 0.0;
+    const outboundClickRate = impressions > 0 ? outboundClicks / impressions : 0.0;
+    const saveRate = impressions > 0 ? saves / impressions : 0.0;
+
+    return {
+      impressions,
+      engagements,
+      pinClicks,
+      outboundClicks,
+      saves,
+      engagementRate: Math.min(1.0, engagementRate),
+      pinClickRate: Math.min(1.0, pinClickRate),
+      outboundClickRate: Math.min(1.0, outboundClickRate),
+      saveRate: Math.min(1.0, saveRate),
+      lastIngestedAt,
+    };
+  },
+
+  /**
+   * Computes high-level aggregated summary across an entire workspace for a given date range.
+   */
+  async getMetricSummary(
     workspaceId: string,
     startDate?: string,
     endDate?: string
-  ): Promise<DailyWorkspaceMetric[]> {
+  ): Promise<MetricSummary> {
     if (!workspaceId) {
       throw new Error('Tenant Boundary Violation: workspaceId is required.');
     }
 
-    const client = dbClients.getAnalytics();
-    let query = client
+    const analyticsClient = dbClients.getAnalytics();
+    let query = analyticsClient
       .from('daily_workspace_metrics')
-      .select('*')
-      .eq('workspace_id', workspaceId)
-      .order('metric_date', { ascending: true });
+      .select('total_impressions, total_engagements, total_saves, total_pin_clicks')
+      .eq('workspace_id', workspaceId);
 
     if (startDate) query = query.gte('metric_date', startDate);
     if (endDate) query = query.lte('metric_date', endDate);
 
     const { data, error } = await query;
     if (error) throw error;
-    return (data as DailyWorkspaceMetric[]) || [];
-  },
-
-  /**
-   * Legacy getMetricsSummary calculation.
-   */
-  async getMetricsSummary(workspaceId: string): Promise<MetricSummary> {
-    if (!workspaceId) {
-      throw new Error('Tenant Boundary Violation: workspaceId is required.');
-    }
-
-    const client = dbClients.getAnalytics();
-    const { data } = await client
-      .from('daily_workspace_metrics')
-      .select('total_impressions, total_engagements, total_saves, total_pin_clicks')
-      .eq('workspace_id', workspaceId)
-      .order('metric_date', { ascending: false })
-      .limit(30);
 
     let total_impressions = 0;
     let total_engagements = 0;
@@ -505,7 +522,7 @@ export const analyticsDb = {
   },
 
   // ============================================================================
-  // Project 3 Dedicated Analytics Control Plane (V16 Final Locked)
+  // Project 3 Dedicated Analytics Control Plane (V17 Final Standalone)
   // ============================================================================
 
   /**
@@ -636,6 +653,7 @@ export const analyticsDb = {
 
   /**
    * Updates an existing analytics connection in Project 3.
+   * If analytics_enabled is set to true, automatically clears revoked_at.
    */
   async updateWorkspaceConnection(
     workspaceId: string,
@@ -651,8 +669,13 @@ export const analyticsDb = {
       ...updates,
       updated_at: new Date().toISOString(),
     };
+
     if (updates.display_name !== undefined) {
       updatePayload.display_name = updates.display_name.trim();
+    }
+
+    if (updates.analytics_enabled === true && updates.revoked_at === undefined) {
+      updatePayload.revoked_at = null;
     }
 
     const { data, error } = await analyticsClient

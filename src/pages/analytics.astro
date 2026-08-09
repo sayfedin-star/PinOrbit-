@@ -76,13 +76,13 @@ export const prerender = false;
         </div>
         <div>
           <div class="flex flex-wrap items-center gap-2">
-            <h3 class="text-xs font-bold text-foreground">Pinterest Analytics Control Plane</h3>
+            <h3 class="text-xs font-bold text-foreground">Pinterest Analytics Standalone Control Plane</h3>
             <span id="cache-status-badge" class="rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-semibold text-blue-600 dark:text-blue-400">
               Edge Cache: Direct
             </span>
           </div>
           <p id="sync-status-detail" class="text-[11px] text-muted-foreground mt-0.5">
-            Ingestion source: Pinterest API v5 (Dedicated Project 3 Control Plane)
+            Ingestion source: Pinterest API v5 (Dedicated Project 3 Standalone Log)
           </p>
         </div>
       </div>
@@ -263,6 +263,13 @@ export const prerender = false;
                 <span id="drawer-connection-status" class="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
                   Active
                 </span>
+                <button
+                  type="button"
+                  id="drawer-reenable-btn"
+                  class="hidden rounded-lg bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20"
+                >
+                  Re-enable
+                </button>
               </div>
               <p class="text-xs text-muted-foreground mt-0.5">Configure Make.com webhooks & FastCron schedules</p>
             </div>
@@ -329,6 +336,14 @@ export const prerender = false;
               >
                 ⚡ Sync Schedule to FastCron
               </button>
+
+              <!-- Last Runs Strip for Pipeline A -->
+              <div class="pt-2 border-t border-border/50">
+                <div class="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Last Runs</div>
+                <div id="pipeline-a-runs" class="space-y-1 text-[11px] text-muted-foreground">
+                  <div class="italic">No recent runs recorded.</div>
+                </div>
+              </div>
             </div>
 
             <!-- Pipeline B: Top Pins -->
@@ -385,6 +400,14 @@ export const prerender = false;
               >
                 ⚡ Sync Schedule to FastCron
               </button>
+
+              <!-- Last Runs Strip for Pipeline B -->
+              <div class="pt-2 border-t border-border/50">
+                <div class="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Last Runs</div>
+                <div id="pipeline-b-runs" class="space-y-1 text-[11px] text-muted-foreground">
+                  <div class="italic">No recent runs recorded.</div>
+                </div>
+              </div>
             </div>
 
             <!-- Status message container -->
@@ -611,9 +634,15 @@ export const prerender = false;
         } else {
           tbody.innerHTML = connections
             .map((conn) => {
-              const statusBadge = conn.analytics_enabled
-                ? '<span class="inline-flex rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">Active</span>'
-                : '<span class="inline-flex rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">Disabled</span>';
+              let statusBadge = '<span class="inline-flex rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">Active</span>';
+              let extraActionBtn = '';
+
+              if (conn.revoked_at) {
+                statusBadge = '<span class="inline-flex rounded-full bg-rose-500/10 px-2 py-0.5 text-[10px] font-bold text-rose-600 dark:text-rose-400">Revoked</span>';
+                extraActionBtn = `<button data-action="reenable-conn" data-id="${conn.id}" class="rounded-lg border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 px-2 py-1 text-[11px] font-bold hover:bg-emerald-500/10">Re-enable</button>`;
+              } else if (!conn.analytics_enabled) {
+                statusBadge = '<span class="inline-flex rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">Disabled</span>';
+              }
 
               const lastSync = conn.last_analytics_sync_at
                 ? new Date(conn.last_analytics_sync_at).toLocaleString()
@@ -626,6 +655,7 @@ export const prerender = false;
                   <td class="py-3 px-4 text-muted-foreground">${lastSync}</td>
                   <td class="py-3 px-4 text-right">
                     <div class="inline-flex items-center gap-2">
+                      ${extraActionBtn}
                       <button data-action="settings-conn" data-id="${conn.id}" class="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-[11px] font-semibold hover:bg-muted">
                         ⚙ Settings
                       </button>
@@ -673,14 +703,18 @@ export const prerender = false;
     }
   }
 
-  // Load Per-Connection Pipeline Settings into Drawer
+  // Load Per-Connection Pipeline Settings & Runs into Drawer
   async function openConnectionSettingsDrawer(connId) {
     const drawer = document.getElementById('settings-drawer');
     if (!drawer) return;
 
     try {
-      const res = await fetch(`/api/analytics/connections/${connId}/settings`);
-      const json = await res.json();
+      const [settingsRes, runsRes] = await Promise.all([
+        fetch(`/api/analytics/connections/${connId}/settings`),
+        fetch(`/api/analytics/runs?connection_id=${connId}&limit=10`),
+      ]);
+
+      const json = await settingsRes.json();
       if (!json.success || !json.data) {
         alert('Failed to load connection settings: ' + (json.error || 'Unknown error'));
         return;
@@ -689,6 +723,20 @@ export const prerender = false;
       const d = json.data;
       document.getElementById('drawer-connection-id').value = d.id;
       document.getElementById('drawer-connection-name').textContent = `${d.display_name} Settings`;
+
+      const statusEl = document.getElementById('drawer-connection-status');
+      const reenableBtn = document.getElementById('drawer-reenable-btn');
+      if (statusEl) {
+        if (d.revoked_at) {
+          statusEl.className = 'rounded-full bg-rose-500/10 px-2 py-0.5 text-[10px] font-bold text-rose-600 dark:text-rose-400';
+          statusEl.textContent = 'Revoked';
+          if (reenableBtn) reenableBtn.classList.remove('hidden');
+        } else {
+          statusEl.className = 'rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400';
+          statusEl.textContent = 'Active';
+          if (reenableBtn) reenableBtn.classList.add('hidden');
+        }
+      }
 
       const setVal = (id, val) => {
         const el = document.getElementById(id);
@@ -730,6 +778,36 @@ export const prerender = false;
       document.getElementById('ping-top-pins-btn').disabled = !hasUrlB;
       document.getElementById('run-top-pins-btn').disabled = !hasUrlB;
       document.getElementById('sync-fastcron-b-btn').disabled = !hasUrlB;
+
+      // Populate Last Runs strips
+      const runsJson = await runsRes.json().catch(() => ({ data: [] }));
+      const allRuns = runsJson.data || [];
+      const pipelineARuns = allRuns.filter(r => r.channel === 'account_analytics').slice(0, 3);
+      const pipelineBRuns = allRuns.filter(r => r.channel === 'top_pins').slice(0, 3);
+
+      const renderRunsStrip = (containerId, runs) => {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        if (runs.length === 0) {
+          container.innerHTML = '<div class="italic text-muted-foreground">No recent runs recorded.</div>';
+          return;
+        }
+        container.innerHTML = runs.map(r => {
+          const isOk = r.status === 'completed';
+          const icon = isOk ? '✅' : r.status === 'processing' ? '⏳' : '❌';
+          const timeStr = new Date(r.started_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const detail = isOk ? `${r.rows_processed} rows` : (r.error_details?.message || r.error_details?.error_code || 'failed');
+          return `
+            <div class="flex items-center justify-between py-0.5">
+              <span>${icon} <span class="font-semibold text-foreground">${r.status}</span> <span class="text-muted-foreground">(${timeStr})</span></span>
+              <span class="text-muted-foreground truncate max-w-[150px]">${detail}</span>
+            </div>
+          `;
+        }).join('');
+      };
+
+      renderRunsStrip('pipeline-a-runs', pipelineARuns);
+      renderRunsStrip('pipeline-b-runs', pipelineBRuns);
 
       document.getElementById('conn-settings-status-msg').classList.add('hidden');
       drawer.classList.remove('hidden');
@@ -957,6 +1035,31 @@ export const prerender = false;
 
     if (closeDrawerBtn) closeDrawerBtn.addEventListener('click', () => toggleDrawer(false));
     if (drawerBackdrop) drawerBackdrop.addEventListener('click', () => toggleDrawer(false));
+
+    // Re-enable Revoked Connection Handler (Drawer)
+    const drawerReenableBtn = document.getElementById('drawer-reenable-btn');
+    if (drawerReenableBtn) {
+      drawerReenableBtn.addEventListener('click', async () => {
+        const connId = document.getElementById('drawer-connection-id').value;
+        try {
+          const res = await fetch(`/api/analytics/connections/${connId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ analytics_enabled: true }),
+          });
+          const json = await res.json();
+          if (json.success) {
+            alert('Connection re-enabled successfully.');
+            await loadConnections();
+            await openConnectionSettingsDrawer(connId);
+          } else {
+            alert('Failed to re-enable: ' + json.error);
+          }
+        } catch (e) {
+          alert('Error: ' + e.message);
+        }
+      });
+    }
 
     // FastCron Schedule Sync Buttons in Drawer
     const setupFastCronSyncBtn = (btnId, channel) => {
@@ -1207,10 +1310,10 @@ export const prerender = false;
       });
     }
 
-    // Connection Table Action Delegation (Settings, Edit, Delete)
+    // Connection Table Action Delegation (Settings, Edit, Delete, Re-enable)
     const connTbody = document.getElementById('connections-tbody');
     if (connTbody) {
-      connTbody.addEventListener('click', (e) => {
+      connTbody.addEventListener('click', async (e) => {
         const btn = e.target.closest('button');
         if (!btn) return;
         const action = btn.getAttribute('data-action');
@@ -1221,6 +1324,23 @@ export const prerender = false;
           openConnectionSettingsDrawer(id);
         } else if (action === 'edit-conn' && conn) {
           toggleConnModal(true, true, conn);
+        } else if (action === 'reenable-conn' && id) {
+          try {
+            const res = await fetch(`/api/analytics/connections/${id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ analytics_enabled: true }),
+            });
+            const json = await res.json();
+            if (json.success) {
+              await loadConnections();
+              await loadAnalyticsData();
+            } else {
+              alert('Failed to re-enable: ' + json.error);
+            }
+          } catch (err) {
+            alert('Error: ' + err.message);
+          }
         } else if (action === 'delete-conn') {
           const delModal = document.getElementById('delete-connection-modal');
           document.getElementById('delete-conn-id').value = id;

@@ -382,18 +382,6 @@ export const fastcronService = {
         signal: AbortSignal.timeout(8000),
       });
 
-      // Record manual session in Project 1 operational log
-      await analyticsDb.recordOperationalImportSession(workspaceId, {
-        account_id: connectionId,
-        source_type: isAnalytics ? 'manual_analytics' : 'manual_top_pins',
-        source_label: 'manual_sync',
-        total_rows: 0,
-        valid_rows: 0,
-        invalid_rows: 0,
-        imported_rows: 0,
-        status: 'pending',
-      });
-
       return {
         success: res.ok,
         connection_id: connectionId,

@@ -519,6 +519,7 @@ export interface AnalyticsConnection {
   display_name: string;
   analytics_enabled: boolean;
   deleted_at?: string | null;
+  revoked_at?: string | null;
   last_analytics_sync_at?: string | null;
 
   // Pipeline A: /v5/user_account/analytics
@@ -539,9 +540,30 @@ export interface AnalyticsConnection {
   updated_at: string;
 }
 
+export interface AnalyticsIngestionRun {
+  id: string;
+  workspace_id: string;
+  connection_id: string;
+  channel: 'account_analytics' | 'top_pins';
+  job_type: 'daily_sync' | 'manual_sync' | 'backfill' | 'ping';
+  status: 'processing' | 'completed' | 'failed';
+  request_context?: Record<string, any> | null;
+  rows_processed: number;
+  error_details?: Record<string, any> | null;
+  started_at: string;
+  completed_at?: string | null;
+}
+
+export interface AnalyticsRunsResponse {
+  success: boolean;
+  data: AnalyticsIngestionRun[];
+  error?: string;
+}
+
 export interface AnalyticsConnectionSettingsResponse {
   id: string;
   display_name: string;
+  revoked_at?: string | null;
   analytics_webhook_url: string | null;
   analytics_sync_time: string;
   analytics_cron_expression: string;
