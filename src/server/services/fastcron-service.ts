@@ -240,12 +240,29 @@ export const fastcronService = {
       };
     }
 
-    // Prepare FastCron job parameters
-    const postData = JSON.stringify({
-      job_type: 'daily_sync',
-      channel: isAnalytics ? 'account_analytics' : 'top_pins',
-      connection_id: connectionId,
-    });
+    // Prepare FastCron job parameters with per-pipeline offsets (V20.1)
+    const startOffset = isAnalytics
+      ? (connection.analytics_start_offset_days ?? 7)
+      : (connection.top_pins_start_offset_days ?? 7);
+    const endOffset = isAnalytics
+      ? (connection.analytics_end_offset_days ?? 1)
+      : (connection.top_pins_end_offset_days ?? 2);
+
+    const postData = isAnalytics
+      ? JSON.stringify({
+          job_type: 'daily_sync',
+          channel: 'account_analytics',
+          connection_id: connectionId,
+          analytics_start_offset_days: startOffset,
+          analytics_end_offset_days: endOffset,
+        })
+      : JSON.stringify({
+          job_type: 'daily_sync',
+          channel: 'top_pins',
+          connection_id: connectionId,
+          top_pins_start_offset_days: startOffset,
+          top_pins_end_offset_days: endOffset,
+        });
 
     const isEdit = Boolean(existingJobId);
     const bothMissing =
@@ -286,8 +303,20 @@ export const fastcronService = {
           http_method: 'POST',
           httpHeaders: 'Content-Type: application/json',
           http_headers: 'Content-Type: application/json',
-          postData: JSON.stringify({ job_type: 'daily_sync', channel: 'account_analytics', connection_id: connectionId }),
-          post_data: JSON.stringify({ job_type: 'daily_sync', channel: 'account_analytics', connection_id: connectionId }),
+          postData: JSON.stringify({
+            job_type: 'daily_sync',
+            channel: 'account_analytics',
+            connection_id: connectionId,
+            analytics_start_offset_days: connection.analytics_start_offset_days ?? 7,
+            analytics_end_offset_days: connection.analytics_end_offset_days ?? 1,
+          }),
+          post_data: JSON.stringify({
+            job_type: 'daily_sync',
+            channel: 'account_analytics',
+            connection_id: connectionId,
+            analytics_start_offset_days: connection.analytics_start_offset_days ?? 7,
+            analytics_end_offset_days: connection.analytics_end_offset_days ?? 1,
+          }),
           instances: 1,
           notify: true,
         },
@@ -300,8 +329,20 @@ export const fastcronService = {
           http_method: 'POST',
           httpHeaders: 'Content-Type: application/json',
           http_headers: 'Content-Type: application/json',
-          postData: JSON.stringify({ job_type: 'daily_sync', channel: 'top_pins', connection_id: connectionId }),
-          post_data: JSON.stringify({ job_type: 'daily_sync', channel: 'top_pins', connection_id: connectionId }),
+          postData: JSON.stringify({
+            job_type: 'daily_sync',
+            channel: 'top_pins',
+            connection_id: connectionId,
+            top_pins_start_offset_days: connection.top_pins_start_offset_days ?? 7,
+            top_pins_end_offset_days: connection.top_pins_end_offset_days ?? 2,
+          }),
+          post_data: JSON.stringify({
+            job_type: 'daily_sync',
+            channel: 'top_pins',
+            connection_id: connectionId,
+            top_pins_start_offset_days: connection.top_pins_start_offset_days ?? 7,
+            top_pins_end_offset_days: connection.top_pins_end_offset_days ?? 2,
+          }),
           instances: 1,
           notify: true,
         },
@@ -420,7 +461,8 @@ export const fastcronService = {
     connectionId: string,
     channel: 'analytics' | 'top_pins',
     mode: 'ping' | 'sync',
-    runtimeEnv: Record<string, any>
+    runtimeEnv: Record<string, any>,
+    overrides?: { from_date?: string; to_date?: string; start_date?: string; end_date?: string }
   ): Promise<TriggerSyncResponse> {
     const connection = await analyticsDb.getWorkspaceConnection(workspaceId, connectionId);
     if (!connection) {
@@ -482,12 +524,39 @@ export const fastcronService = {
       }
     }
 
-    // Concrete 7-day rolling window for manual sync
-    const now = new Date();
-    const endDateObj = new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000); // yesterday
-    const startDateObj = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); // 7 days ago
-    const startDate = startDateObj.toISOString().split('T')[0];
-    const endDate = endDateObj.toISOString().split('T')[0];
+    // Per-pipeline date offsets and manual override resolution (V20.1)
+    const startOffset = isAnalytics
+      ? (connection.analytics_start_offset_days ?? 7)
+      : (connection.top_pins_start_offset_days ?? 7);
+    const endOffset = isAnalytics
+      ? (connection.analytics_end_offset_days ?? 1)
+      : (connection.top_pins_end_offset_days ?? 2);
+
+    const fromOverride = overrides?.from_date || overrides?.start_date;
+    const toOverride = overrides?.to_date || overrides?.end_date;
+
+    let startDate: string;
+    let endDate: string;
+
+    if (fromOverride && toOverride) {
+      if (fromOverride >= toOverride) {
+        return {
+          success: false,
+          connection_id: connectionId,
+          channel,
+          mode: 'sync',
+          error: 'Manual run override Start Date must be strictly before End Date.',
+        };
+      }
+      startDate = fromOverride;
+      endDate = toOverride;
+    } else {
+      const now = new Date();
+      const startDateObj = new Date(now.getTime() - startOffset * 24 * 60 * 60 * 1000);
+      const endDateObj = new Date(now.getTime() - endOffset * 24 * 60 * 60 * 1000);
+      startDate = startDateObj.toISOString().split('T')[0];
+      endDate = endDateObj.toISOString().split('T')[0];
+    }
 
     const jobId = isAnalytics
       ? connection.analytics_fastcron_job_id
@@ -496,16 +565,30 @@ export const fastcronService = {
     const settings = await analyticsDb.getWorkspaceAnalyticsSettings(workspaceId);
     const token = this.resolveFastCronToken(settings?.fastcron_token, runtimeEnv);
 
+    const payloadObj = isAnalytics
+      ? {
+          job_type: 'manual_sync',
+          channel: 'account_analytics',
+          connection_id: connectionId,
+          start_date: startDate,
+          end_date: endDate,
+          analytics_start_offset_days: startOffset,
+          analytics_end_offset_days: endOffset,
+        }
+      : {
+          job_type: 'manual_sync',
+          channel: 'top_pins',
+          connection_id: connectionId,
+          start_date: startDate,
+          end_date: endDate,
+          top_pins_start_offset_days: startOffset,
+          top_pins_end_offset_days: endOffset,
+          sort_modes: SORT_MODES,
+        };
+
     // If Job ID and Token exist -> Dispatches cron_run
     if (jobId && token) {
-      const payload = JSON.stringify({
-        job_type: 'manual_sync',
-        channel: isAnalytics ? 'account_analytics' : 'top_pins',
-        connection_id: connectionId,
-        start_date: startDate,
-        end_date: endDate,
-        ...(channel === 'top_pins' && { sort_modes: SORT_MODES }),
-      });
+      const payload = JSON.stringify(payloadObj);
 
       const cronRunRes = await this.fastcronCall(
         'cron_run',
@@ -537,28 +620,11 @@ export const fastcronService = {
     }
 
     // Legacy Fallback: Direct POST to channel webhook
-    const directPayload = isAnalytics
-      ? {
-          connection_id: connectionId,
-          start_date: startDate,
-          end_date: endDate,
-          job_type: 'manual_sync',
-          channel: 'account_analytics',
-        }
-      : {
-          connection_id: connectionId,
-          start_date: startDate,
-          end_date: endDate,
-          sort_modes: SORT_MODES,
-          job_type: 'manual_sync',
-          channel: 'top_pins',
-        };
-
     try {
       const res = await fetch(webhookUrl!, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(directPayload),
+        body: JSON.stringify(payloadObj),
         signal: AbortSignal.timeout(8000),
       });
 

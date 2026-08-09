@@ -528,6 +528,8 @@ export interface AnalyticsConnection {
   analytics_cron_expression: string;
   analytics_fastcron_job_id?: number | null;
   analytics_schedule_status: 'synced' | 'pending' | 'error';
+  analytics_start_offset_days?: number;
+  analytics_end_offset_days?: number;
 
   // Pipeline B: /v5/user_account/analytics/top_pins
   top_pins_webhook_url?: string | null;
@@ -535,6 +537,8 @@ export interface AnalyticsConnection {
   top_pins_cron_expression: string;
   top_pins_fastcron_job_id?: number | null;
   top_pins_schedule_status: 'synced' | 'pending' | 'error';
+  top_pins_start_offset_days?: number;
+  top_pins_end_offset_days?: number;
 
   created_at: string;
   updated_at: string;
@@ -568,10 +572,14 @@ export interface AnalyticsConnectionSettingsResponse {
   analytics_sync_time: string;
   analytics_cron_expression: string;
   analytics_schedule_status: 'synced' | 'pending' | 'error';
+  analytics_start_offset_days?: number;
+  analytics_end_offset_days?: number;
   top_pins_webhook_url: string | null;
   top_pins_sync_time: string;
   top_pins_cron_expression: string;
   top_pins_schedule_status: 'synced' | 'pending' | 'error';
+  top_pins_start_offset_days?: number;
+  top_pins_end_offset_days?: number;
 }
 
 export type PinnerConnection = AnalyticsConnection;

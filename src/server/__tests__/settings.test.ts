@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { GET as getSettingsHandler, POST as postSettingsHandler } from '../../pages/api/analytics/settings';
-import { POST as postConnSettingsHandler } from '../../pages/api/analytics/connections/[id]/settings';
+import { GET as getConnSettingsHandler, POST as postConnSettingsHandler } from '../../pages/api/analytics/connections/[id]/settings';
 import { fastcronService } from '../services/fastcron-service';
 import { analyticsDb } from '../db/analytics';
 
@@ -29,7 +29,7 @@ vi.mock('../auth/workspace-guard', () => ({
   }),
 }));
 
-describe('Pinner Analytics Settings & Security Suite (V16)', () => {
+describe('Pinner Analytics Settings & Security Suite (V20.1 Per-Pipeline Date Offsets)', () => {
   const workspaceId = '00000000-0000-0000-0000-000000000001';
   const connectionId = 'a1b2c3d4-e5f6-7890-1234-56789abcdef0';
 
@@ -79,7 +79,65 @@ describe('Pinner Analytics Settings & Security Suite (V16)', () => {
     expect(JSON.stringify(json)).not.toContain('secret_raw_token_super_confidential_123');
   });
 
-  it('per-connection settings update resets channel schedule status to pending when URL or time changes', async () => {
+  it('V20.1: validates per-pipeline date offset bounds and ordering with 422 errors', async () => {
+    (analyticsDb.getWorkspaceConnection as any).mockResolvedValue({
+      id: connectionId,
+      workspace_id: workspaceId,
+      display_name: 'hymumdotcom',
+      analytics_start_offset_days: 7,
+      analytics_end_offset_days: 1,
+      top_pins_start_offset_days: 7,
+      top_pins_end_offset_days: 2,
+    });
+
+    const locals = { user: { id: 'u1' }, supabase: {}, activeWorkspaceId: workspaceId };
+
+    // 1. Violation: Pipeline A end offset >= start offset
+    const res1 = await postConnSettingsHandler({
+      params: { id: connectionId },
+      request: new Request('http://localhost', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          analytics_start_offset_days: 5,
+          analytics_end_offset_days: 5, // equal -> invalid
+        }),
+      }),
+      locals,
+    } as any);
+    expect(res1.status).toBe(422);
+
+    // 2. Violation: Pipeline A start offset > 90
+    const res2 = await postConnSettingsHandler({
+      params: { id: connectionId },
+      request: new Request('http://localhost', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          analytics_start_offset_days: 95,
+        }),
+      }),
+      locals,
+    } as any);
+    expect(res2.status).toBe(422);
+
+    // 3. Violation: Pipeline B end offset >= start offset
+    const res3 = await postConnSettingsHandler({
+      params: { id: connectionId },
+      request: new Request('http://localhost', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          top_pins_start_offset_days: 3,
+          top_pins_end_offset_days: 4, // greater -> invalid
+        }),
+      }),
+      locals,
+    } as any);
+    expect(res3.status).toBe(422);
+  });
+
+  it('V20.1: per-connection settings update resets ONLY the modified pipeline status to pending', async () => {
     (analyticsDb.getWorkspaceConnection as any).mockResolvedValue({
       id: connectionId,
       workspace_id: workspaceId,
@@ -87,23 +145,30 @@ describe('Pinner Analytics Settings & Security Suite (V16)', () => {
       analytics_webhook_url: 'https://hook.make.com/old',
       analytics_sync_time: '04:00',
       analytics_schedule_status: 'synced',
+      analytics_start_offset_days: 7,
+      analytics_end_offset_days: 1,
+      top_pins_webhook_url: 'https://hook.make.com/toppins',
+      top_pins_sync_time: '04:30',
+      top_pins_schedule_status: 'synced',
+      top_pins_start_offset_days: 7,
+      top_pins_end_offset_days: 2,
     });
 
     (analyticsDb.updateWorkspaceConnection as any).mockResolvedValue({
       id: connectionId,
       display_name: 'hymumdotcom',
-      analytics_webhook_url: 'https://hook.make.com/new',
-      analytics_sync_time: '05:00',
-      analytics_cron_expression: '0 5 * * *',
       analytics_schedule_status: 'pending',
+      top_pins_schedule_status: 'synced',
+      analytics_start_offset_days: 14,
+      analytics_end_offset_days: 2,
     });
 
     const req = new Request(`http://localhost/api/analytics/connections/${connectionId}/settings`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        analytics_webhook_url: 'https://hook.make.com/new',
-        analytics_sync_time: '05:00',
+        analytics_start_offset_days: 14,
+        analytics_end_offset_days: 2,
       }),
     });
 
@@ -119,9 +184,13 @@ describe('Pinner Analytics Settings & Security Suite (V16)', () => {
       workspaceId,
       connectionId,
       expect.objectContaining({
-        analytics_webhook_url: 'https://hook.make.com/new',
+        analytics_start_offset_days: 14,
+        analytics_end_offset_days: 2,
         analytics_schedule_status: 'pending',
       })
     );
+    // Verify top_pins_schedule_status was NOT reset to pending
+    const callArgs = (analyticsDb.updateWorkspaceConnection as any).mock.calls[0][2];
+    expect(callArgs.top_pins_schedule_status).toBeUndefined();
   });
 });

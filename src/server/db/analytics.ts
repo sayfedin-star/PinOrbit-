@@ -195,11 +195,11 @@ export const analyticsDb = {
    */
   async upsertAccountDailyMetrics(
     workspaceId: string,
-    accountId: string,
+    connectionId: string,
     rows: AccountAnalyticsDaily[]
   ): Promise<number> {
-    if (!workspaceId || !accountId) {
-      throw new Error('Tenant Boundary Violation: workspaceId and accountId are required.');
+    if (!workspaceId || !connectionId) {
+      throw new Error('Tenant Boundary Violation: workspaceId and connectionId are required.');
     }
     if (!rows || rows.length === 0) return 0;
 
@@ -207,14 +207,14 @@ export const analyticsDb = {
     const payload = rows.map((r) => ({
       ...r,
       workspace_id: workspaceId,
-      account_id: accountId,
-      updated_at: new Date().toISOString(),
+      connection_id: connectionId,
+      recorded_at: new Date().toISOString(),
     }));
 
     const { error } = await analyticsClient
       .from('account_analytics_daily')
       .upsert(payload, {
-        onConflict: 'account_id,metric_date',
+        onConflict: 'workspace_id,connection_id,metric_date',
         ignoreDuplicates: false,
       });
 
@@ -227,25 +227,25 @@ export const analyticsDb = {
    */
   async upsertAccountSummary(
     workspaceId: string,
-    accountId: string,
+    connectionId: string,
     summary: AccountAnalyticsSummary
   ): Promise<void> {
-    if (!workspaceId || !accountId) {
-      throw new Error('Tenant Boundary Violation: workspaceId and accountId are required.');
+    if (!workspaceId || !connectionId) {
+      throw new Error('Tenant Boundary Violation: workspaceId and connectionId are required.');
     }
 
     const analyticsClient = dbClients.getAnalytics();
     const payload = {
       ...summary,
       workspace_id: workspaceId,
-      account_id: accountId,
-      updated_at: new Date().toISOString(),
+      connection_id: connectionId,
+      recorded_at: new Date().toISOString(),
     };
 
     const { error } = await analyticsClient
       .from('account_analytics_summaries')
       .upsert(payload, {
-        onConflict: 'account_id,window_start,window_end',
+        onConflict: 'workspace_id,connection_id,window_start,window_end',
         ignoreDuplicates: false,
       });
 
@@ -257,11 +257,11 @@ export const analyticsDb = {
    */
   async upsertTopPinsSnapshots(
     workspaceId: string,
-    accountId: string,
+    connectionId: string,
     pins: TopPinSnapshot[]
   ): Promise<number> {
-    if (!workspaceId || !accountId) {
-      throw new Error('Tenant Boundary Violation: workspaceId and accountId are required.');
+    if (!workspaceId || !connectionId) {
+      throw new Error('Tenant Boundary Violation: workspaceId and connectionId are required.');
     }
     if (!pins || pins.length === 0) return 0;
 
@@ -269,14 +269,14 @@ export const analyticsDb = {
     const payload = pins.map((p) => ({
       ...p,
       workspace_id: workspaceId,
-      account_id: accountId,
+      connection_id: connectionId,
       recorded_at: new Date().toISOString(),
     }));
 
     const { error } = await analyticsClient
       .from('top_pins_snapshots')
       .upsert(payload, {
-        onConflict: 'account_id,pin_id,sort_by,window_end',
+        onConflict: 'workspace_id,connection_id,pin_id,window_start,window_end,sort_by',
         ignoreDuplicates: false,
       });
 
@@ -315,18 +315,16 @@ export const analyticsDb = {
   },
 
   /**
-   * Upserts URL performance metrics (Project 3 destination_url_performance).
+   * Upserts URL performance metrics (Project 3 url_performance_history).
    */
   async upsertUrlPerformance(
     workspaceId: string,
     urls: Array<{
-      account_id: string;
       destination_url: string;
-      window_days: number;
+      period_date: string;
       total_impressions: number;
-      total_outbound_clicks: number;
-      total_saves: number;
-      total_pins: number;
+      total_clicks: number;
+      total_pins_active: number;
     }>
   ): Promise<number> {
     if (!workspaceId) {
@@ -338,13 +336,13 @@ export const analyticsDb = {
     const payload = urls.map((u) => ({
       ...u,
       workspace_id: workspaceId,
-      last_synced_at: new Date().toISOString(),
+      created_at: new Date().toISOString(),
     }));
 
     const { error } = await analyticsClient
-      .from('destination_url_performance')
+      .from('url_performance_history')
       .upsert(payload, {
-        onConflict: 'account_id,destination_url,window_days',
+        onConflict: 'workspace_id,destination_url,period_date',
         ignoreDuplicates: false,
       });
 
@@ -361,11 +359,11 @@ export const analyticsDb = {
    */
   async getDailyTimeSeries(
     workspaceId: string,
-    accountId: string,
+    connectionId: string,
     windowDays: number
   ): Promise<AccountAnalyticsDaily[]> {
-    if (!workspaceId || !accountId) {
-      throw new Error('Tenant Boundary Violation: workspaceId and accountId are required.');
+    if (!workspaceId || !connectionId) {
+      throw new Error('Tenant Boundary Violation: workspaceId and connectionId are required.');
     }
 
     const startDate = new Date();
@@ -377,7 +375,7 @@ export const analyticsDb = {
       .from('account_analytics_daily')
       .select('*')
       .eq('workspace_id', workspaceId)
-      .eq('account_id', accountId)
+      .eq('connection_id', connectionId)
       .gte('metric_date', startDateStr)
       .order('metric_date', { ascending: true });
 
@@ -390,12 +388,12 @@ export const analyticsDb = {
    */
   async getRankedTopPins(
     workspaceId: string,
-    accountId: string,
+    connectionId: string,
     sortBy: PinnerSortBy,
     limit = 50
   ): Promise<TopPinSnapshot[]> {
-    if (!workspaceId || !accountId) {
-      throw new Error('Tenant Boundary Violation: workspaceId and accountId are required.');
+    if (!workspaceId || !connectionId) {
+      throw new Error('Tenant Boundary Violation: workspaceId and connectionId are required.');
     }
 
     const analyticsClient = dbClients.getAnalytics();
@@ -403,7 +401,7 @@ export const analyticsDb = {
       .from('top_pins_snapshots')
       .select('*')
       .eq('workspace_id', workspaceId)
-      .eq('account_id', accountId)
+      .eq('connection_id', connectionId)
       .eq('sort_by', sortBy)
       .order('rank_position', { ascending: true })
       .limit(limit);
@@ -417,7 +415,7 @@ export const analyticsDb = {
    */
   async getAccountOverviewMetrics(
     workspaceId: string,
-    accountId: string,
+    connectionId: string,
     windowDays: number
   ): Promise<{
     impressions: number;
@@ -431,7 +429,7 @@ export const analyticsDb = {
     saveRate: number;
     lastIngestedAt: string | null;
   }> {
-    const dailyRows = await this.getDailyTimeSeries(workspaceId, accountId, windowDays);
+    const dailyRows = await this.getDailyTimeSeries(workspaceId, connectionId, windowDays);
 
     let impressions = 0;
     let engagements = 0;

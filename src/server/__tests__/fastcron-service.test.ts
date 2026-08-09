@@ -11,7 +11,7 @@ vi.mock('../db/analytics', () => ({
   },
 }));
 
-describe('FastCron Full Service Suite (V19 Strict Directive A1, B6 & Hotfix 3 POST Mandatory)', () => {
+describe('FastCron Full Service Suite (V20.1 Strict Directive A1, B6, Hotfix 3 POST Mandatory & Date Offsets)', () => {
   const workspaceId = '00000000-0000-0000-0000-000000000001';
   const connectionId = 'conn-uuid-12345';
   const mockRuntimeEnv = { FASTCRON_API_TOKEN: 'valid_env_fastcron_token_12345' };
@@ -84,7 +84,7 @@ describe('FastCron Full Service Suite (V19 Strict Directive A1, B6 & Hotfix 3 PO
     fetchSpy.mockRestore();
   });
 
-  it('F1, F2, F4: syncScheduleWithFastCron asserts httpMethod === "POST" in outgoing payloads for cron_add, cron_batch_add, and cron_edit', async () => {
+  it('F1, F2, F4, V20.1: syncScheduleWithFastCron asserts httpMethod === "POST" and carries per-pipeline offsets in postData', async () => {
     let capturedCalls: Array<{ url: string; body: any }> = [];
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((async (url: string, init?: any) => {
       capturedCalls.push({
@@ -110,6 +110,8 @@ describe('FastCron Full Service Suite (V19 Strict Directive A1, B6 & Hotfix 3 PO
       analytics_webhook_url: 'https://hook.make.com/analytics',
       top_pins_webhook_url: null,
       analytics_sync_time: '04:00',
+      analytics_start_offset_days: 14,
+      analytics_end_offset_days: 3,
       analytics_fastcron_job_id: null,
       top_pins_fastcron_job_id: null,
     });
@@ -128,6 +130,10 @@ describe('FastCron Full Service Suite (V19 Strict Directive A1, B6 & Hotfix 3 PO
     expect(addCall.body.httpHeaders).toBe('Content-Type: application/json');
     expect(addCall.body.postData).toBeDefined();
 
+    const addPostData = JSON.parse(addCall.body.postData);
+    expect(addPostData.analytics_start_offset_days).toBe(14);
+    expect(addPostData.analytics_end_offset_days).toBe(3);
+
     // 2. cron_batch_add (both missing and both webhooks configured)
     (analyticsDb.getWorkspaceConnection as any).mockResolvedValue({
       id: connectionId,
@@ -137,6 +143,10 @@ describe('FastCron Full Service Suite (V19 Strict Directive A1, B6 & Hotfix 3 PO
       top_pins_webhook_url: 'https://hook.make.com/toppins',
       analytics_sync_time: '04:00',
       top_pins_sync_time: '04:30',
+      analytics_start_offset_days: 7,
+      analytics_end_offset_days: 1,
+      top_pins_start_offset_days: 10,
+      top_pins_end_offset_days: 2,
       analytics_fastcron_job_id: null,
       top_pins_fastcron_job_id: null,
     });
@@ -154,19 +164,31 @@ describe('FastCron Full Service Suite (V19 Strict Directive A1, B6 & Hotfix 3 PO
     const batchItems = batchCall.body.data || batchCall.body.jobs;
     expect(Array.isArray(batchItems)).toBe(true);
     expect(batchItems.length).toBe(2);
+
+    const batchItemA = JSON.parse(batchItems[0].postData);
+    expect(batchItemA.channel).toBe('account_analytics');
+    expect(batchItemA.analytics_start_offset_days).toBe(7);
+    expect(batchItemA.analytics_end_offset_days).toBe(1);
+
+    const batchItemB = JSON.parse(batchItems[1].postData);
+    expect(batchItemB.channel).toBe('top_pins');
+    expect(batchItemB.top_pins_start_offset_days).toBe(10);
+    expect(batchItemB.top_pins_end_offset_days).toBe(2);
+
     for (const item of batchItems) {
       expect(item.httpMethod).toBe('POST');
       expect(item.httpHeaders).toBe('Content-Type: application/json');
-      expect(item.postData).toBeDefined();
     }
 
-    // 3. cron_edit (existing job id -> converts / ensures POST)
+    // 3. cron_edit (existing job id -> converts / ensures POST + offset propagation)
     (analyticsDb.getWorkspaceConnection as any).mockResolvedValue({
       id: connectionId,
       workspace_id: workspaceId,
       display_name: 'test_pinner',
       analytics_webhook_url: 'https://hook.make.com/analytics',
       analytics_sync_time: '05:00',
+      analytics_start_offset_days: 21,
+      analytics_end_offset_days: 4,
       analytics_fastcron_job_id: 7788,
     });
 
@@ -183,7 +205,9 @@ describe('FastCron Full Service Suite (V19 Strict Directive A1, B6 & Hotfix 3 PO
     expect(editCall.body.id).toBe(7788);
     expect(editCall.body.httpMethod).toBe('POST');
     expect(editCall.body.httpHeaders).toBe('Content-Type: application/json');
-    expect(editCall.body.postData).toBeDefined();
+    const editPostData = JSON.parse(editCall.body.postData);
+    expect(editPostData.analytics_start_offset_days).toBe(21);
+    expect(editPostData.analytics_end_offset_days).toBe(4);
 
     fetchSpy.mockRestore();
   });

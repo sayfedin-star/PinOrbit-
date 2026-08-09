@@ -340,13 +340,11 @@ export const pinnerETL = {
     let summaryRow: AccountAnalyticsSummary | null = null;
     const topPinRows: TopPinSnapshot[] = [];
     const destinationUrlsToTrack: Array<{
-      account_id: string;
       destination_url: string;
-      window_days: number;
+      period_date: string;
       total_impressions: number;
-      total_outbound_clicks: number;
-      total_saves: number;
-      total_pins: number;
+      total_clicks: number;
+      total_pins_active: number;
     }> = [];
 
     // -------------------------------------------------------------------------
@@ -362,12 +360,15 @@ export const pinnerETL = {
             const metrics = normalizeMetrics(item.metrics);
             dailyRows.push({
               workspace_id: workspaceId,
-              account_id: connectionId,
+              connection_id: connectionId,
               metric_date: item.date,
+              window_start: item.date,
+              window_end: item.date,
               data_status: item.data_status || 'READY',
               ...metrics,
+              recorded_at: nowIso,
               updated_at: nowIso,
-            });
+            } as any);
           }
         }
       }
@@ -380,12 +381,13 @@ export const pinnerETL = {
 
         summaryRow = {
           workspace_id: workspaceId,
-          account_id: connectionId,
+          connection_id: connectionId,
           window_start: windowStart,
           window_end: windowEnd,
           ...metrics,
+          recorded_at: nowIso,
           updated_at: nowIso,
-        };
+        } as any;
       }
     }
 
@@ -393,6 +395,7 @@ export const pinnerETL = {
     // Parse Pipeline B: Ranked Top Pins Snapshots
     // -------------------------------------------------------------------------
     const windowEnd = requestContext?.end_date || nowIso.split('T')[0];
+    const windowStart = requestContext?.start_date || windowEnd;
 
     if (payload.top_pins_analytics && payload.top_pins_analytics.pins_by_sort_mode) {
       const { pins_by_sort_mode } = payload.top_pins_analytics;
@@ -405,28 +408,27 @@ export const pinnerETL = {
           const metrics = normalizeMetrics(pin.metrics);
           topPinRows.push({
             workspace_id: workspaceId,
-            account_id: connectionId,
+            connection_id: connectionId,
             pin_id: pin.pin_id,
+            window_start: windowStart,
+            window_end: windowEnd,
             title: pin.title || null,
             image_url: pin.image_url || null,
             destination_url: pin.destination_url || null,
             sort_by: sortBy,
             rank_position: index + 1,
-            window_end: windowEnd,
             ...metrics,
             data_status: pin.data_status || 'READY',
             recorded_at: nowIso,
-          });
+          } as any);
 
           if (pin.destination_url) {
             destinationUrlsToTrack.push({
-              account_id: connectionId,
               destination_url: pin.destination_url,
-              window_days: 30,
+              period_date: windowEnd.split('T')[0],
               total_impressions: metrics.impressions,
-              total_outbound_clicks: metrics.outbound_clicks,
-              total_saves: metrics.saves,
-              total_pins: 1,
+              total_clicks: metrics.outbound_clicks + metrics.pin_clicks,
+              total_pins_active: 1,
             });
           }
         });

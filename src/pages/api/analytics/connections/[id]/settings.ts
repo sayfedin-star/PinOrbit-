@@ -64,10 +64,14 @@ export const GET: APIRoute = async ({ params, locals }) => {
       analytics_sync_time: connection.analytics_sync_time || '04:00',
       analytics_cron_expression: connection.analytics_cron_expression || '0 4 * * *',
       analytics_schedule_status: connection.analytics_schedule_status || 'pending',
+      analytics_start_offset_days: connection.analytics_start_offset_days ?? 7,
+      analytics_end_offset_days: connection.analytics_end_offset_days ?? 1,
       top_pins_webhook_url: connection.top_pins_webhook_url || null,
       top_pins_sync_time: connection.top_pins_sync_time || '04:30',
       top_pins_cron_expression: connection.top_pins_cron_expression || '30 4 * * *',
       top_pins_schedule_status: connection.top_pins_schedule_status || 'pending',
+      top_pins_start_offset_days: connection.top_pins_start_offset_days ?? 7,
+      top_pins_end_offset_days: connection.top_pins_end_offset_days ?? 2,
     };
 
     return new Response(JSON.stringify({ success: true, data: responseData }), {
@@ -196,6 +200,45 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
       }
     }
 
+    // Validate Pipeline A Date Offsets (V20.1)
+    const analyticsStart = body.analytics_start_offset_days !== undefined
+      ? parseInt(String(body.analytics_start_offset_days), 10)
+      : (existing.analytics_start_offset_days ?? 7);
+    const analyticsEnd = body.analytics_end_offset_days !== undefined
+      ? parseInt(String(body.analytics_end_offset_days), 10)
+      : (existing.analytics_end_offset_days ?? 1);
+
+    if (body.analytics_start_offset_days !== undefined || body.analytics_end_offset_days !== undefined) {
+      if (isNaN(analyticsStart) || analyticsStart < 1 || analyticsStart > 90) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Pipeline A Start Offset must be an integer between 1 and 90.' }),
+          { status: 422, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      if (isNaN(analyticsEnd) || analyticsEnd < 0 || analyticsEnd > 60) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Pipeline A End Offset must be an integer between 0 and 60.' }),
+          { status: 422, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      if (analyticsEnd >= analyticsStart) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Pipeline A End Offset must be strictly less than Start Offset.' }),
+          { status: 422, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+
+      updates.analytics_start_offset_days = analyticsStart;
+      updates.analytics_end_offset_days = analyticsEnd;
+
+      if (
+        analyticsStart !== existing.analytics_start_offset_days ||
+        analyticsEnd !== existing.analytics_end_offset_days
+      ) {
+        updates.analytics_schedule_status = 'pending';
+      }
+    }
+
     // Validate and update Pipeline B (Top Pins)
     if (body.top_pins_webhook_url !== undefined) {
       if (body.top_pins_webhook_url) {
@@ -228,6 +271,45 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
       }
     }
 
+    // Validate Pipeline B Date Offsets (V20.1)
+    const topPinsStart = body.top_pins_start_offset_days !== undefined
+      ? parseInt(String(body.top_pins_start_offset_days), 10)
+      : (existing.top_pins_start_offset_days ?? 7);
+    const topPinsEnd = body.top_pins_end_offset_days !== undefined
+      ? parseInt(String(body.top_pins_end_offset_days), 10)
+      : (existing.top_pins_end_offset_days ?? 2);
+
+    if (body.top_pins_start_offset_days !== undefined || body.top_pins_end_offset_days !== undefined) {
+      if (isNaN(topPinsStart) || topPinsStart < 1 || topPinsStart > 90) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Pipeline B Start Offset must be an integer between 1 and 90.' }),
+          { status: 422, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      if (isNaN(topPinsEnd) || topPinsEnd < 0 || topPinsEnd > 60) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Pipeline B End Offset must be an integer between 0 and 60.' }),
+          { status: 422, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      if (topPinsEnd >= topPinsStart) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Pipeline B End Offset must be strictly less than Start Offset.' }),
+          { status: 422, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+
+      updates.top_pins_start_offset_days = topPinsStart;
+      updates.top_pins_end_offset_days = topPinsEnd;
+
+      if (
+        topPinsStart !== existing.top_pins_start_offset_days ||
+        topPinsEnd !== existing.top_pins_end_offset_days
+      ) {
+        updates.top_pins_schedule_status = 'pending';
+      }
+    }
+
     const updated = await analyticsDb.updateWorkspaceConnection(workspaceId, connectionId, updates);
 
     const responseData: AnalyticsConnectionSettingsResponse = {
@@ -238,10 +320,14 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
       analytics_sync_time: updated.analytics_sync_time,
       analytics_cron_expression: updated.analytics_cron_expression,
       analytics_schedule_status: updated.analytics_schedule_status,
+      analytics_start_offset_days: updated.analytics_start_offset_days ?? 7,
+      analytics_end_offset_days: updated.analytics_end_offset_days ?? 1,
       top_pins_webhook_url: updated.top_pins_webhook_url || null,
       top_pins_sync_time: updated.top_pins_sync_time,
       top_pins_cron_expression: updated.top_pins_cron_expression,
       top_pins_schedule_status: updated.top_pins_schedule_status,
+      top_pins_start_offset_days: updated.top_pins_start_offset_days ?? 7,
+      top_pins_end_offset_days: updated.top_pins_end_offset_days ?? 2,
     };
 
     return new Response(JSON.stringify({ success: true, data: responseData }), {

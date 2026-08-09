@@ -328,7 +328,67 @@ export const prerender = false;
                   </button>
                 </div>
               </div>
-              <div class="flex items-center gap-2">
+
+              <!-- Date Window Offsets (Pipeline A) -->
+              <div class="space-y-1.5 pt-1">
+                <div class="flex items-center justify-between">
+                  <label class="text-[11px] font-semibold text-foreground">Date Window (Offsets in Days)</label>
+                  <span class="text-[10px] text-muted-foreground">Rolling Daily</span>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                  <div>
+                    <label class="block text-[10px] text-muted-foreground mb-0.5">Start Offset (1–90d ago)</label>
+                    <input
+                      type="number"
+                      id="setting-analytics-start-offset"
+                      min="1"
+                      max="90"
+                      value="7"
+                      class="w-full rounded-xl border border-border bg-card px-3 py-1.5 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                  <div>
+                    <label class="block text-[10px] text-muted-foreground mb-0.5">End Offset (0–60d ago)</label>
+                    <input
+                      type="number"
+                      id="setting-analytics-end-offset"
+                      min="0"
+                      max="60"
+                      value="1"
+                      class="w-full rounded-xl border border-border bg-card px-3 py-1.5 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                </div>
+                <p class="text-[10px] text-muted-foreground italic">Pinterest lags 2-3 days; higher end offset = READY-only data.</p>
+              </div>
+
+              <!-- Manual Run Override (Pipeline A) -->
+              <div class="space-y-1.5 pt-1 border-t border-border/40">
+                <div class="flex items-center justify-between">
+                  <label class="text-[11px] font-semibold text-foreground">Manual Run Override (Optional)</label>
+                  <span class="text-[10px] text-muted-foreground">Empty = Use offsets</span>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                  <div>
+                    <label class="block text-[10px] text-muted-foreground mb-0.5">From Date</label>
+                    <input
+                      type="date"
+                      id="override-analytics-from-date"
+                      class="w-full rounded-xl border border-border bg-card px-2.5 py-1.5 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                  <div>
+                    <label class="block text-[10px] text-muted-foreground mb-0.5">To Date</label>
+                    <input
+                      type="date"
+                      id="override-analytics-to-date"
+                      class="w-full rounded-xl border border-border bg-card px-2.5 py-1.5 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-2 pt-1">
                 <button
                   type="button"
                   id="sync-fastcron-a-btn"
@@ -402,7 +462,67 @@ export const prerender = false;
                   </button>
                 </div>
               </div>
-              <div class="flex items-center gap-2">
+
+              <!-- Date Window Offsets (Pipeline B) -->
+              <div class="space-y-1.5 pt-1">
+                <div class="flex items-center justify-between">
+                  <label class="text-[11px] font-semibold text-foreground">Date Window (Offsets in Days)</label>
+                  <span class="text-[10px] text-muted-foreground">Rolling Daily</span>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                  <div>
+                    <label class="block text-[10px] text-muted-foreground mb-0.5">Start Offset (1–90d ago)</label>
+                    <input
+                      type="number"
+                      id="setting-top-pins-start-offset"
+                      min="1"
+                      max="90"
+                      value="7"
+                      class="w-full rounded-xl border border-border bg-card px-3 py-1.5 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                  <div>
+                    <label class="block text-[10px] text-muted-foreground mb-0.5">End Offset (0–60d ago)</label>
+                    <input
+                      type="number"
+                      id="setting-top-pins-end-offset"
+                      min="0"
+                      max="60"
+                      value="2"
+                      class="w-full rounded-xl border border-border bg-card px-3 py-1.5 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                </div>
+                <p class="text-[10px] text-muted-foreground italic">Pinterest lags 2-3 days; higher end offset = READY-only data.</p>
+              </div>
+
+              <!-- Manual Run Override (Pipeline B) -->
+              <div class="space-y-1.5 pt-1 border-t border-border/40">
+                <div class="flex items-center justify-between">
+                  <label class="text-[11px] font-semibold text-foreground">Manual Run Override (Optional)</label>
+                  <span class="text-[10px] text-muted-foreground">Empty = Use offsets</span>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                  <div>
+                    <label class="block text-[10px] text-muted-foreground mb-0.5">From Date</label>
+                    <input
+                      type="date"
+                      id="override-top-pins-from-date"
+                      class="w-full rounded-xl border border-border bg-card px-2.5 py-1.5 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                  <div>
+                    <label class="block text-[10px] text-muted-foreground mb-0.5">To Date</label>
+                    <input
+                      type="date"
+                      id="override-top-pins-to-date"
+                      class="w-full rounded-xl border border-border bg-card px-2.5 py-1.5 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-2 pt-1">
                 <button
                   type="button"
                   id="sync-fastcron-b-btn"
@@ -800,6 +920,14 @@ export const prerender = false;
       setVal('setting-top-pins-webhook', d.top_pins_webhook_url);
       setVal('setting-analytics-time', d.analytics_sync_time || '04:00');
       setVal('setting-top-pins-time', d.top_pins_sync_time || '04:30');
+      setVal('setting-analytics-start-offset', d.analytics_start_offset_days ?? 7);
+      setVal('setting-analytics-end-offset', d.analytics_end_offset_days ?? 1);
+      setVal('setting-top-pins-start-offset', d.top_pins_start_offset_days ?? 7);
+      setVal('setting-top-pins-end-offset', d.top_pins_end_offset_days ?? 2);
+      setVal('override-analytics-from-date', '');
+      setVal('override-analytics-to-date', '');
+      setVal('override-top-pins-from-date', '');
+      setVal('override-top-pins-to-date', '');
 
       // Update Channel A & B status badges
       const updateStatusBadge = (badgeId, status) => {
@@ -1267,12 +1395,29 @@ export const prerender = false;
       if (btn) {
         btn.addEventListener('click', async () => {
           const connId = document.getElementById('drawer-connection-id').value;
+          const isAnalytics = channel === 'analytics';
+          const fromInputId = isAnalytics ? 'override-analytics-from-date' : 'override-top-pins-from-date';
+          const toInputId = isAnalytics ? 'override-analytics-to-date' : 'override-top-pins-to-date';
+          const fromDate = (document.getElementById(fromInputId) as HTMLInputElement)?.value || undefined;
+          const toDate = (document.getElementById(toInputId) as HTMLInputElement)?.value || undefined;
+
+          if (fromDate && toDate && fromDate >= toDate) {
+            alert('Manual run override Start Date must be strictly before End Date.');
+            return;
+          }
+
           btn.textContent = 'Triggering...';
           try {
             const res = await fetch('/api/analytics/trigger-sync', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ connection_id: connId, channel, mode: 'sync' }),
+              body: JSON.stringify({
+                connection_id: connId,
+                channel,
+                mode: 'sync',
+                from_date: fromDate,
+                to_date: toDate,
+              }),
             });
             const json = await res.json();
             alert(json.success ? json.message : `Trigger Failed: ${json.error}`);
@@ -1292,7 +1437,7 @@ export const prerender = false;
     if (connSettingsForm) {
       connSettingsForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const connId = document.getElementById('drawer-connection-id').value;
+        const connId = (document.getElementById('drawer-connection-id') as HTMLInputElement).value;
         const submitBtn = document.getElementById('save-conn-settings-btn');
         const statusMsg = document.getElementById('conn-settings-status-msg');
 
@@ -1302,10 +1447,14 @@ export const prerender = false;
         }
 
         const payload = {
-          analytics_webhook_url: document.getElementById('setting-analytics-webhook').value,
-          top_pins_webhook_url: document.getElementById('setting-top-pins-webhook').value,
-          analytics_sync_time: document.getElementById('setting-analytics-time').value,
-          top_pins_sync_time: document.getElementById('setting-top-pins-time').value,
+          analytics_webhook_url: (document.getElementById('setting-analytics-webhook') as HTMLInputElement).value,
+          top_pins_webhook_url: (document.getElementById('setting-top-pins-webhook') as HTMLInputElement).value,
+          analytics_sync_time: (document.getElementById('setting-analytics-time') as HTMLInputElement).value,
+          top_pins_sync_time: (document.getElementById('setting-top-pins-time') as HTMLInputElement).value,
+          analytics_start_offset_days: parseInt((document.getElementById('setting-analytics-start-offset') as HTMLInputElement).value, 10),
+          analytics_end_offset_days: parseInt((document.getElementById('setting-analytics-end-offset') as HTMLInputElement).value, 10),
+          top_pins_start_offset_days: parseInt((document.getElementById('setting-top-pins-start-offset') as HTMLInputElement).value, 10),
+          top_pins_end_offset_days: parseInt((document.getElementById('setting-top-pins-end-offset') as HTMLInputElement).value, 10),
         };
 
         try {

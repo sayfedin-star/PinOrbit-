@@ -71,6 +71,22 @@ export const POST: APIRoute = async ({ request, locals }) => {
     );
   }
 
+  const fromDate = body.from_date || body.start_date;
+  const toDate = body.to_date || body.end_date;
+
+  if (fromDate && toDate && fromDate >= toDate) {
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: 'Manual run override Start Date must be strictly before End Date.',
+      }),
+      {
+        status: 422,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
+  }
+
   try {
     await assertWorkspaceAccess(schedulingClient, workspaceId, user.id);
     const result = await fastcronService.triggerManualSync(
@@ -78,7 +94,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
       connectionId,
       channel,
       mode,
-      runtimeEnv
+      runtimeEnv,
+      fromDate && toDate ? { from_date: fromDate, to_date: toDate } : undefined
     );
 
     return new Response(JSON.stringify(result), {
