@@ -7,12 +7,23 @@ import { fastcronService } from '../../../server/services/fastcron-service';
 export const POST: APIRoute = async ({ request, locals }) => {
   const user = locals.user;
   const schedulingClient = locals.supabase;
+  const workspaceId = locals.activeWorkspaceId;
 
   if (!user || !schedulingClient) {
     return new Response(
       JSON.stringify({ error: 'Unauthorized: authentication required.' }),
       {
         status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
+  }
+
+  if (!workspaceId) {
+    return new Response(
+      JSON.stringify({ success: false, error: 'Active workspace not found in session.' }),
+      {
+        status: 400,
         headers: { 'Content-Type': 'application/json' },
       }
     );
@@ -32,14 +43,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
     );
   }
 
-  const workspaceId = body.workspace_id || locals.activeWorkspaceId;
-  const channel = body.channel as 'analytics' | 'top_pins';
   const connectionId = body.connection_id;
-  const isPing = Boolean(body.is_ping);
+  const channel = body.channel as 'analytics' | 'top_pins';
+  const mode = (body.mode === 'ping' ? 'ping' : 'sync') as 'ping' | 'sync';
 
-  if (!workspaceId) {
+  if (!connectionId) {
     return new Response(
-      JSON.stringify({ success: false, error: 'workspace_id is required.' }),
+      JSON.stringify({ success: false, error: 'connection_id is required.' }),
       {
         status: 400,
         headers: { 'Content-Type': 'application/json' },
@@ -62,19 +72,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   try {
     await assertWorkspaceAccess(schedulingClient, workspaceId, user.id);
-
-    if (isPing) {
-      const pingResult = await fastcronService.triggerTestPing(workspaceId, channel);
-      return new Response(JSON.stringify(pingResult), {
-        status: pingResult.success ? 200 : 400,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
     const result = await fastcronService.triggerManualSync(
       workspaceId,
+      connectionId,
       channel,
-      connectionId
+      mode
     );
 
     return new Response(JSON.stringify(result), {
@@ -85,7 +87,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return new Response(
       JSON.stringify({
         success: false,
+        connection_id: connectionId,
         channel,
+        mode,
         error: err.message || 'Failed to trigger sync run.',
       }),
       {

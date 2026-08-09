@@ -494,93 +494,103 @@ export interface PinnerOverviewKPIs {
 }
 
 // ==============================================================================
-// V15 Control Plane & Settings Types
+// V16 Control Plane & Settings Types (Project 3 Dedicated Ownership)
 // ==============================================================================
 
 export interface WorkspaceAnalyticsSettings {
-  id: string;
   workspace_id: string;
-  analytics_webhook_url?: string | null;
-  top_pins_webhook_url?: string | null;
-  analytics_sync_time: string;
-  top_pins_sync_time: string;
-  timezone: string;
-  analytics_enabled: boolean;
-  top_pins_enabled: boolean;
-  auto_backfill_on_connect: boolean;
   fastcron_token?: string | null;
-  analytics_fastcron_job_id?: string | null;
-  top_pins_fastcron_job_id?: string | null;
-  analytics_schedule_status: 'pending' | 'synced' | 'error';
-  top_pins_schedule_status: 'pending' | 'synced' | 'error';
-  last_synced_at?: string | null;
-  created_at: string;
+  timezone: string;
+  is_sync_enabled: boolean;
+  auto_backfill_on_connect: boolean;
   updated_at: string;
 }
 
 export interface WorkspaceAnalyticsSettingsResponse {
-  workspace_id: string;
-  analytics_webhook_url: string | null;
-  top_pins_webhook_url: string | null;
-  analytics_sync_time: string;
-  top_pins_sync_time: string;
+  fastcron_token_configured: boolean;
   timezone: string;
-  analytics_enabled: boolean;
-  top_pins_enabled: boolean;
+  is_sync_enabled: boolean;
   auto_backfill_on_connect: boolean;
-  has_fastcron_token: boolean;
-  fastcron_token_masked: string | null;
-  has_ingest_secret: boolean;
-  analytics_schedule_status: 'pending' | 'synced' | 'error';
-  top_pins_schedule_status: 'pending' | 'synced' | 'error';
-  analytics_fastcron_job_id?: string | null;
-  top_pins_fastcron_job_id?: string | null;
-  last_synced_at?: string | null;
 }
 
-export interface PinnerConnection {
+export interface AnalyticsConnection {
   id: string;
   workspace_id: string;
-  account_name: string;
-  is_active: boolean;
+  display_name: string;
   analytics_enabled: boolean;
   deleted_at?: string | null;
+  last_analytics_sync_at?: string | null;
+
+  // Pipeline A: /v5/user_account/analytics
+  analytics_webhook_url?: string | null;
+  analytics_sync_time: string;
+  analytics_cron_expression: string;
+  analytics_fastcron_job_id?: number | null;
+  analytics_schedule_status: 'synced' | 'pending' | 'error';
+
+  // Pipeline B: /v5/user_account/analytics/top_pins
+  top_pins_webhook_url?: string | null;
+  top_pins_sync_time: string;
+  top_pins_cron_expression: string;
+  top_pins_fastcron_job_id?: number | null;
+  top_pins_schedule_status: 'synced' | 'pending' | 'error';
+
   created_at: string;
-  last_published_at?: string | null;
-  last_synced_at?: string | null;
+  updated_at: string;
 }
 
+export interface AnalyticsConnectionSettingsResponse {
+  id: string;
+  display_name: string;
+  analytics_webhook_url: string | null;
+  analytics_sync_time: string;
+  analytics_cron_expression: string;
+  analytics_schedule_status: 'synced' | 'pending' | 'error';
+  top_pins_webhook_url: string | null;
+  top_pins_sync_time: string;
+  top_pins_cron_expression: string;
+  top_pins_schedule_status: 'synced' | 'pending' | 'error';
+}
+
+export type PinnerConnection = AnalyticsConnection;
+
 export interface PinnerConnectionInput {
-  account_name: string;
+  display_name: string;
   analytics_enabled?: boolean;
 }
 
 export interface ScheduleSyncRequest {
+  connection_id: string;
   channel: 'analytics' | 'top_pins';
 }
 
 export interface ScheduleSyncResponse {
   success: boolean;
+  connection_id: string;
   channel: 'analytics' | 'top_pins';
   schedule_status: 'synced' | 'error';
-  fastcron_job_id?: string | null;
+  fastcron_job_id?: number | null;
   message?: string;
   error?: string;
 }
 
 export interface TriggerSyncRequest {
+  connection_id: string;
   channel: 'analytics' | 'top_pins';
-  connection_id?: string;
+  mode: 'ping' | 'sync';
 }
 
 export interface TriggerSyncResponse {
   success: boolean;
+  connection_id: string;
   channel: 'analytics' | 'top_pins';
-  startDate: string;
-  endDate: string;
+  mode: 'ping' | 'sync';
+  startDate?: string;
+  endDate?: string;
   webhookResponseStatus?: number;
   message?: string;
   error?: string;
 }
+
 
 

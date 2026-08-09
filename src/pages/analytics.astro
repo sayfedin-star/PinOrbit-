@@ -15,15 +15,15 @@ export const prerender = false;
       description="Aggregated reach, engagement metrics, ranked pin performance, and pipeline control plane."
     />
 
-    <!-- Account Selector, Window Toggles & Settings Gear -->
+    <!-- Account Selector & Window Toggles -->
     <div class="flex flex-wrap items-center gap-3 self-start sm:self-auto">
-      <!-- Account Dropdown -->
+      <!-- Connection Dropdown -->
       <div class="relative">
         <select
           id="analytics-account-select"
           class="rounded-xl border border-border bg-card px-3.5 py-2 text-xs font-semibold text-foreground shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
         >
-          <option value="">Loading accounts...</option>
+          <option value="">Loading connections...</option>
         </select>
       </div>
 
@@ -62,19 +62,6 @@ export const prerender = false;
           <path d="M16 21h5v-5"/>
         </svg>
       </button>
-
-      <!-- Settings Drawer Trigger (Gear Icon) -->
-      <button
-        id="open-settings-drawer-btn"
-        class="inline-flex items-center gap-1.5 rounded-xl border border-primary/20 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary shadow-sm hover:bg-primary/20 transition-all"
-        title="Analytics Pipeline Settings"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
-          <circle cx="12" cy="12" r="3"/>
-        </svg>
-        <span>Settings</span>
-      </button>
     </div>
   </div>
 
@@ -89,19 +76,13 @@ export const prerender = false;
         </div>
         <div>
           <div class="flex flex-wrap items-center gap-2">
-            <h3 class="text-xs font-bold text-foreground">Make.com Ingestion Control Plane</h3>
-            <span id="channel-a-status-badge" class="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-              Analytics: Synced
-            </span>
-            <span id="channel-b-status-badge" class="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-              Top Pins: Synced
-            </span>
+            <h3 class="text-xs font-bold text-foreground">Pinterest Analytics Control Plane</h3>
             <span id="cache-status-badge" class="rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-semibold text-blue-600 dark:text-blue-400">
               Edge Cache: Direct
             </span>
           </div>
           <p id="sync-status-detail" class="text-[11px] text-muted-foreground mt-0.5">
-            Ingestion source: Pinterest API v5 (Independent daily pipelines A @ 04:00 UTC & B @ 04:30 UTC)
+            Ingestion source: Pinterest API v5 (Dedicated Project 3 Control Plane)
           </p>
         </div>
       </div>
@@ -234,7 +215,7 @@ export const prerender = false;
     <div class="flex flex-col gap-3 border-b border-border p-4 sm:flex-row sm:items-center sm:justify-between">
       <div>
         <h2 class="text-base font-bold text-foreground">Pinterest Connections</h2>
-        <p class="text-xs text-muted-foreground">Manage active accounts for scheduled analytics ingestion and reporting</p>
+        <p class="text-xs text-muted-foreground">Manage accounts, configure Make.com pipelines, and sync FastCron schedules</p>
       </div>
       <button
         id="add-connection-btn"
@@ -249,9 +230,9 @@ export const prerender = false;
       <table class="w-full text-left text-xs">
         <thead class="border-b border-border bg-muted/20 text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
           <tr>
-            <th class="py-3 px-4">Account Name</th>
+            <th class="py-3 px-4">Display Name</th>
             <th class="py-3 px-4 text-center">Analytics Status</th>
-            <th class="py-3 px-4">Created Date</th>
+            <th class="py-3 px-4">Last Sync</th>
             <th class="py-3 px-4 text-right">Actions</th>
           </tr>
         </thead>
@@ -265,7 +246,7 @@ export const prerender = false;
   </div>
 
   <!-- ========================================================================= -->
-  <!-- Settings Slide-over Drawer (FastCron, Webhooks, Schedules) -->
+  <!-- Per-Connection Settings Slide-over Drawer (FastCron, Webhooks, Schedules) -->
   <!-- ========================================================================= -->
   <div id="settings-drawer" class="fixed inset-0 z-50 hidden overflow-hidden">
     <!-- Backdrop -->
@@ -277,22 +258,29 @@ export const prerender = false;
           <!-- Drawer Header -->
           <div class="flex items-center justify-between pb-4 border-b border-border mb-6">
             <div>
-              <h3 class="text-base font-bold text-foreground">Analytics Settings</h3>
-              <p class="text-xs text-muted-foreground">Configure Make.com pipelines & FastCron automation</p>
+              <div class="flex items-center gap-2">
+                <h3 id="drawer-connection-name" class="text-base font-bold text-foreground">Connection Settings</h3>
+                <span id="drawer-connection-status" class="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                  Active
+                </span>
+              </div>
+              <p class="text-xs text-muted-foreground mt-0.5">Configure Make.com webhooks & FastCron schedules</p>
             </div>
             <button id="close-settings-drawer-btn" class="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
           </div>
 
-          <!-- Settings Form -->
-          <form id="settings-form" class="space-y-6">
-            <!-- Channel A: Account Analytics -->
+          <!-- Connection-Specific Pipelines Form -->
+          <form id="connection-settings-form" class="space-y-6">
+            <input type="hidden" id="drawer-connection-id" value="" />
+
+            <!-- Pipeline A: Account Analytics -->
             <div class="space-y-3 rounded-xl border border-border/80 bg-muted/20 p-4">
               <div class="flex items-center justify-between">
                 <span class="text-xs font-bold text-foreground">Pipeline A (Account Analytics)</span>
-                <span id="drawer-channel-a-badge" class="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-                  Synced
+                <span id="drawer-channel-a-badge" class="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                  Pending
                 </span>
               </div>
               <div>
@@ -318,14 +306,16 @@ export const prerender = false;
                   <button
                     type="button"
                     id="ping-analytics-btn"
-                    class="w-full rounded-xl border border-border bg-card px-2.5 py-2 text-[11px] font-semibold text-foreground hover:bg-muted transition-all"
+                    disabled
+                    class="w-full rounded-xl border border-border bg-card px-2.5 py-2 text-[11px] font-semibold text-foreground hover:bg-muted transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Test Ping
                   </button>
                   <button
                     type="button"
                     id="run-analytics-btn"
-                    class="w-full rounded-xl bg-primary/10 border border-primary/20 px-2.5 py-2 text-[11px] font-semibold text-primary hover:bg-primary/20 transition-all"
+                    disabled
+                    class="w-full rounded-xl bg-primary/10 border border-primary/20 px-2.5 py-2 text-[11px] font-semibold text-primary hover:bg-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Run Now
                   </button>
@@ -334,18 +324,19 @@ export const prerender = false;
               <button
                 type="button"
                 id="sync-fastcron-a-btn"
-                class="w-full rounded-xl border border-border bg-muted/60 px-3 py-1.5 text-[11px] font-semibold text-foreground hover:bg-muted transition-all"
+                disabled
+                class="w-full rounded-xl border border-border bg-muted/60 px-3 py-1.5 text-[11px] font-semibold text-foreground hover:bg-muted transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 ⚡ Sync Schedule to FastCron
               </button>
             </div>
 
-            <!-- Channel B: Top Pins -->
+            <!-- Pipeline B: Top Pins -->
             <div class="space-y-3 rounded-xl border border-border/80 bg-muted/20 p-4">
               <div class="flex items-center justify-between">
                 <span class="text-xs font-bold text-foreground">Pipeline B (Ranked Top Pins)</span>
-                <span id="drawer-channel-b-badge" class="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-                  Synced
+                <span id="drawer-channel-b-badge" class="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                  Pending
                 </span>
               </div>
               <div>
@@ -371,14 +362,16 @@ export const prerender = false;
                   <button
                     type="button"
                     id="ping-top-pins-btn"
-                    class="w-full rounded-xl border border-border bg-card px-2.5 py-2 text-[11px] font-semibold text-foreground hover:bg-muted transition-all"
+                    disabled
+                    class="w-full rounded-xl border border-border bg-card px-2.5 py-2 text-[11px] font-semibold text-foreground hover:bg-muted transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Test Ping
                   </button>
                   <button
                     type="button"
                     id="run-top-pins-btn"
-                    class="w-full rounded-xl bg-primary/10 border border-primary/20 px-2.5 py-2 text-[11px] font-semibold text-primary hover:bg-primary/20 transition-all"
+                    disabled
+                    class="w-full rounded-xl bg-primary/10 border border-primary/20 px-2.5 py-2 text-[11px] font-semibold text-primary hover:bg-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Run Now
                   </button>
@@ -387,29 +380,46 @@ export const prerender = false;
               <button
                 type="button"
                 id="sync-fastcron-b-btn"
-                class="w-full rounded-xl border border-border bg-muted/60 px-3 py-1.5 text-[11px] font-semibold text-foreground hover:bg-muted transition-all"
+                disabled
+                class="w-full rounded-xl border border-border bg-muted/60 px-3 py-1.5 text-[11px] font-semibold text-foreground hover:bg-muted transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 ⚡ Sync Schedule to FastCron
               </button>
             </div>
 
-            <!-- FastCron API Token & Options -->
-            <div class="space-y-3">
+            <!-- Status message container -->
+            <div id="conn-settings-status-msg" class="hidden rounded-xl p-3 text-xs font-medium"></div>
+
+            <div>
+              <button
+                type="submit"
+                id="save-conn-settings-btn"
+                class="w-full rounded-xl bg-primary py-2.5 text-xs font-bold text-primary-foreground shadow-sm hover:bg-primary/90 transition-all"
+              >
+                Save Pipeline Settings
+              </button>
+            </div>
+          </form>
+
+          <!-- Workspace-Level Secrets & Settings Accordion -->
+          <div class="mt-8 pt-6 border-t border-border">
+            <h4 class="text-xs font-bold text-foreground mb-3 uppercase tracking-wider text-muted-foreground">
+              Workspace Global Settings
+            </h4>
+
+            <form id="workspace-settings-form" class="space-y-4">
               <div>
-                <label class="block text-xs font-bold text-foreground mb-1">FastCron API Token (Write-Only)</label>
+                <label class="block text-xs font-semibold text-foreground mb-1">FastCron API Token (Write-Only)</label>
                 <input
                   type="password"
                   id="setting-fastcron-token"
                   placeholder="Enter token to overwrite (or leave blank to keep)"
                   class="w-full rounded-xl border border-border bg-card px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                 />
-                <p class="text-[10px] text-muted-foreground mt-1">
-                  Stored securely in Project 1. Never displayed in plain text.
-                </p>
               </div>
 
               <div>
-                <label class="block text-xs font-bold text-foreground mb-1">Timezone</label>
+                <label class="block text-xs font-semibold text-foreground mb-1">Timezone</label>
                 <select
                   id="setting-timezone"
                   class="w-full rounded-xl border border-border bg-card px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
@@ -422,7 +432,7 @@ export const prerender = false;
                 </select>
               </div>
 
-              <div class="flex items-center gap-2 pt-1">
+              <div class="flex items-center gap-2">
                 <input
                   type="checkbox"
                   id="setting-auto-backfill"
@@ -432,21 +442,18 @@ export const prerender = false;
                   Auto-backfill 90 days of data on new account connection
                 </label>
               </div>
-            </div>
 
-            <!-- Status message container -->
-            <div id="settings-status-msg" class="hidden rounded-xl p-3 text-xs font-medium"></div>
+              <div id="ws-settings-status-msg" class="hidden rounded-xl p-3 text-xs font-medium"></div>
 
-            <div class="pt-4 border-t border-border">
               <button
                 type="submit"
-                id="save-settings-btn"
-                class="w-full rounded-xl bg-primary py-2.5 text-xs font-bold text-primary-foreground shadow-sm hover:bg-primary/90 transition-all"
+                id="save-ws-settings-btn"
+                class="w-full rounded-xl border border-border bg-muted/60 py-2 text-xs font-semibold text-foreground hover:bg-muted transition-all"
               >
-                Save Settings
+                Save Global Settings
               </button>
-            </div>
-          </form>
+            </form>
+          </div>
         </div>
       </div>
     </div>
@@ -467,12 +474,12 @@ export const prerender = false;
       <form id="connection-form" class="space-y-4">
         <input type="hidden" id="conn-edit-id" value="" />
         <div>
-          <label class="block text-xs font-semibold text-foreground mb-1">Account Display Name</label>
+          <label class="block text-xs font-semibold text-foreground mb-1">Display Name</label>
           <input
             type="text"
-            id="conn-account-name"
+            id="conn-display-name"
             required
-            placeholder="e.g. HealthyBites_US"
+            placeholder="e.g. hymumdotcom"
             class="w-full rounded-xl border border-border bg-card px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
           />
         </div>
@@ -485,7 +492,7 @@ export const prerender = false;
             class="h-4 w-4 rounded border-border text-primary focus:ring-primary"
           />
           <label for="conn-analytics-enabled" class="text-xs font-semibold text-foreground cursor-pointer">
-            Analytics enabled (allow scheduled sync runs)
+            Analytics enabled
           </label>
         </div>
 
@@ -516,7 +523,7 @@ export const prerender = false;
     <div class="w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-2xl">
       <h3 class="text-base font-bold text-foreground mb-2">Delete Connection?</h3>
       <p class="text-xs text-muted-foreground mb-4">
-        This will disable future sync runs for this account. Historical analytics and top pins snapshots will be safely preserved in Project 3.
+        This will soft-delete the connection and remove associated FastCron jobs. Historical analytics data in Project 3 will be preserved.
       </p>
       <input type="hidden" id="delete-conn-id" value="" />
       <div class="flex items-center justify-end gap-3">
@@ -557,7 +564,7 @@ export const prerender = false;
 
   async function initAnalytics() {
     await loadConnections();
-    await loadSettings();
+    await loadWorkspaceSettings();
     await loadAnalyticsData();
     setupEventListeners();
   }
@@ -567,29 +574,33 @@ export const prerender = false;
     try {
       const res = await fetch('/api/analytics/connections');
       const json = await res.json();
-      const accounts = json.data || [];
-      activeConnectionsList = accounts;
+      const connections = json.data || [];
+      activeConnectionsList = connections;
 
       const select = document.getElementById('analytics-account-select');
       const tbody = document.getElementById('connections-tbody');
 
       if (select) {
         select.innerHTML = '';
-        if (accounts.length === 0) {
+        if (connections.length === 0) {
           select.innerHTML = '<option value="">No Pinterest accounts connected</option>';
+          currentConnectionId = '';
         } else {
-          accounts.forEach((acc, index) => {
+          connections.forEach((conn) => {
             const opt = document.createElement('option');
-            opt.value = acc.id;
-            opt.textContent = acc.account_name || `Account ${index + 1}`;
+            opt.value = conn.id;
+            opt.textContent = conn.display_name;
             select.appendChild(opt);
           });
-          currentConnectionId = accounts[0].id;
+          if (!currentConnectionId || !connections.some(c => c.id === currentConnectionId)) {
+            currentConnectionId = connections[0].id;
+          }
+          select.value = currentConnectionId;
         }
       }
 
       if (tbody) {
-        if (accounts.length === 0) {
+        if (connections.length === 0) {
           tbody.innerHTML = `
             <tr>
               <td colspan="4" class="py-8 text-center text-muted-foreground">
@@ -598,24 +609,28 @@ export const prerender = false;
             </tr>
           `;
         } else {
-          tbody.innerHTML = accounts
-            .map((acc) => {
-              const statusBadge = acc.analytics_enabled
+          tbody.innerHTML = connections
+            .map((conn) => {
+              const statusBadge = conn.analytics_enabled
                 ? '<span class="inline-flex rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">Active</span>'
                 : '<span class="inline-flex rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">Disabled</span>';
 
-              const createdDate = acc.created_at ? new Date(acc.created_at).toLocaleDateString() : '---';
+              const lastSync = conn.last_analytics_sync_at
+                ? new Date(conn.last_analytics_sync_at).toLocaleString()
+                : '—';
 
               return `
                 <tr class="hover:bg-muted/30 transition-colors">
-                  <td class="py-3 px-4 font-bold text-foreground">${acc.account_name}</td>
+                  <td class="py-3 px-4 font-bold text-foreground">${conn.display_name}</td>
                   <td class="py-3 px-4 text-center">${statusBadge}</td>
-                  <td class="py-3 px-4 text-muted-foreground">${createdDate}</td>
+                  <td class="py-3 px-4 text-muted-foreground">${lastSync}</td>
                   <td class="py-3 px-4 text-right">
                     <div class="inline-flex items-center gap-2">
-                      <button data-action="sync-now" data-id="${acc.id}" class="rounded-lg border border-border px-2.5 py-1 text-[11px] font-semibold hover:bg-muted">Sync Now</button>
-                      <button data-action="edit-conn" data-id="${acc.id}" class="rounded-lg border border-border px-2.5 py-1 text-[11px] font-semibold hover:bg-muted">Edit</button>
-                      <button data-action="delete-conn" data-id="${acc.id}" class="rounded-lg border border-destructive/20 text-destructive px-2.5 py-1 text-[11px] font-semibold hover:bg-destructive/10">Delete</button>
+                      <button data-action="settings-conn" data-id="${conn.id}" class="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-[11px] font-semibold hover:bg-muted">
+                        ⚙ Settings
+                      </button>
+                      <button data-action="edit-conn" data-id="${conn.id}" class="rounded-lg border border-border px-2.5 py-1 text-[11px] font-semibold hover:bg-muted">Edit</button>
+                      <button data-action="delete-conn" data-id="${conn.id}" class="rounded-lg border border-destructive/20 text-destructive px-2.5 py-1 text-[11px] font-semibold hover:bg-destructive/10">Delete</button>
                     </div>
                   </td>
                 </tr>
@@ -629,8 +644,8 @@ export const prerender = false;
     }
   }
 
-  // Load Settings for Drawer
-  async function loadSettings() {
+  // Load Workspace-Level Settings
+  async function loadWorkspaceSettings() {
     try {
       const res = await fetch('/api/analytics/settings');
       const json = await res.json();
@@ -642,25 +657,52 @@ export const prerender = false;
         if (el) el.value = val || '';
       };
 
-      setVal('setting-analytics-webhook', d.analytics_webhook_url);
-      setVal('setting-top_pins-webhook', d.top_pins_webhook_url);
-      setVal('setting-analytics-time', d.analytics_sync_time || '04:00');
-      setVal('setting-top-pins-time', d.top_pins_sync_time || '04:30');
       setVal('setting-timezone', d.timezone || 'UTC');
 
       const tokenEl = document.getElementById('setting-fastcron-token');
       if (tokenEl) {
-        tokenEl.placeholder = d.has_fastcron_token ? '•••••••• (Configured)' : 'Enter FastCron API Token';
+        tokenEl.placeholder = d.fastcron_token_configured ? '•••••••• (Configured)' : 'Enter FastCron API Token';
       }
 
       const backfillEl = document.getElementById('setting-auto-backfill');
       if (backfillEl) {
         backfillEl.checked = Boolean(d.auto_backfill_on_connect);
       }
+    } catch (e) {
+      console.error('Error loading workspace settings:', e);
+    }
+  }
 
-      // Update status badges
-      const updateBadge = (id, status) => {
+  // Load Per-Connection Pipeline Settings into Drawer
+  async function openConnectionSettingsDrawer(connId) {
+    const drawer = document.getElementById('settings-drawer');
+    if (!drawer) return;
+
+    try {
+      const res = await fetch(`/api/analytics/connections/${connId}/settings`);
+      const json = await res.json();
+      if (!json.success || !json.data) {
+        alert('Failed to load connection settings: ' + (json.error || 'Unknown error'));
+        return;
+      }
+
+      const d = json.data;
+      document.getElementById('drawer-connection-id').value = d.id;
+      document.getElementById('drawer-connection-name').textContent = `${d.display_name} Settings`;
+
+      const setVal = (id, val) => {
         const el = document.getElementById(id);
+        if (el) el.value = val || '';
+      };
+
+      setVal('setting-analytics-webhook', d.analytics_webhook_url);
+      setVal('setting-top-pins-webhook', d.top_pins_webhook_url);
+      setVal('setting-analytics-time', d.analytics_sync_time || '04:00');
+      setVal('setting-top-pins-time', d.top_pins_sync_time || '04:30');
+
+      // Update Channel A & B status badges
+      const updateStatusBadge = (badgeId, status) => {
+        const el = document.getElementById(badgeId);
         if (!el) return;
         if (status === 'synced') {
           el.className = 'rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400';
@@ -674,18 +716,35 @@ export const prerender = false;
         }
       };
 
-      updateBadge('channel-a-status-badge', d.analytics_schedule_status);
-      updateBadge('channel-b-status-badge', d.top_pins_schedule_status);
-      updateBadge('drawer-channel-a-badge', d.analytics_schedule_status);
-      updateBadge('drawer-channel-b-badge', d.top_pins_schedule_status);
+      updateStatusBadge('drawer-channel-a-badge', d.analytics_schedule_status);
+      updateStatusBadge('drawer-channel-b-badge', d.top_pins_schedule_status);
+
+      // Disable or enable Test Ping, Run Now, and Sync FastCron buttons based on whether URL exists
+      const hasUrlA = Boolean(d.analytics_webhook_url);
+      const hasUrlB = Boolean(d.top_pins_webhook_url);
+
+      document.getElementById('ping-analytics-btn').disabled = !hasUrlA;
+      document.getElementById('run-analytics-btn').disabled = !hasUrlA;
+      document.getElementById('sync-fastcron-a-btn').disabled = !hasUrlA;
+
+      document.getElementById('ping-top-pins-btn').disabled = !hasUrlB;
+      document.getElementById('run-top-pins-btn').disabled = !hasUrlB;
+      document.getElementById('sync-fastcron-b-btn').disabled = !hasUrlB;
+
+      document.getElementById('conn-settings-status-msg').classList.add('hidden');
+      drawer.classList.remove('hidden');
     } catch (e) {
-      console.error('Error loading settings:', e);
+      alert('Error fetching connection settings: ' + e.message);
     }
   }
 
   // Load KPI Overview and Top Pins Data
   async function loadAnalyticsData() {
-    if (!currentConnectionId) return;
+    if (!currentConnectionId) {
+      renderOverviewEmpty();
+      renderTopPinsEmpty('No connection selected or available.');
+      return;
+    }
     await Promise.all([loadOverview(), loadTopPins()]);
   }
 
@@ -818,7 +877,24 @@ export const prerender = false;
     }
   }
 
-  // Setup Event Handlers
+  function renderOverviewEmpty() {
+    ['kpi-impressions', 'kpi-engagements', 'kpi-clicks', 'kpi-conversions'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) {
+        const valEl = el.querySelector('.text-2xl');
+        if (valEl) valEl.textContent = '---';
+      }
+    });
+  }
+
+  function renderTopPinsEmpty(msg) {
+    const tbody = document.getElementById('top-pins-tbody');
+    if (tbody) {
+      tbody.innerHTML = `<tr><td colspan="8" class="py-12 text-center text-muted-foreground">${msg}</td></tr>`;
+    }
+  }
+
+  // Setup Event Listeners
   function setupEventListeners() {
     // Account select change
     const accSelect = document.getElementById('analytics-account-select');
@@ -867,24 +943,18 @@ export const prerender = false;
       });
     }
 
-    // Settings Drawer Open / Close
-    const openDrawerBtn = document.getElementById('open-settings-drawer-btn');
+    // Close Settings Drawer
     const closeDrawerBtn = document.getElementById('close-settings-drawer-btn');
     const drawerBackdrop = document.getElementById('settings-drawer-backdrop');
     const drawer = document.getElementById('settings-drawer');
 
     const toggleDrawer = (open) => {
       if (drawer) {
-        if (open) {
-          drawer.classList.remove('hidden');
-          loadSettings();
-        } else {
-          drawer.classList.add('hidden');
-        }
+        if (open) drawer.classList.remove('hidden');
+        else drawer.classList.add('hidden');
       }
     };
 
-    if (openDrawerBtn) openDrawerBtn.addEventListener('click', () => toggleDrawer(true));
     if (closeDrawerBtn) closeDrawerBtn.addEventListener('click', () => toggleDrawer(false));
     if (drawerBackdrop) drawerBackdrop.addEventListener('click', () => toggleDrawer(false));
 
@@ -893,17 +963,18 @@ export const prerender = false;
       const btn = document.getElementById(btnId);
       if (btn) {
         btn.addEventListener('click', async () => {
+          const connId = document.getElementById('drawer-connection-id').value;
           btn.textContent = 'Syncing...';
           btn.disabled = true;
           try {
             const res = await fetch('/api/analytics/schedule/sync', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ channel }),
+              body: JSON.stringify({ connection_id: connId, channel }),
             });
             const json = await res.json();
             alert(json.success ? json.message : `FastCron Sync Failed: ${json.error}`);
-            loadSettings();
+            await openConnectionSettingsDrawer(connId);
           } catch (e) {
             alert('Failed to contact FastCron schedule endpoint: ' + e.message);
           } finally {
@@ -921,15 +992,16 @@ export const prerender = false;
       const btn = document.getElementById(btnId);
       if (btn) {
         btn.addEventListener('click', async () => {
+          const connId = document.getElementById('drawer-connection-id').value;
           btn.textContent = 'Pinging...';
           try {
             const res = await fetch('/api/analytics/trigger-sync', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ channel, is_ping: true }),
+              body: JSON.stringify({ connection_id: connId, channel, mode: 'ping' }),
             });
             const json = await res.json();
-            alert(json.success ? `Ping Succeeded (HTTP ${json.status || 200})` : `Ping Failed: ${json.error}`);
+            alert(json.success ? `Ping Succeeded (HTTP ${json.webhookResponseStatus || 200})` : `Ping Failed: ${json.error}`);
           } catch (e) {
             alert('Ping request error: ' + e.message);
           } finally {
@@ -945,12 +1017,13 @@ export const prerender = false;
       const btn = document.getElementById(btnId);
       if (btn) {
         btn.addEventListener('click', async () => {
+          const connId = document.getElementById('drawer-connection-id').value;
           btn.textContent = 'Triggering...';
           try {
             const res = await fetch('/api/analytics/trigger-sync', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ channel, connection_id: currentConnectionId }),
+              body: JSON.stringify({ connection_id: connId, channel, mode: 'sync' }),
             });
             const json = await res.json();
             alert(json.success ? json.message : `Trigger Failed: ${json.error}`);
@@ -965,13 +1038,15 @@ export const prerender = false;
     setupRunBtn('run-analytics-btn', 'analytics');
     setupRunBtn('run-top-pins-btn', 'top_pins');
 
-    // Save Settings Form
-    const settingsForm = document.getElementById('settings-form');
-    if (settingsForm) {
-      settingsForm.addEventListener('submit', async (e) => {
+    // Save Per-Connection Pipeline Settings Form
+    const connSettingsForm = document.getElementById('connection-settings-form');
+    if (connSettingsForm) {
+      connSettingsForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const submitBtn = document.getElementById('save-settings-btn');
-        const statusMsg = document.getElementById('settings-status-msg');
+        const connId = document.getElementById('drawer-connection-id').value;
+        const submitBtn = document.getElementById('save-conn-settings-btn');
+        const statusMsg = document.getElementById('conn-settings-status-msg');
+
         if (submitBtn) {
           submitBtn.textContent = 'Saving...';
           submitBtn.disabled = true;
@@ -982,8 +1057,57 @@ export const prerender = false;
           top_pins_webhook_url: document.getElementById('setting-top-pins-webhook').value,
           analytics_sync_time: document.getElementById('setting-analytics-time').value,
           top_pins_sync_time: document.getElementById('setting-top-pins-time').value,
-          timezone: document.getElementById('setting-timezone').value,
+        };
+
+        try {
+          const res = await fetch(`/api/analytics/connections/${connId}/settings`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          const json = await res.json();
+          if (statusMsg) {
+            statusMsg.classList.remove('hidden');
+            if (json.success) {
+              statusMsg.className = 'rounded-xl bg-emerald-500/10 p-3 text-xs font-semibold text-emerald-600 dark:text-emerald-400';
+              statusMsg.textContent = 'Pipeline settings saved successfully!';
+              await openConnectionSettingsDrawer(connId);
+            } else {
+              statusMsg.className = 'rounded-xl bg-destructive/10 p-3 text-xs font-semibold text-destructive';
+              statusMsg.textContent = `Error: ${json.error}`;
+            }
+          }
+        } catch (err) {
+          if (statusMsg) {
+            statusMsg.classList.remove('hidden');
+            statusMsg.className = 'rounded-xl bg-destructive/10 p-3 text-xs font-semibold text-destructive';
+            statusMsg.textContent = 'Network error while saving settings.';
+          }
+        } finally {
+          if (submitBtn) {
+            submitBtn.textContent = 'Save Pipeline Settings';
+            submitBtn.disabled = false;
+          }
+        }
+      });
+    }
+
+    // Save Workspace Global Settings Form
+    const wsSettingsForm = document.getElementById('workspace-settings-form');
+    if (wsSettingsForm) {
+      wsSettingsForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const submitBtn = document.getElementById('save-ws-settings-btn');
+        const statusMsg = document.getElementById('ws-settings-status-msg');
+
+        if (submitBtn) {
+          submitBtn.textContent = 'Saving...';
+          submitBtn.disabled = true;
+        }
+
+        const payload = {
           fastcron_token: document.getElementById('setting-fastcron-token').value,
+          timezone: document.getElementById('setting-timezone').value,
           auto_backfill_on_connect: document.getElementById('setting-auto-backfill').checked,
         };
 
@@ -998,8 +1122,8 @@ export const prerender = false;
             statusMsg.classList.remove('hidden');
             if (json.success) {
               statusMsg.className = 'rounded-xl bg-emerald-500/10 p-3 text-xs font-semibold text-emerald-600 dark:text-emerald-400';
-              statusMsg.textContent = 'Settings saved successfully!';
-              await loadSettings();
+              statusMsg.textContent = 'Workspace settings saved!';
+              await loadWorkspaceSettings();
             } else {
               statusMsg.className = 'rounded-xl bg-destructive/10 p-3 text-xs font-semibold text-destructive';
               statusMsg.textContent = `Error: ${json.error}`;
@@ -1013,7 +1137,7 @@ export const prerender = false;
           }
         } finally {
           if (submitBtn) {
-            submitBtn.textContent = 'Save Settings';
+            submitBtn.textContent = 'Save Global Settings';
             submitBtn.disabled = false;
           }
         }
@@ -1034,7 +1158,7 @@ export const prerender = false;
           connModal.classList.add('flex');
           document.getElementById('connection-modal-title').textContent = isEdit ? 'Edit Pinterest Connection' : 'Add Pinterest Connection';
           document.getElementById('conn-edit-id').value = isEdit ? data.id : '';
-          document.getElementById('conn-account-name').value = isEdit ? data.account_name : '';
+          document.getElementById('conn-display-name').value = isEdit ? (data.display_name || data.account_name) : '';
           document.getElementById('conn-analytics-enabled').checked = isEdit ? data.analytics_enabled : true;
           document.getElementById('connection-modal-error').classList.add('hidden');
         } else {
@@ -1053,7 +1177,7 @@ export const prerender = false;
       connForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const editId = document.getElementById('conn-edit-id').value;
-        const accountName = document.getElementById('conn-account-name').value;
+        const displayName = document.getElementById('conn-display-name').value;
         const analyticsEnabled = document.getElementById('conn-analytics-enabled').checked;
         const errorDiv = document.getElementById('connection-modal-error');
 
@@ -1065,7 +1189,7 @@ export const prerender = false;
           const res = await fetch(url, {
             method,
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ account_name: accountName, analytics_enabled: analyticsEnabled }),
+            body: JSON.stringify({ display_name: displayName, analytics_enabled: analyticsEnabled }),
           });
           const json = await res.json();
           if (json.success) {
@@ -1083,7 +1207,7 @@ export const prerender = false;
       });
     }
 
-    // Connection Table Action Delegation (Sync Now, Edit, Delete)
+    // Connection Table Action Delegation (Settings, Edit, Delete)
     const connTbody = document.getElementById('connections-tbody');
     if (connTbody) {
       connTbody.addEventListener('click', (e) => {
@@ -1091,10 +1215,12 @@ export const prerender = false;
         if (!btn) return;
         const action = btn.getAttribute('data-action');
         const id = btn.getAttribute('data-id');
-        const acc = activeConnectionsList.find((a) => a.id === id);
+        const conn = activeConnectionsList.find((a) => a.id === id);
 
-        if (action === 'edit-conn' && acc) {
-          toggleConnModal(true, true, acc);
+        if (action === 'settings-conn' && id) {
+          openConnectionSettingsDrawer(id);
+        } else if (action === 'edit-conn' && conn) {
+          toggleConnModal(true, true, conn);
         } else if (action === 'delete-conn') {
           const delModal = document.getElementById('delete-connection-modal');
           document.getElementById('delete-conn-id').value = id;
@@ -1102,18 +1228,6 @@ export const prerender = false;
             delModal.classList.remove('hidden');
             delModal.classList.add('flex');
           }
-        } else if (action === 'sync-now') {
-          btn.textContent = 'Syncing...';
-          fetch('/api/analytics/trigger-sync', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ channel: 'analytics', connection_id: id }),
-          })
-            .then((r) => r.json())
-            .then((j) => alert(j.success ? j.message : `Sync failed: ${j.error}`))
-            .finally(() => {
-              btn.textContent = 'Sync Now';
-            });
         }
       });
     }

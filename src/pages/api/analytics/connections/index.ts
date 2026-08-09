@@ -4,9 +4,10 @@ import type { APIRoute } from 'astro';
 import { assertWorkspaceAccess } from '../../../../server/auth/workspace-guard';
 import { analyticsDb } from '../../../../server/db/analytics';
 
-export const GET: APIRoute = async ({ request, locals }) => {
+export const GET: APIRoute = async ({ locals }) => {
   const user = locals.user;
   const schedulingClient = locals.supabase;
+  const workspaceId = locals.activeWorkspaceId;
 
   if (!user || !schedulingClient) {
     return new Response(
@@ -18,12 +19,9 @@ export const GET: APIRoute = async ({ request, locals }) => {
     );
   }
 
-  const url = new URL(request.url);
-  const workspaceId = url.searchParams.get('workspace_id') || locals.activeWorkspaceId;
-
   if (!workspaceId) {
     return new Response(
-      JSON.stringify({ error: 'workspace_id query parameter is required.' }),
+      JSON.stringify({ error: 'Active workspace not found in session.' }),
       {
         status: 400,
         headers: { 'Content-Type': 'application/json' },
@@ -40,10 +38,11 @@ export const GET: APIRoute = async ({ request, locals }) => {
       headers: { 'Content-Type': 'application/json' },
     });
   } catch (err: any) {
+    const isAuth = err.message?.includes('Forbidden') || err.message?.includes('Unauthorized');
     return new Response(
       JSON.stringify({ success: false, error: err.message || 'Failed to list connections.' }),
       {
-        status: 500,
+        status: isAuth ? 403 : 500,
         headers: { 'Content-Type': 'application/json' },
       }
     );
@@ -53,12 +52,23 @@ export const GET: APIRoute = async ({ request, locals }) => {
 export const POST: APIRoute = async ({ request, locals }) => {
   const user = locals.user;
   const schedulingClient = locals.supabase;
+  const workspaceId = locals.activeWorkspaceId;
 
   if (!user || !schedulingClient) {
     return new Response(
       JSON.stringify({ error: 'Unauthorized: authentication required.' }),
       {
         status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
+  }
+
+  if (!workspaceId) {
+    return new Response(
+      JSON.stringify({ success: false, error: 'Active workspace not found in session.' }),
+      {
+        status: 400,
         headers: { 'Content-Type': 'application/json' },
       }
     );
@@ -78,13 +88,14 @@ export const POST: APIRoute = async ({ request, locals }) => {
     );
   }
 
-  const workspaceId = body.workspace_id || locals.activeWorkspaceId;
-  const accountName = body.account_name;
-  const analyticsEnabled = body.analytics_enabled !== undefined ? Boolean(body.analytics_enabled) : true;
+  // Unified field: display_name (with fallback for compatibility)
+  const displayName = body.display_name || body.account_name;
+  const analyticsEnabled =
+    body.analytics_enabled !== undefined ? Boolean(body.analytics_enabled) : true;
 
-  if (!workspaceId || !accountName) {
+  if (!displayName || typeof displayName !== 'string' || displayName.trim().length === 0) {
     return new Response(
-      JSON.stringify({ success: false, error: 'workspace_id and account_name are required.' }),
+      JSON.stringify({ success: false, error: 'display_name is required.' }),
       {
         status: 400,
         headers: { 'Content-Type': 'application/json' },
@@ -96,7 +107,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const access = await assertWorkspaceAccess(schedulingClient, workspaceId, user.id);
     if (!access.isAdmin && !access.isOwner) {
       return new Response(
-        JSON.stringify({ success: false, error: 'Forbidden: Admin or Owner role required to add connections.' }),
+        JSON.stringify({
+          success: false,
+          error: 'Forbidden: Admin or Owner role required to add connections.',
+        }),
         {
           status: 403,
           headers: { 'Content-Type': 'application/json' },
@@ -104,17 +118,18 @@ export const POST: APIRoute = async ({ request, locals }) => {
       );
     }
 
-    const account = await analyticsDb.createWorkspaceConnection(
+    const connection = await analyticsDb.createWorkspaceConnection(
       workspaceId,
-      accountName,
+      displayName,
       analyticsEnabled
     );
 
     return new Response(
       JSON.stringify({
         success: true,
-        connection_id: account.id,
-        account,
+        connection_id: connection.id,
+        account: connection, // for backward compatibility
+        connection,
         message: 'Pinterest connection created successfully.',
       }),
       {

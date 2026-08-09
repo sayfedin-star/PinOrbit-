@@ -6,7 +6,8 @@ import { dbClients } from '../db/clients';
 vi.mock('../db/analytics', () => ({
   analyticsDb: {
     getWorkspaceAnalyticsSettings: vi.fn(),
-    upsertWorkspaceAnalyticsSettings: vi.fn(),
+    getWorkspaceConnection: vi.fn(),
+    updateWorkspaceConnection: vi.fn(),
   },
 }));
 
@@ -18,8 +19,9 @@ vi.mock('../db/clients', () => ({
   },
 }));
 
-describe('FastCron Schedule Synchronization Suite', () => {
+describe('FastCron Per-Connection Schedule Synchronization Suite (V16)', () => {
   const workspaceId = '00000000-0000-0000-0000-000000000001';
+  const connectionId = 'a1b2c3d4-e5f6-7890-1234-56789abcdef0';
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -41,63 +43,89 @@ describe('FastCron Schedule Synchronization Suite', () => {
     expect(resolvedNone).toBeNull();
   });
 
-  it('handles FastCron API creation (cron_add) vs edit (cron_edit)', async () => {
+  it('handles FastCron API creation (cron_add) vs edit (cron_edit) for connection', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((async (url: string) => {
       return {
         ok: true,
-        json: async () => ({ status: 'OK', id: 'fc_job_9988' }),
+        json: async () => ({ status: 'OK', id: 9988 }),
       } as any;
     }) as any);
 
     // Initial sync (no existing job id -> cron_add)
-    (analyticsDb.getWorkspaceAnalyticsSettings as any).mockResolvedValue({
+    (analyticsDb.getWorkspaceConnection as any).mockResolvedValue({
+      id: connectionId,
       workspace_id: workspaceId,
+      display_name: 'hymumdotcom',
       analytics_webhook_url: 'https://hook.make.com/pipeline-a',
       analytics_sync_time: '04:00',
-      fastcron_token: 'valid_fastcron_token_1234',
       analytics_fastcron_job_id: null,
     });
 
-    const addResult = await fastcronService.syncScheduleWithFastCron(workspaceId, 'analytics');
+    (analyticsDb.getWorkspaceAnalyticsSettings as any).mockResolvedValue({
+      workspace_id: workspaceId,
+      fastcron_token: 'valid_fastcron_token_1234',
+    });
+
+    const addResult = await fastcronService.syncScheduleWithFastCron(
+      workspaceId,
+      connectionId,
+      'analytics'
+    );
     expect(addResult.success).toBe(true);
     expect(addResult.schedule_status).toBe('synced');
-    expect(addResult.fastcron_job_id).toBe('fc_job_9988');
+    expect(addResult.fastcron_job_id).toBe(9988);
     expect(fetchSpy.mock.calls[0][0].toString()).toContain('/cron_add');
 
     // Subsequent sync with existing job id -> cron_edit
-    (analyticsDb.getWorkspaceAnalyticsSettings as any).mockResolvedValue({
+    (analyticsDb.getWorkspaceConnection as any).mockResolvedValue({
+      id: connectionId,
       workspace_id: workspaceId,
+      display_name: 'hymumdotcom',
       analytics_webhook_url: 'https://hook.make.com/pipeline-a',
       analytics_sync_time: '05:00',
-      fastcron_token: 'valid_fastcron_token_1234',
-      analytics_fastcron_job_id: 'fc_job_9988',
+      analytics_fastcron_job_id: 9988,
     });
 
-    const editResult = await fastcronService.syncScheduleWithFastCron(workspaceId, 'analytics');
+    const editResult = await fastcronService.syncScheduleWithFastCron(
+      workspaceId,
+      connectionId,
+      'analytics'
+    );
     expect(editResult.success).toBe(true);
     expect(fetchSpy.mock.calls[1][0].toString()).toContain('/cron_edit');
-    expect(fetchSpy.mock.calls[1][0].toString()).toContain('id=fc_job_9988');
+    expect(fetchSpy.mock.calls[1][0].toString()).toContain('id=9988');
 
     fetchSpy.mockRestore();
   });
 
   it('sets status to error without crashing if token is missing or API fails', async () => {
-    (analyticsDb.getWorkspaceAnalyticsSettings as any).mockResolvedValue({
+    (analyticsDb.getWorkspaceConnection as any).mockResolvedValue({
+      id: connectionId,
       workspace_id: workspaceId,
+      display_name: 'hymumdotcom',
       analytics_webhook_url: 'https://hook.make.com/pipeline-a',
       analytics_sync_time: '04:00',
-      fastcron_token: null,
       analytics_fastcron_job_id: null,
+    });
+
+    (analyticsDb.getWorkspaceAnalyticsSettings as any).mockResolvedValue({
+      workspace_id: workspaceId,
+      fastcron_token: null,
     });
     (dbClients.getConfig as any).mockReturnValue({ FASTCRON_API_TOKEN: '' });
 
-    const result = await fastcronService.syncScheduleWithFastCron(workspaceId, 'analytics');
+    const result = await fastcronService.syncScheduleWithFastCron(
+      workspaceId,
+      connectionId,
+      'analytics'
+    );
     expect(result.success).toBe(false);
     expect(result.schedule_status).toBe('error');
     expect(result.error).toContain('FastCron API token not configured');
 
-    expect(analyticsDb.upsertWorkspaceAnalyticsSettings).toHaveBeenCalledWith(
+    expect(analyticsDb.updateWorkspaceConnection).toHaveBeenCalledWith(
       workspaceId,
+      connectionId,
       expect.objectContaining({
         analytics_schedule_status: 'error',
       })

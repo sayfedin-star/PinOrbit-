@@ -71,7 +71,7 @@ export const fastcronService = {
   },
 
   /**
-   * Resolves the active FastCron token (DB token → env FASTCRON_API_TOKEN → null).
+   * Resolves the active FastCron token (Workspace DB token → env FASTCRON_API_TOKEN → null).
    */
   resolveFastCronToken(dbToken?: string | null): string | null {
     if (dbToken && dbToken.trim().length >= 16) {
@@ -85,40 +85,44 @@ export const fastcronService = {
   },
 
   /**
-   * Synchronizes schedule for Channel A or B with FastCron API.
+   * Synchronizes schedule for a specific connection & channel with FastCron API.
    */
   async syncScheduleWithFastCron(
     workspaceId: string,
+    connectionId: string,
     channel: 'analytics' | 'top_pins'
   ): Promise<ScheduleSyncResponse> {
-    const settings = await analyticsDb.getWorkspaceAnalyticsSettings(workspaceId);
-    if (!settings) {
+    const connection = await analyticsDb.getWorkspaceConnection(workspaceId, connectionId);
+    if (!connection) {
       return {
         success: false,
+        connection_id: connectionId,
         channel,
         schedule_status: 'error',
-        error: 'Workspace analytics settings not found.',
+        error: 'Pinterest connection not found in this workspace.',
       };
     }
 
+    const settings = await analyticsDb.getWorkspaceAnalyticsSettings(workspaceId);
     const isAnalytics = channel === 'analytics';
     const webhookUrl = isAnalytics
-      ? settings.analytics_webhook_url
-      : settings.top_pins_webhook_url;
-    const syncTime = isAnalytics ? settings.analytics_sync_time : settings.top_pins_sync_time;
+      ? connection.analytics_webhook_url
+      : connection.top_pins_webhook_url;
+    const syncTime = isAnalytics ? connection.analytics_sync_time : connection.top_pins_sync_time;
     const existingJobId = isAnalytics
-      ? settings.analytics_fastcron_job_id
-      : settings.top_pins_fastcron_job_id;
+      ? connection.analytics_fastcron_job_id
+      : connection.top_pins_fastcron_job_id;
 
     // Validate Webhook URL
     const urlValidation = this.validateWebhookUrl(webhookUrl);
     if (!urlValidation.valid) {
       const statusField = isAnalytics ? 'analytics_schedule_status' : 'top_pins_schedule_status';
-      await analyticsDb.upsertWorkspaceAnalyticsSettings(workspaceId, {
+      await analyticsDb.updateWorkspaceConnection(workspaceId, connectionId, {
         [statusField]: 'error',
       });
       return {
         success: false,
+        connection_id: connectionId,
         channel,
         schedule_status: 'error',
         error: urlValidation.error || 'Invalid webhook URL for this channel.',
@@ -129,11 +133,12 @@ export const fastcronService = {
     const cronValidation = this.parseTimeToCron(syncTime);
     if (!cronValidation.valid || !cronValidation.cron) {
       const statusField = isAnalytics ? 'analytics_schedule_status' : 'top_pins_schedule_status';
-      await analyticsDb.upsertWorkspaceAnalyticsSettings(workspaceId, {
+      await analyticsDb.updateWorkspaceConnection(workspaceId, connectionId, {
         [statusField]: 'error',
       });
       return {
         success: false,
+        connection_id: connectionId,
         channel,
         schedule_status: 'error',
         error: cronValidation.error || 'Invalid sync time format.',
@@ -141,14 +146,15 @@ export const fastcronService = {
     }
 
     // Resolve Token
-    const token = this.resolveFastCronToken(settings.fastcron_token);
+    const token = this.resolveFastCronToken(settings?.fastcron_token);
     if (!token) {
       const statusField = isAnalytics ? 'analytics_schedule_status' : 'top_pins_schedule_status';
-      await analyticsDb.upsertWorkspaceAnalyticsSettings(workspaceId, {
+      await analyticsDb.updateWorkspaceConnection(workspaceId, connectionId, {
         [statusField]: 'error',
       });
       return {
         success: false,
+        connection_id: connectionId,
         channel,
         schedule_status: 'error',
         error: 'FastCron API token not configured. Please provide a valid token in settings.',
@@ -156,18 +162,11 @@ export const fastcronService = {
     }
 
     // Prepare FastCron payload
-    const postData = isAnalytics
-      ? JSON.stringify({
-          job_type: 'daily_sync',
-          channel: 'account_analytics',
-          workspace_id: workspaceId,
-        })
-      : JSON.stringify({
-          job_type: 'daily_sync',
-          channel: 'top_pins',
-          workspace_id: workspaceId,
-          sort_modes: ['IMPRESSION', 'OUTBOUND_CLICK', 'SAVE', 'ENGAGEMENT', 'PIN_CLICK'],
-        });
+    const postData = JSON.stringify({
+      job_type: 'daily_sync',
+      channel: isAnalytics ? 'account_analytics' : 'top_pins',
+      connection_id: connectionId,
+    });
 
     const isEdit = Boolean(existingJobId);
     const endpoint = isEdit
@@ -177,14 +176,14 @@ export const fastcronService = {
     const params = new URLSearchParams();
     params.append('token', token);
     if (isEdit && existingJobId) {
-      params.append('id', existingJobId);
+      params.append('id', String(existingJobId));
     }
     params.append(
       'name',
-      `PinOrbit ${isAnalytics ? 'Account Analytics' : 'Top Pins'} — ${workspaceId.substring(0, 8)}`
+      `PinOrbit ${isAnalytics ? 'analytics' : 'top-pins'} — ${workspaceId.substring(0, 8)} — ${connection.display_name}`
     );
     params.append('expression', cronValidation.cron);
-    params.append('timezone', settings.timezone || 'UTC');
+    params.append('timezone', settings?.timezone || 'UTC');
     params.append('url', webhookUrl!);
     params.append('http_method', 'POST');
     params.append('http_headers', 'Content-Type: application/json');
@@ -199,20 +198,23 @@ export const fastcronService = {
       const data = await res.json().catch(() => ({}));
 
       if (data.status === 'OK' || data.status === 'success' || data.id || data?.data?.id) {
-        const jobId = String(data.id || data?.data?.id || existingJobId);
+        const jobId = parseInt(String(data.id || data?.data?.id || existingJobId), 10);
         const updates: any = {};
         if (isAnalytics) {
           updates.analytics_fastcron_job_id = jobId;
           updates.analytics_schedule_status = 'synced';
+          updates.analytics_cron_expression = cronValidation.cron;
         } else {
           updates.top_pins_fastcron_job_id = jobId;
           updates.top_pins_schedule_status = 'synced';
+          updates.top_pins_cron_expression = cronValidation.cron;
         }
 
-        await analyticsDb.upsertWorkspaceAnalyticsSettings(workspaceId, updates);
+        await analyticsDb.updateWorkspaceConnection(workspaceId, connectionId, updates);
 
         return {
           success: true,
+          connection_id: connectionId,
           channel,
           schedule_status: 'synced',
           fastcron_job_id: jobId,
@@ -226,10 +228,11 @@ export const fastcronService = {
         } else {
           updates.top_pins_schedule_status = 'error';
         }
-        await analyticsDb.upsertWorkspaceAnalyticsSettings(workspaceId, updates);
+        await analyticsDb.updateWorkspaceConnection(workspaceId, connectionId, updates);
 
         return {
           success: false,
+          connection_id: connectionId,
           channel,
           schedule_status: 'error',
           error: errorMsg,
@@ -242,10 +245,11 @@ export const fastcronService = {
       } else {
         updates.top_pins_schedule_status = 'error';
       }
-      await analyticsDb.upsertWorkspaceAnalyticsSettings(workspaceId, updates);
+      await analyticsDb.updateWorkspaceConnection(workspaceId, connectionId, updates);
 
       return {
         success: false,
+        connection_id: connectionId,
         channel,
         schedule_status: 'error',
         error: `Failed to contact FastCron API: ${err.message}`,
@@ -254,31 +258,99 @@ export const fastcronService = {
   },
 
   /**
-   * Manually triggers a 7-day ingestion run by posting to the Make.com webhook.
+   * Deletes a FastCron job via cron_delete API (best effort).
+   */
+  async deleteFastCronJob(
+    workspaceId: string,
+    jobId?: number | null
+  ): Promise<boolean> {
+    if (!jobId) return true;
+    const settings = await analyticsDb.getWorkspaceAnalyticsSettings(workspaceId);
+    const token = this.resolveFastCronToken(settings?.fastcron_token);
+    if (!token) return false;
+
+    try {
+      const res = await fetch(
+        `https://api.fastcron.com/v1/cron_delete?token=${encodeURIComponent(token)}&id=${jobId}`,
+        { method: 'GET', signal: AbortSignal.timeout(6000) }
+      );
+      return res.ok;
+    } catch (e) {
+      console.warn('[FastCron] Failed to delete cron job id:', jobId, e);
+      return false;
+    }
+  },
+
+  /**
+   * Dispatches manual sync or test ping to a connection's Make.com webhook.
    */
   async triggerManualSync(
     workspaceId: string,
+    connectionId: string,
     channel: 'analytics' | 'top_pins',
-    connectionId?: string
+    mode: 'ping' | 'sync' = 'sync'
   ): Promise<TriggerSyncResponse> {
-    const settings = await analyticsDb.getWorkspaceAnalyticsSettings(workspaceId);
+    const connection = await analyticsDb.getWorkspaceConnection(workspaceId, connectionId);
+    if (!connection) {
+      return {
+        success: false,
+        connection_id: connectionId,
+        channel,
+        mode,
+        error: 'Connection not found in this workspace.',
+      };
+    }
+
     const isAnalytics = channel === 'analytics';
     const webhookUrl = isAnalytics
-      ? settings?.analytics_webhook_url
-      : settings?.top_pins_webhook_url;
+      ? connection.analytics_webhook_url
+      : connection.top_pins_webhook_url;
 
     const urlValidation = this.validateWebhookUrl(webhookUrl);
     if (!urlValidation.valid) {
       return {
         success: false,
+        connection_id: connectionId,
         channel,
-        startDate: '',
-        endDate: '',
+        mode,
         error: urlValidation.error || 'Webhook URL not configured or invalid.',
       };
     }
 
-    // Concrete 7-day rolling window
+    // If Test Ping mode
+    if (mode === 'ping') {
+      try {
+        const res = await fetch(webhookUrl!, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            job_type: 'ping',
+            channel: isAnalytics ? 'account_analytics' : 'top_pins',
+            connection_id: connectionId,
+          }),
+          signal: AbortSignal.timeout(8000),
+        });
+
+        return {
+          success: res.ok,
+          connection_id: connectionId,
+          channel,
+          mode: 'ping',
+          webhookResponseStatus: res.status,
+          message: res.ok ? 'Ping successful.' : `Webhook returned HTTP ${res.status}`,
+        };
+      } catch (err: any) {
+        return {
+          success: false,
+          connection_id: connectionId,
+          channel,
+          mode: 'ping',
+          error: `Ping failed: ${err.message}`,
+        };
+      }
+    }
+
+    // Concrete 7-day rolling window for manual sync
     const now = new Date();
     const endDateObj = new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000); // yesterday
     const startDateObj = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); // 7 days ago
@@ -287,16 +359,14 @@ export const fastcronService = {
 
     const payload = isAnalytics
       ? {
-          workspace_id: workspaceId,
-          connection_id: connectionId || 'all',
+          connection_id: connectionId,
           start_date: startDate,
           end_date: endDate,
           job_type: 'manual_sync',
           channel: 'account_analytics',
         }
       : {
-          workspace_id: workspaceId,
-          connection_id: connectionId || 'all',
+          connection_id: connectionId,
           start_date: startDate,
           end_date: endDate,
           sort_modes: ['IMPRESSION', 'OUTBOUND_CLICK', 'SAVE', 'ENGAGEMENT', 'PIN_CLICK'],
@@ -312,23 +382,23 @@ export const fastcronService = {
         signal: AbortSignal.timeout(8000),
       });
 
-      // Record manual trigger session in Project 1
-      if (connectionId && connectionId !== 'all') {
-        await analyticsDb.recordOperationalImportSession(workspaceId, {
-          account_id: connectionId,
-          source_type: isAnalytics ? 'manual_analytics' : 'manual_top_pins',
-          source_label: 'manual_sync',
-          total_rows: 0,
-          valid_rows: 0,
-          invalid_rows: 0,
-          imported_rows: 0,
-          status: 'pending',
-        });
-      }
+      // Record manual session in Project 1 operational log
+      await analyticsDb.recordOperationalImportSession(workspaceId, {
+        account_id: connectionId,
+        source_type: isAnalytics ? 'manual_analytics' : 'manual_top_pins',
+        source_label: 'manual_sync',
+        total_rows: 0,
+        valid_rows: 0,
+        invalid_rows: 0,
+        imported_rows: 0,
+        status: 'pending',
+      });
 
       return {
         success: res.ok,
+        connection_id: connectionId,
         channel,
+        mode: 'sync',
         startDate,
         endDate,
         webhookResponseStatus: res.status,
@@ -339,51 +409,13 @@ export const fastcronService = {
     } catch (err: any) {
       return {
         success: false,
+        connection_id: connectionId,
         channel,
+        mode: 'sync',
         startDate,
         endDate,
         error: `Webhook dispatch failed: ${err.message}`,
       };
-    }
-  },
-
-  /**
-   * Dispatches test ping to Make.com webhook.
-   */
-  async triggerTestPing(
-    workspaceId: string,
-    channel: 'analytics' | 'top_pins'
-  ): Promise<{ success: boolean; status?: number; error?: string }> {
-    const settings = await analyticsDb.getWorkspaceAnalyticsSettings(workspaceId);
-    const webhookUrl =
-      channel === 'analytics'
-        ? settings?.analytics_webhook_url
-        : settings?.top_pins_webhook_url;
-
-    const urlValidation = this.validateWebhookUrl(webhookUrl);
-    if (!urlValidation.valid) {
-      return { success: false, error: urlValidation.error };
-    }
-
-    try {
-      const res = await fetch(webhookUrl!, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          job_type: 'ping',
-          channel: channel === 'analytics' ? 'account_analytics' : 'top_pins',
-          workspace_id: workspaceId,
-        }),
-        signal: AbortSignal.timeout(8000),
-      });
-
-      return {
-        success: res.ok,
-        status: res.status,
-        error: res.ok ? undefined : `Make.com webhook returned HTTP ${res.status}`,
-      };
-    } catch (err: any) {
-      return { success: false, error: err.message };
     }
   },
 };

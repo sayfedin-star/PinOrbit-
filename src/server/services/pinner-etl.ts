@@ -142,17 +142,19 @@ export const pinnerETL = {
     errorDetails?: any
   ): Promise<void> {
     try {
-      const schedulingAdmin = dbClients.getSchedulingAdmin();
-      // Deactivate account in Project 1
-      await schedulingAdmin
-        .from('accounts')
+      // 1. Deactivate in Project 3 analytics_connections
+      const analyticsClient = dbClients.getAnalytics();
+      await analyticsClient
+        .from('analytics_connections')
         .update({
-          is_active: false,
+          analytics_enabled: false,
+          updated_at: new Date().toISOString(),
         })
         .eq('id', connectionId)
         .eq('workspace_id', workspaceId);
 
-      // Log revocation event in Project 1 logs
+      // 2. Log revocation event in Project 1 operational logs
+      const schedulingAdmin = dbClients.getSchedulingAdmin();
       await schedulingAdmin.from('logs').insert({
         account_id: connectionId,
         status: 'error',
@@ -174,7 +176,6 @@ export const pinnerETL = {
     runtimeKvNamespace?: any
   ): Promise<ETLProcessingResult> {
     const {
-      workspace_id: workspaceId,
       connection_id: connectionId,
       request_context: requestContext,
       success,
@@ -182,10 +183,48 @@ export const pinnerETL = {
       error_details: errorDetails,
     } = payload;
 
-    if (!workspaceId || !connectionId) {
-      throw new Error('Tenant Boundary Error: workspace_id and connection_id are required in ingestion payload.');
+    if (!connectionId) {
+      return {
+        success: false,
+        persisted: false,
+        workspaceId: payload.workspace_id || 'unknown',
+        connectionId: 'unknown',
+        dailyRowsIngested: 0,
+        summarySaved: false,
+        topPinsIngested: 0,
+        workspaceRollupsUpdated: 0,
+        revoked: false,
+        snitchAlerted: false,
+        error: 'Validation Error: connection_id is required in ingestion payload.',
+      };
     }
 
+    // Validate connection_id against Project 3 analytics_connections
+    const analyticsClient = dbClients.getAnalytics();
+    const { data: connRow } = await analyticsClient
+      .from('analytics_connections')
+      .select('id, workspace_id, analytics_enabled, deleted_at')
+      .eq('id', connectionId)
+      .is('deleted_at', null)
+      .maybeSingle();
+
+    if (!connRow) {
+      return {
+        success: false,
+        persisted: false,
+        workspaceId: payload.workspace_id || 'unknown',
+        connectionId,
+        dailyRowsIngested: 0,
+        summarySaved: false,
+        topPinsIngested: 0,
+        workspaceRollupsUpdated: 0,
+        revoked: false,
+        snitchAlerted: false,
+        error: `Validation Error: connection_id "${connectionId}" is not registered in Project 3 analytics_connections.`,
+      };
+    }
+
+    const workspaceId = payload.workspace_id || connRow.workspace_id;
     const nowIso = new Date().toISOString();
 
     // =========================================================================
@@ -590,6 +629,7 @@ export const pinnerETL = {
     // Edge Cache Invalidation & Post-Persistence Warmup
     // =========================================================================
     await edgeCache.invalidateConnection(workspaceId, connectionId, runtimeKvNamespace);
+    await analyticsDb.updateConnectionLastSync(connectionId);
 
     return {
       success: true,

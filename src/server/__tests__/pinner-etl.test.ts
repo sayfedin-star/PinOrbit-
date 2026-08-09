@@ -13,6 +13,7 @@ vi.mock('../db/analytics', () => ({
     upsertTopPinsSnapshots: vi.fn().mockResolvedValue(5),
     upsertDailyWorkspaceMetrics: vi.fn().mockResolvedValue(2),
     upsertUrlPerformance: vi.fn().mockResolvedValue(1),
+    updateConnectionLastSync: vi.fn().mockResolvedValue(undefined),
   },
 }));
 
@@ -30,10 +31,20 @@ vi.mock('../db/clients', () => ({
       })),
     }),
     getAnalytics: vi.fn().mockReturnValue({
-      from: vi.fn(() => ({
+      from: vi.fn((table: string) => ({
         upsert: vi.fn().mockResolvedValue({ error: null }),
+        update: vi.fn().mockReturnThis(),
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
+        is: vi.fn().mockReturnThis(),
+        maybeSingle: vi.fn().mockImplementation(async () => ({
+          data: {
+            id: 'a1b2c3d4-e5f6-7890-1234-56789abcdef0',
+            workspace_id: '00000000-0000-0000-0000-000000000001',
+            analytics_enabled: true,
+          },
+          error: null,
+        })),
       })),
     }),
   },
@@ -346,18 +357,27 @@ describe('Pinner Analytics ETL Processor Suite', () => {
     expect(analyticsDb.upsertTopPinsSnapshots).toHaveBeenCalled();
   });
 
-  it('rejects payload when success=true but both channels are null', async () => {
+  it('rejects payload when connection_id is not registered in Project 3 analytics_connections', async () => {
+    // Override maybeSingle to simulate missing connection
+    (dbClients.getAnalytics as any).mockReturnValueOnce({
+      from: vi.fn(() => ({
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        is: vi.fn().mockReturnThis(),
+        maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+      })),
+    });
+
     const payload: PinnerIngestPayload = {
       success: true,
       workspace_id: workspaceId,
-      connection_id: connectionId,
-      account_analytics: null,
-      top_pins_analytics: null,
+      connection_id: 'unknown-conn-id',
+      account_analytics: samplePinterestDailyAnalytics,
     };
 
     const result = await pinnerETL.processIngestionPayload(payload);
     expect(result.success).toBe(false);
     expect(result.persisted).toBe(false);
-    expect(result.error).toContain('At least one analytics channel');
+    expect(result.error).toContain('is not registered in Project 3 analytics_connections');
   });
 });

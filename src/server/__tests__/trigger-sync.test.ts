@@ -4,12 +4,12 @@ import { analyticsDb } from '../db/analytics';
 
 vi.mock('../db/analytics', () => ({
   analyticsDb: {
-    getWorkspaceAnalyticsSettings: vi.fn(),
+    getWorkspaceConnection: vi.fn(),
     recordOperationalImportSession: vi.fn().mockResolvedValue({ id: 'import-1' }),
   },
 }));
 
-describe('Manual Trigger Sync Suite', () => {
+describe('Manual Trigger & Test Ping Sync Suite (V16)', () => {
   const workspaceId = '00000000-0000-0000-0000-000000000001';
   const connectionId = 'a1b2c3d4-e5f6-7890-1234-56789abcdef0';
 
@@ -17,9 +17,11 @@ describe('Manual Trigger Sync Suite', () => {
     vi.clearAllMocks();
   });
 
-  it('formats Channel A (Account Analytics) manual payload without sort_modes and with concrete dates', async () => {
-    (analyticsDb.getWorkspaceAnalyticsSettings as any).mockResolvedValue({
+  it('formats Channel A (Account Analytics) manual sync payload with concrete dates', async () => {
+    (analyticsDb.getWorkspaceConnection as any).mockResolvedValue({
+      id: connectionId,
       workspace_id: workspaceId,
+      display_name: 'hymumdotcom',
       analytics_webhook_url: 'https://hook.make.com/pipeline-a',
     });
 
@@ -29,19 +31,22 @@ describe('Manual Trigger Sync Suite', () => {
       return { ok: true, status: 200 } as any;
     }) as any);
 
-    const result = await fastcronService.triggerManualSync(workspaceId, 'analytics', connectionId);
+    const result = await fastcronService.triggerManualSync(
+      workspaceId,
+      connectionId,
+      'analytics',
+      'sync'
+    );
 
     expect(result.success).toBe(true);
     expect(sentPayload).toBeDefined();
     expect(sentPayload.job_type).toBe('manual_sync');
     expect(sentPayload.channel).toBe('account_analytics');
-    expect(sentPayload.workspace_id).toBe(workspaceId);
     expect(sentPayload.connection_id).toBe(connectionId);
     expect(sentPayload.start_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(sentPayload.end_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(sentPayload.sort_modes).toBeUndefined();
 
-    // Verify operational import session logged
     expect(analyticsDb.recordOperationalImportSession).toHaveBeenCalledWith(
       workspaceId,
       expect.objectContaining({
@@ -53,10 +58,12 @@ describe('Manual Trigger Sync Suite', () => {
     fetchSpy.mockRestore();
   });
 
-  it('formats Channel B (Top Pins) manual payload with all 5 sort modes', async () => {
-    (analyticsDb.getWorkspaceAnalyticsSettings as any).mockResolvedValue({
+  it('formats Test Ping payload correctly when mode is ping', async () => {
+    (analyticsDb.getWorkspaceConnection as any).mockResolvedValue({
+      id: connectionId,
       workspace_id: workspaceId,
-      top_pins_webhook_url: 'https://hook.make.com/pipeline-b',
+      display_name: 'hymumdotcom',
+      analytics_webhook_url: 'https://hook.make.com/pipeline-a',
     });
 
     let sentPayload: any = null;
@@ -65,28 +72,17 @@ describe('Manual Trigger Sync Suite', () => {
       return { ok: true, status: 200 } as any;
     }) as any);
 
-    const result = await fastcronService.triggerManualSync(workspaceId, 'top_pins', connectionId);
+    const result = await fastcronService.triggerManualSync(
+      workspaceId,
+      connectionId,
+      'analytics',
+      'ping'
+    );
 
     expect(result.success).toBe(true);
-    expect(sentPayload).toBeDefined();
-    expect(sentPayload.job_type).toBe('manual_sync');
-    expect(sentPayload.channel).toBe('top_pins');
-    expect(sentPayload.sort_modes).toEqual([
-      'IMPRESSION',
-      'OUTBOUND_CLICK',
-      'SAVE',
-      'ENGAGEMENT',
-      'PIN_CLICK',
-    ]);
-
-    // Verify operational import session logged
-    expect(analyticsDb.recordOperationalImportSession).toHaveBeenCalledWith(
-      workspaceId,
-      expect.objectContaining({
-        account_id: connectionId,
-        source_type: 'manual_top_pins',
-      })
-    );
+    expect(sentPayload.job_type).toBe('ping');
+    expect(sentPayload.channel).toBe('account_analytics');
+    expect(sentPayload.connection_id).toBe(connectionId);
 
     fetchSpy.mockRestore();
   });

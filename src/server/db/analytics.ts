@@ -505,11 +505,11 @@ export const analyticsDb = {
   },
 
   // ============================================================================
-  // Project 1 Control Plane Settings & Connection Management (V15)
+  // Project 3 Dedicated Analytics Control Plane (V16 Final Locked)
   // ============================================================================
 
   /**
-   * Retrieves workspace analytics settings.
+   * Retrieves workspace analytics settings from Project 3.
    */
   async getWorkspaceAnalyticsSettings(
     workspaceId: string
@@ -518,8 +518,8 @@ export const analyticsDb = {
       throw new Error('Tenant Boundary Violation: workspaceId is required.');
     }
 
-    const schedulingAdmin = dbClients.getSchedulingAdmin();
-    const { data, error } = await schedulingAdmin
+    const analyticsClient = dbClients.getAnalytics();
+    const { data, error } = await analyticsClient
       .from('workspace_analytics_settings')
       .select('*')
       .eq('workspace_id', workspaceId)
@@ -530,7 +530,7 @@ export const analyticsDb = {
   },
 
   /**
-   * Upserts workspace analytics settings.
+   * Upserts workspace analytics settings into Project 3.
    */
   async upsertWorkspaceAnalyticsSettings(
     workspaceId: string,
@@ -540,14 +540,14 @@ export const analyticsDb = {
       throw new Error('Tenant Boundary Violation: workspaceId is required.');
     }
 
-    const schedulingAdmin = dbClients.getSchedulingAdmin();
+    const analyticsClient = dbClients.getAnalytics();
     const payload = {
       ...settings,
       workspace_id: workspaceId,
       updated_at: new Date().toISOString(),
     };
 
-    const { data, error } = await schedulingAdmin
+    const { data, error } = await analyticsClient
       .from('workspace_analytics_settings')
       .upsert(payload, { onConflict: 'workspace_id' })
       .select()
@@ -558,109 +558,156 @@ export const analyticsDb = {
   },
 
   /**
-   * Lists active Pinterest connections in a workspace (filtering out soft-deleted).
+   * Lists non-deleted analytics connections of a workspace from Project 3.
    */
-  async listWorkspaceConnections(workspaceId: string): Promise<PinnerConnection[]> {
+  async listWorkspaceConnections(workspaceId: string): Promise<AnalyticsConnection[]> {
     if (!workspaceId) {
       throw new Error('Tenant Boundary Violation: workspaceId is required.');
     }
 
-    const schedulingAdmin = dbClients.getSchedulingAdmin();
-    const { data, error } = await schedulingAdmin
-      .from('accounts')
-      .select('id, workspace_id, account_name, is_active, analytics_enabled, deleted_at, created_at, last_published_at')
+    const analyticsClient = dbClients.getAnalytics();
+    const { data, error } = await analyticsClient
+      .from('analytics_connections')
+      .select('*')
       .eq('workspace_id', workspaceId)
       .is('deleted_at', null)
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    return (data as PinnerConnection[]) || [];
+    return (data as AnalyticsConnection[]) || [];
   },
 
   /**
-   * Creates a new Pinterest connection in Project 1 accounts.
+   * Gets a specific analytics connection in a workspace.
+   */
+  async getWorkspaceConnection(
+    workspaceId: string,
+    connectionId: string
+  ): Promise<AnalyticsConnection | null> {
+    if (!workspaceId || !connectionId) {
+      throw new Error('Tenant Boundary Violation: workspaceId and connectionId are required.');
+    }
+
+    const analyticsClient = dbClients.getAnalytics();
+    const { data, error } = await analyticsClient
+      .from('analytics_connections')
+      .select('*')
+      .eq('workspace_id', workspaceId)
+      .eq('id', connectionId)
+      .is('deleted_at', null)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data as AnalyticsConnection | null;
+  },
+
+  /**
+   * Creates a new analytics connection in Project 3.
    */
   async createWorkspaceConnection(
     workspaceId: string,
-    accountName: string,
+    displayName: string,
     analyticsEnabled = true
-  ): Promise<PinnerConnection> {
-    if (!workspaceId || !accountName) {
-      throw new Error('Validation Error: workspaceId and accountName are required.');
+  ): Promise<AnalyticsConnection> {
+    if (!workspaceId || !displayName) {
+      throw new Error('Validation Error: workspaceId and displayName are required.');
     }
 
-    const schedulingAdmin = dbClients.getSchedulingAdmin();
-    const { data, error } = await schedulingAdmin
-      .from('accounts')
+    const analyticsClient = dbClients.getAnalytics();
+    const { data, error } = await analyticsClient
+      .from('analytics_connections')
       .insert({
         workspace_id: workspaceId,
-        account_name: accountName.trim(),
-        is_active: true,
+        display_name: displayName.trim(),
         analytics_enabled: analyticsEnabled,
+        analytics_sync_time: '04:00',
+        analytics_cron_expression: '0 4 * * *',
+        analytics_schedule_status: 'pending',
+        top_pins_sync_time: '04:30',
+        top_pins_cron_expression: '30 4 * * *',
+        top_pins_schedule_status: 'pending',
       })
-      .select('id, workspace_id, account_name, is_active, analytics_enabled, deleted_at, created_at, last_published_at')
+      .select()
       .single();
 
     if (error) throw error;
-    return data as PinnerConnection;
+    return data as AnalyticsConnection;
   },
 
   /**
-   * Updates an existing connection in Project 1 accounts.
+   * Updates an existing analytics connection in Project 3.
    */
   async updateWorkspaceConnection(
     workspaceId: string,
     connectionId: string,
-    updates: { account_name?: string; analytics_enabled?: boolean }
-  ): Promise<PinnerConnection> {
+    updates: Partial<AnalyticsConnection>
+  ): Promise<AnalyticsConnection> {
     if (!workspaceId || !connectionId) {
       throw new Error('Validation Error: workspaceId and connectionId are required.');
     }
 
-    const schedulingAdmin = dbClients.getSchedulingAdmin();
-    const updatePayload: Record<string, any> = {};
-    if (updates.account_name !== undefined) {
-      updatePayload.account_name = updates.account_name.trim();
-    }
-    if (updates.analytics_enabled !== undefined) {
-      updatePayload.analytics_enabled = updates.analytics_enabled;
+    const analyticsClient = dbClients.getAnalytics();
+    const updatePayload: Record<string, any> = {
+      ...updates,
+      updated_at: new Date().toISOString(),
+    };
+    if (updates.display_name !== undefined) {
+      updatePayload.display_name = updates.display_name.trim();
     }
 
-    const { data, error } = await schedulingAdmin
-      .from('accounts')
+    const { data, error } = await analyticsClient
+      .from('analytics_connections')
       .update(updatePayload)
       .eq('id', connectionId)
       .eq('workspace_id', workspaceId)
-      .select('id, workspace_id, account_name, is_active, analytics_enabled, deleted_at, created_at, last_published_at')
+      .is('deleted_at', null)
+      .select()
       .single();
 
     if (error) throw error;
-    return data as PinnerConnection;
+    return data as AnalyticsConnection;
   },
 
   /**
-   * Soft-deletes a Pinterest connection in Project 1 accounts.
+   * Soft-deletes an analytics connection in Project 3.
    */
   async softDeleteWorkspaceConnection(
     workspaceId: string,
     connectionId: string
-  ): Promise<boolean> {
+  ): Promise<AnalyticsConnection> {
     if (!workspaceId || !connectionId) {
       throw new Error('Validation Error: workspaceId and connectionId are required.');
     }
 
-    const schedulingAdmin = dbClients.getSchedulingAdmin();
-    const { error } = await schedulingAdmin
-      .from('accounts')
+    const analyticsClient = dbClients.getAnalytics();
+    const { data, error } = await analyticsClient
+      .from('analytics_connections')
       .update({
-        is_active: false,
         analytics_enabled: false,
         deleted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       })
       .eq('id', connectionId)
-      .eq('workspace_id', workspaceId);
+      .eq('workspace_id', workspaceId)
+      .select()
+      .single();
 
     if (error) throw error;
-    return true;
+    return data as AnalyticsConnection;
+  },
+
+  /**
+   * Updates the last_analytics_sync_at timestamp for a connection in Project 3.
+   */
+  async updateConnectionLastSync(connectionId: string): Promise<void> {
+    if (!connectionId) return;
+    const analyticsClient = dbClients.getAnalytics();
+    await analyticsClient
+      .from('analytics_connections')
+      .update({
+        last_analytics_sync_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', connectionId);
   },
 };

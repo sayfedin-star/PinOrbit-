@@ -3,10 +3,12 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 import { assertWorkspaceAccess } from '../../../../server/auth/workspace-guard';
 import { analyticsDb } from '../../../../server/db/analytics';
+import { fastcronService } from '../../../../server/services/fastcron-service';
 
 export const PATCH: APIRoute = async ({ params, request, locals }) => {
   const user = locals.user;
   const schedulingClient = locals.supabase;
+  const workspaceId = locals.activeWorkspaceId;
   const connectionId = params.id;
 
   if (!user || !schedulingClient) {
@@ -14,6 +16,16 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
       JSON.stringify({ error: 'Unauthorized: authentication required.' }),
       {
         status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
+  }
+
+  if (!workspaceId) {
+    return new Response(
+      JSON.stringify({ success: false, error: 'Active workspace not found in session.' }),
+      {
+        status: 400,
         headers: { 'Content-Type': 'application/json' },
       }
     );
@@ -43,22 +55,14 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
     );
   }
 
-  const workspaceId = body.workspace_id || locals.activeWorkspaceId;
-  if (!workspaceId) {
-    return new Response(
-      JSON.stringify({ success: false, error: 'workspace_id is required.' }),
-      {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      }
-    );
-  }
-
   try {
     const access = await assertWorkspaceAccess(schedulingClient, workspaceId, user.id);
     if (!access.isAdmin && !access.isOwner) {
       return new Response(
-        JSON.stringify({ success: false, error: 'Forbidden: Admin or Owner role required to modify connections.' }),
+        JSON.stringify({
+          success: false,
+          error: 'Forbidden: Admin or Owner role required to modify connections.',
+        }),
         {
           status: 403,
           headers: { 'Content-Type': 'application/json' },
@@ -66,19 +70,38 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
       );
     }
 
-    const updatedAccount = await analyticsDb.updateWorkspaceConnection(
+    // Verify connection exists and belongs to this workspace
+    const existing = await analyticsDb.getWorkspaceConnection(workspaceId, connectionId);
+    if (!existing) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Connection not found in this workspace.' }),
+        {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    const updates: any = {};
+    const displayName = body.display_name !== undefined ? body.display_name : body.account_name;
+    if (displayName !== undefined) {
+      updates.display_name = displayName;
+    }
+    if (body.analytics_enabled !== undefined) {
+      updates.analytics_enabled = Boolean(body.analytics_enabled);
+    }
+
+    const updated = await analyticsDb.updateWorkspaceConnection(
       workspaceId,
       connectionId,
-      {
-        account_name: body.account_name,
-        analytics_enabled: body.analytics_enabled !== undefined ? Boolean(body.analytics_enabled) : undefined,
-      }
+      updates
     );
 
     return new Response(
       JSON.stringify({
         success: true,
-        account: updatedAccount,
+        account: updated, // backward compatibility
+        connection: updated,
         message: 'Pinterest connection updated successfully.',
       }),
       {
@@ -97,9 +120,10 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
   }
 };
 
-export const DELETE: APIRoute = async ({ params, request, locals }) => {
+export const DELETE: APIRoute = async ({ params, locals }) => {
   const user = locals.user;
   const schedulingClient = locals.supabase;
+  const workspaceId = locals.activeWorkspaceId;
   const connectionId = params.id;
 
   if (!user || !schedulingClient) {
@@ -107,6 +131,16 @@ export const DELETE: APIRoute = async ({ params, request, locals }) => {
       JSON.stringify({ error: 'Unauthorized: authentication required.' }),
       {
         status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
+  }
+
+  if (!workspaceId) {
+    return new Response(
+      JSON.stringify({ success: false, error: 'Active workspace not found in session.' }),
+      {
+        status: 400,
         headers: { 'Content-Type': 'application/json' },
       }
     );
@@ -122,24 +156,14 @@ export const DELETE: APIRoute = async ({ params, request, locals }) => {
     );
   }
 
-  const url = new URL(request.url);
-  const workspaceId = url.searchParams.get('workspace_id') || locals.activeWorkspaceId;
-
-  if (!workspaceId) {
-    return new Response(
-      JSON.stringify({ success: false, error: 'workspace_id is required.' }),
-      {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      }
-    );
-  }
-
   try {
     const access = await assertWorkspaceAccess(schedulingClient, workspaceId, user.id);
     if (!access.isAdmin && !access.isOwner) {
       return new Response(
-        JSON.stringify({ success: false, error: 'Forbidden: Admin or Owner role required to delete connections.' }),
+        JSON.stringify({
+          success: false,
+          error: 'Forbidden: Admin or Owner role required to delete connections.',
+        }),
         {
           status: 403,
           headers: { 'Content-Type': 'application/json' },
@@ -147,7 +171,27 @@ export const DELETE: APIRoute = async ({ params, request, locals }) => {
       );
     }
 
-    // Soft delete: sets is_active = false, deleted_at = now()
+    // Verify connection exists and belongs to this workspace
+    const existing = await analyticsDb.getWorkspaceConnection(workspaceId, connectionId);
+    if (!existing) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Connection not found in this workspace.' }),
+        {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    // Best-effort: Delete FastCron jobs if present
+    if (existing.analytics_fastcron_job_id) {
+      await fastcronService.deleteFastCronJob(workspaceId, existing.analytics_fastcron_job_id);
+    }
+    if (existing.top_pins_fastcron_job_id) {
+      await fastcronService.deleteFastCronJob(workspaceId, existing.top_pins_fastcron_job_id);
+    }
+
+    // Soft delete in Project 3: sets analytics_enabled = false, deleted_at = now()
     await analyticsDb.softDeleteWorkspaceConnection(workspaceId, connectionId);
 
     return new Response(

@@ -7,12 +7,23 @@ import { fastcronService } from '../../../../server/services/fastcron-service';
 export const POST: APIRoute = async ({ request, locals }) => {
   const user = locals.user;
   const schedulingClient = locals.supabase;
+  const workspaceId = locals.activeWorkspaceId;
 
   if (!user || !schedulingClient) {
     return new Response(
       JSON.stringify({ error: 'Unauthorized: authentication required.' }),
       {
         status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
+  }
+
+  if (!workspaceId) {
+    return new Response(
+      JSON.stringify({ success: false, error: 'Active workspace not found in session.' }),
+      {
+        status: 400,
         headers: { 'Content-Type': 'application/json' },
       }
     );
@@ -32,12 +43,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
     );
   }
 
-  const workspaceId = body.workspace_id || locals.activeWorkspaceId;
+  const connectionId = body.connection_id;
   const channel = body.channel as 'analytics' | 'top_pins';
 
-  if (!workspaceId) {
+  if (!connectionId) {
     return new Response(
-      JSON.stringify({ success: false, error: 'workspace_id is required.' }),
+      JSON.stringify({ success: false, error: 'connection_id is required.' }),
       {
         status: 400,
         headers: { 'Content-Type': 'application/json' },
@@ -60,7 +71,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   try {
     await assertWorkspaceAccess(schedulingClient, workspaceId, user.id);
-    const result = await fastcronService.syncScheduleWithFastCron(workspaceId, channel);
+    const result = await fastcronService.syncScheduleWithFastCron(
+      workspaceId,
+      connectionId,
+      channel
+    );
 
     return new Response(JSON.stringify(result), {
       status: result.success ? 200 : 400,
@@ -70,6 +85,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return new Response(
       JSON.stringify({
         success: false,
+        connection_id: connectionId,
         channel,
         schedule_status: 'error',
         error: err.message || 'Failed to sync schedule with FastCron.',
