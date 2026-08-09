@@ -582,10 +582,8 @@ export const prerender = false;
           >
             Delete Connection
           </button>
-        </div>
-      </div>
-    </div>
-  </div>
+  <!-- Toast Container -->
+  <div id="toast-container" class="fixed bottom-5 right-5 z-[100] flex flex-col gap-2 max-w-sm pointer-events-none"></div>
 </Layout>
 
 <script>
@@ -595,13 +593,43 @@ export const prerender = false;
   let connectionsList: any[] = [];
   let currentSelectedConnection: any = null;
 
+  function showToast(message: string, type: 'success' | 'error' | 'info' = 'info') {
+    const container = document.getElementById('toast-container');
+    if (!container) {
+      alert(message);
+      return;
+    }
+    const toast = document.createElement('div');
+    toast.className = `pointer-events-auto rounded-xl px-4 py-3 text-xs font-semibold shadow-2xl border transition-all duration-300 transform translate-y-2 opacity-0 flex items-center justify-between gap-3 ${
+      type === 'success'
+        ? 'bg-emerald-900 text-emerald-100 border-emerald-700'
+        : type === 'error'
+        ? 'bg-red-950 text-red-100 border-red-700'
+        : 'bg-card text-foreground border-border'
+    }`;
+    toast.innerHTML = `
+      <span>${message}</span>
+      <button class="text-xs opacity-70 hover:opacity-100 ml-2 font-bold">&times;</button>
+    `;
+    container.appendChild(toast);
+    requestAnimationFrame(() => {
+      toast.classList.remove('translate-y-2', 'opacity-0');
+    });
+    const dismiss = () => {
+      toast.classList.add('opacity-0', 'translate-y-2');
+      setTimeout(() => toast.remove(), 300);
+    };
+    toast.querySelector('button')?.addEventListener('click', dismiss);
+    setTimeout(dismiss, 5000);
+  }
+
   function formatNumber(num: number | undefined | null): string {
     if (num === undefined || num === null) return '0';
     return Number(num).toLocaleString();
   }
 
   function formatDate(dateStr: string | null | undefined): string {
-    if (!dateStr) return 'Never synced';
+    if (!dateStr) return '—';
     try {
       const d = new Date(dateStr);
       return d.toLocaleDateString(undefined, {
@@ -612,7 +640,7 @@ export const prerender = false;
         minute: '2-digit',
       });
     } catch {
-      return dateStr;
+      return dateStr || '—';
     }
   }
 
@@ -720,10 +748,12 @@ export const prerender = false;
       tbody.innerHTML = `
         <tr>
           <td colspan="9" class="py-8 text-center text-red-500">
-            Error loading connections: ${err.message}
+            <p class="font-bold">Failed to load connections</p>
+            <p class="text-xs text-muted-foreground mt-1">${err.message}</p>
           </td>
         </tr>
       `;
+      showToast(`Error loading connections: ${err.message}`, 'error');
     }
   }
 
@@ -846,8 +876,10 @@ export const prerender = false;
           labelEl.textContent = 'Connection Healthy';
         }
       }
-    } catch (e) {
+    } catch (e: any) {
       console.warn('Failed to load runs for health strip:', e);
+      const labelEl = document.getElementById('health-label');
+      if (labelEl) labelEl.textContent = 'Health Status Unavailable';
     }
   }
 
@@ -909,9 +941,10 @@ export const prerender = false;
 
         addModal?.classList.add('hidden');
         input.value = '';
+        showToast('✅ Connection created successfully!', 'success');
         await loadConnections();
       } catch (err: any) {
-        alert(err.message);
+        showToast(err.message, 'error');
       } finally {
         submitBtn.disabled = false;
         submitBtn.textContent = 'Create Connection';
@@ -927,10 +960,9 @@ export const prerender = false;
       chip.addEventListener('click', () => {
         const isActive = chip.classList.contains('active');
         if (isActive) {
-          // Check that at least one remains active
           const activeCount = document.querySelectorAll('#sort-modes-chips-container .sort-chip.active').length;
           if (activeCount <= 1) {
-            alert('At least one sort mode must remain selected.');
+            showToast('At least one sort mode must remain selected.', 'error');
             return;
           }
           chip.classList.remove('active', 'border-primary', 'bg-primary/10', 'text-primary');
@@ -942,7 +974,7 @@ export const prerender = false;
       });
     });
 
-    // Save Drawer Settings (V23)
+    // Save Drawer Settings (V23 & R15.3.3)
     document.getElementById('connection-settings-form')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const connId = (document.getElementById('drawer-connection-id') as HTMLInputElement).value;
@@ -952,7 +984,6 @@ export const prerender = false;
       saveBtn.disabled = true;
       saveBtn.textContent = 'Saving...';
 
-      // Gather active sort modes
       const activeSortModes: string[] = [];
       document.querySelectorAll('#sort-modes-chips-container .sort-chip.active').forEach((c) => {
         const mode = c.getAttribute('data-mode');
@@ -984,10 +1015,11 @@ export const prerender = false;
         });
         if (!json.success) throw new Error(json.error || 'Failed to save settings.');
 
+        showToast('✅ Settings saved successfully', 'success');
         closeSettingsDrawer();
         await loadConnections();
       } catch (err: any) {
-        alert(err.message);
+        showToast(err.message, 'error');
       } finally {
         saveBtn.disabled = false;
         saveBtn.textContent = 'Save Settings';
@@ -998,30 +1030,38 @@ export const prerender = false;
     document.getElementById('ping-analytics-btn')?.addEventListener('click', async () => {
       const connId = (document.getElementById('drawer-connection-id') as HTMLInputElement).value;
       if (!connId) return;
+      const btn = document.getElementById('ping-analytics-btn') as HTMLButtonElement;
+      btn.disabled = true;
       try {
         const json = await safeFetchJson('/api/analytics/trigger-sync', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ connection_id: connId, channel: 'analytics', mode: 'ping' }),
         });
-        alert(json.message || 'Ping successful!');
+        showToast(json.message || '✅ Pipeline A ping successful!', 'success');
       } catch (err: any) {
-        alert(err.message);
+        showToast(`Ping failed: ${err.message}`, 'error');
+      } finally {
+        btn.disabled = false;
       }
     });
 
     document.getElementById('ping-top-pins-btn')?.addEventListener('click', async () => {
       const connId = (document.getElementById('drawer-connection-id') as HTMLInputElement).value;
       if (!connId) return;
+      const btn = document.getElementById('ping-top-pins-btn') as HTMLButtonElement;
+      btn.disabled = true;
       try {
         const json = await safeFetchJson('/api/analytics/trigger-sync', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ connection_id: connId, channel: 'top_pins', mode: 'ping' }),
         });
-        alert(json.message || 'Ping successful!');
+        showToast(json.message || '✅ Pipeline B ping successful!', 'success');
       } catch (err: any) {
-        alert(err.message);
+        showToast(`Ping failed: ${err.message}`, 'error');
+      } finally {
+        btn.disabled = false;
       }
     });
 
@@ -1029,37 +1069,47 @@ export const prerender = false;
     document.getElementById('run-analytics-btn')?.addEventListener('click', async () => {
       const connId = (document.getElementById('drawer-connection-id') as HTMLInputElement).value;
       if (!connId) return;
+      const btn = document.getElementById('run-analytics-btn') as HTMLButtonElement;
+      btn.disabled = true;
       try {
         const json = await safeFetchJson('/api/analytics/trigger-sync', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ connection_id: connId, channel: 'analytics', mode: 'sync' }),
         });
-        alert(json.message || 'Analytics sync triggered!');
+        showToast(json.message || '✅ Analytics sync triggered!', 'success');
       } catch (err: any) {
-        alert(err.message);
+        showToast(`Run failed: ${err.message}`, 'error');
+      } finally {
+        btn.disabled = false;
       }
     });
 
     document.getElementById('run-top-pins-btn')?.addEventListener('click', async () => {
       const connId = (document.getElementById('drawer-connection-id') as HTMLInputElement).value;
       if (!connId) return;
+      const btn = document.getElementById('run-top-pins-btn') as HTMLButtonElement;
+      btn.disabled = true;
       try {
         const json = await safeFetchJson('/api/analytics/trigger-sync', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ connection_id: connId, channel: 'top_pins', mode: 'sync' }),
         });
-        alert(json.message || 'Top pins sync triggered!');
+        showToast(json.message || '✅ Top pins sync triggered!', 'success');
       } catch (err: any) {
-        alert(err.message);
+        showToast(`Run failed: ${err.message}`, 'error');
+      } finally {
+        btn.disabled = false;
       }
     });
 
-    // Sync Schedule Buttons with Verbatim Error Display (V23)
+    // Sync Schedule Buttons with Verbatim Error Display (V23 & R15.3.4)
     document.getElementById('sync-fastcron-a-btn')?.addEventListener('click', async () => {
       const connId = (document.getElementById('drawer-connection-id') as HTMLInputElement).value;
       if (!connId) return;
+      const btn = document.getElementById('sync-fastcron-a-btn') as HTMLButtonElement;
+      btn.disabled = true;
       try {
         const json = await safeFetchJson('/api/analytics/schedule/sync', {
           method: 'POST',
@@ -1067,20 +1117,24 @@ export const prerender = false;
           body: JSON.stringify({ connection_id: connId, channel: 'analytics' }),
         });
         if (json.success) {
-          alert(`Schedule synced! Job ID: #${json.fastcron_job_id}`);
+          showToast(`✅ Schedule synced! FastCron Job #${json.fastcron_job_id}`, 'success');
           await loadConnections();
           if (currentSelectedConnection) openSettingsDrawer(connId);
         } else {
-          alert(`FastCron Sync Error: ${json.error}`);
+          showToast(`FastCron Sync Error: ${json.error}`, 'error');
         }
       } catch (err: any) {
-        alert(`FastCron Sync Error: ${err.message}`);
+        showToast(`FastCron Sync Error: ${err.message}`, 'error');
+      } finally {
+        btn.disabled = false;
       }
     });
 
     document.getElementById('sync-fastcron-b-btn')?.addEventListener('click', async () => {
       const connId = (document.getElementById('drawer-connection-id') as HTMLInputElement).value;
       if (!connId) return;
+      const btn = document.getElementById('sync-fastcron-b-btn') as HTMLButtonElement;
+      btn.disabled = true;
       try {
         const json = await safeFetchJson('/api/analytics/schedule/sync', {
           method: 'POST',
@@ -1088,14 +1142,16 @@ export const prerender = false;
           body: JSON.stringify({ connection_id: connId, channel: 'top_pins' }),
         });
         if (json.success) {
-          alert(`Schedule synced! Job ID: #${json.fastcron_job_id}`);
+          showToast(`✅ Schedule synced! FastCron Job #${json.fastcron_job_id}`, 'success');
           await loadConnections();
           if (currentSelectedConnection) openSettingsDrawer(connId);
         } else {
-          alert(`FastCron Sync Error: ${json.error}`);
+          showToast(`FastCron Sync Error: ${json.error}`, 'error');
         }
       } catch (err: any) {
-        alert(`FastCron Sync Error: ${err.message}`);
+        showToast(`FastCron Sync Error: ${err.message}`, 'error');
+      } finally {
+        btn.disabled = false;
       }
     });
 
@@ -1108,10 +1164,10 @@ export const prerender = false;
         if (json.success && Array.isArray(json.logs)) {
           alert(`FastCron Logs (Job #${json.job_id}):\n` + json.logs.map((l: any) => `[${l.date || l.time}] HTTP ${l.http_status || '200'}`).join('\n'));
         } else {
-          alert(json.error || 'No logs available.');
+          showToast(json.error || 'No logs available.', 'info');
         }
       } catch (err: any) {
-        alert(err.message);
+        showToast(`Failed to load logs: ${err.message}`, 'error');
       }
     });
 
@@ -1123,10 +1179,10 @@ export const prerender = false;
         if (json.success && Array.isArray(json.logs)) {
           alert(`FastCron Logs (Job #${json.job_id}):\n` + json.logs.map((l: any) => `[${l.date || l.time}] HTTP ${l.http_status || '200'}`).join('\n'));
         } else {
-          alert(json.error || 'No logs available.');
+          showToast(json.error || 'No logs available.', 'info');
         }
       } catch (err: any) {
-        alert(err.message);
+        showToast(`Failed to load logs: ${err.message}`, 'error');
       }
     });
 
@@ -1165,11 +1221,12 @@ export const prerender = false;
         });
         if (!json.success) throw new Error(json.error || 'Failed to delete connection.');
 
+        showToast('✅ Connection deleted successfully.', 'success');
         deleteModal?.classList.add('hidden');
         closeSettingsDrawer();
         await loadConnections();
       } catch (err: any) {
-        alert(err.message);
+        showToast(err.message, 'error');
       } finally {
         executeDeleteBtn.textContent = 'Delete Connection';
       }
@@ -1178,3 +1235,4 @@ export const prerender = false;
     loadConnections();
   });
 </script>
+

@@ -254,7 +254,7 @@ const { id: connectionId } = Astro.params;
           if (lastSyncEl) {
             lastSyncEl.textContent = conn.last_analytics_sync_at
               ? new Date(conn.last_analytics_sync_at).toLocaleString()
-              : 'Never synced';
+              : '—';
           }
 
           const badge = document.getElementById('connection-status-badge');
@@ -272,8 +272,10 @@ const { id: connectionId } = Astro.params;
           }
         }
       }
-    } catch (e) {
+    } catch (e: any) {
       console.warn('Failed to load connection details:', e);
+      const lastSyncEl = document.getElementById('connection-last-sync');
+      if (lastSyncEl) lastSyncEl.textContent = '—';
     }
   }
 
@@ -399,10 +401,12 @@ const { id: connectionId } = Astro.params;
       tbody.innerHTML = `
         <tr>
           <td colspan="12" class="py-8 text-center text-red-500">
-            Error loading daily metrics: ${err.message}
+            <p class="font-bold">Failed to load daily metrics</p>
+            <p class="text-xs text-muted-foreground mt-1">${err.message}</p>
           </td>
         </tr>
       `;
+      if (tfoot) tfoot.innerHTML = '';
     }
   }
 
@@ -424,7 +428,6 @@ const { id: connectionId } = Astro.params;
       `;
 
       const json = await safeFetchJson(`/api/analytics/connections/${connectionId}/top-pins?sort_by=${activeSortBy}&from_date=${fromDate}&to_date=${toDate}`);
-
       if (!json.success || !Array.isArray(json.data)) {
         throw new Error(json.error || 'Failed to load top pins');
       }
@@ -504,7 +507,8 @@ const { id: connectionId } = Astro.params;
       tbody.innerHTML = `
         <tr>
           <td colspan="9" class="py-8 text-center text-red-500">
-            Error loading top pins: ${err.message}
+            <p class="font-bold">Failed to load top pins</p>
+            <p class="text-xs text-muted-foreground mt-1">${err.message}</p>
           </td>
         </tr>
       `;

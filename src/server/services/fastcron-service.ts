@@ -264,6 +264,12 @@ export const fastcronService = {
       ? (connection.analytics_end_offset_days ?? 1)
       : (connection.top_pins_end_offset_days ?? 2);
 
+    const effectiveSortModes =
+      connection.top_pins_sort_modes && connection.top_pins_sort_modes.length > 0
+        ? connection.top_pins_sort_modes
+        : SORT_MODES;
+    const effectiveNumPins = connection.top_pins_num_of_pins || 50;
+
     const postData = isAnalytics
       ? JSON.stringify({
           job_type: 'daily_sync',
@@ -278,8 +284,8 @@ export const fastcronService = {
           connection_id: connectionId,
           top_pins_start_offset_days: startOffset,
           top_pins_end_offset_days: endOffset,
-          num_of_pins: connection.top_pins_num_of_pins || 50,
-          sort_modes: connection.top_pins_sort_modes || SORT_MODES,
+          num_of_pins: effectiveNumPins,
+          sort_modes: effectiveSortModes,
         });
 
     const jobName = `PinOrbit ${isAnalytics ? 'analytics' : 'top-pins'} — ${workspaceId.substring(0, 8)} — ${connection.display_name}`;
@@ -374,8 +380,8 @@ export const fastcronService = {
               connection_id: connectionId,
               top_pins_start_offset_days: connection.top_pins_start_offset_days ?? 7,
               top_pins_end_offset_days: connection.top_pins_end_offset_days ?? 2,
-              num_of_pins: connection.top_pins_num_of_pins || 50,
-              sort_modes: connection.top_pins_sort_modes || SORT_MODES,
+              num_of_pins: effectiveNumPins,
+              sort_modes: effectiveSortModes,
             }),
             post_data: JSON.stringify({
               job_type: 'daily_sync',
@@ -383,8 +389,8 @@ export const fastcronService = {
               connection_id: connectionId,
               top_pins_start_offset_days: connection.top_pins_start_offset_days ?? 7,
               top_pins_end_offset_days: connection.top_pins_end_offset_days ?? 2,
-              num_of_pins: connection.top_pins_num_of_pins || 50,
-              sort_modes: connection.top_pins_sort_modes || SORT_MODES,
+              num_of_pins: effectiveNumPins,
+              sort_modes: effectiveSortModes,
             }),
             instances: connection.fastcron_instances !== undefined ? connection.fastcron_instances : 1,
             notify: connection.fastcron_notify !== undefined ? connection.fastcron_notify : true,
@@ -656,17 +662,33 @@ export const fastcronService = {
       };
     }
 
+    const effectiveSortModes =
+      connection.top_pins_sort_modes && connection.top_pins_sort_modes.length > 0
+        ? connection.top_pins_sort_modes
+        : SORT_MODES;
+    const effectiveNumPins = connection.top_pins_num_of_pins || 50;
+
     // If Test Ping mode
     if (mode === 'ping') {
       try {
+        const pingPayload = isAnalytics
+          ? {
+              job_type: 'ping',
+              channel: 'account_analytics',
+              connection_id: connectionId,
+            }
+          : {
+              job_type: 'ping',
+              channel: 'top_pins',
+              connection_id: connectionId,
+              num_of_pins: effectiveNumPins,
+              sort_modes: effectiveSortModes,
+            };
+
         const res = await fetch(webhookUrl!, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            job_type: 'ping',
-            channel: isAnalytics ? 'account_analytics' : 'top_pins',
-            connection_id: connectionId,
-          }),
+          body: JSON.stringify(pingPayload),
           signal: AbortSignal.timeout(8000),
         });
 
@@ -748,8 +770,8 @@ export const fastcronService = {
           end_date: endDate,
           top_pins_start_offset_days: startOffset,
           top_pins_end_offset_days: endOffset,
-          num_of_pins: connection.top_pins_num_of_pins || 50,
-          sort_modes: connection.top_pins_sort_modes || SORT_MODES,
+          num_of_pins: effectiveNumPins,
+          sort_modes: effectiveSortModes,
         };
 
     // If Job ID and Token exist -> Dispatches cron_run
