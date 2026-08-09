@@ -7,15 +7,15 @@ import EmptyState from '../components/ui/EmptyState.astro';
 export const prerender = false;
 ---
 
-<Layout title="Pinterest Analytics" description="Multi-tenant Pinterest performance analytics, ranked top pins, and reach metrics.">
+<Layout title="Pinterest Analytics" description="Multi-tenant Pinterest performance analytics, ranked top pins, reach metrics, and control plane.">
   <!-- Page Header -->
   <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
     <SectionHeader
       title="Pinner Analytics"
-      description="Aggregated reach, engagement metrics, and ranked pin performance."
+      description="Aggregated reach, engagement metrics, ranked pin performance, and pipeline control plane."
     />
 
-    <!-- Account Selector & Window Toggles -->
+    <!-- Account Selector, Window Toggles & Settings Gear -->
     <div class="flex flex-wrap items-center gap-3 self-start sm:self-auto">
       <!-- Account Dropdown -->
       <div class="relative">
@@ -62,6 +62,19 @@ export const prerender = false;
           <path d="M16 21h5v-5"/>
         </svg>
       </button>
+
+      <!-- Settings Drawer Trigger (Gear Icon) -->
+      <button
+        id="open-settings-drawer-btn"
+        class="inline-flex items-center gap-1.5 rounded-xl border border-primary/20 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary shadow-sm hover:bg-primary/20 transition-all"
+        title="Analytics Pipeline Settings"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+          <circle cx="12" cy="12" r="3"/>
+        </svg>
+        <span>Settings</span>
+      </button>
     </div>
   </div>
 
@@ -75,17 +88,20 @@ export const prerender = false;
           </svg>
         </div>
         <div>
-          <div class="flex items-center gap-2">
-            <h3 class="text-xs font-bold text-foreground">Make.com Proxy Pipeline</h3>
-            <span id="sync-status-badge" class="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-              Operational
+          <div class="flex flex-wrap items-center gap-2">
+            <h3 class="text-xs font-bold text-foreground">Make.com Ingestion Control Plane</h3>
+            <span id="channel-a-status-badge" class="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+              Analytics: Synced
+            </span>
+            <span id="channel-b-status-badge" class="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+              Top Pins: Synced
             </span>
             <span id="cache-status-badge" class="rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-semibold text-blue-600 dark:text-blue-400">
               Edge Cache: Direct
             </span>
           </div>
           <p id="sync-status-detail" class="text-[11px] text-muted-foreground mt-0.5">
-            Ingestion source: Pinterest API v5 (Daily batch sync at 04:00 UTC)
+            Ingestion source: Pinterest API v5 (Independent daily pipelines A @ 04:00 UTC & B @ 04:30 UTC)
           </p>
         </div>
       </div>
@@ -118,88 +134,88 @@ export const prerender = false;
       <KPIStatCard
         title="Total Engagements"
         value="---"
-        subtitle="0.00% engagement rate"
-        iconName="users"
+        subtitle="Saves, clicks, & reactions"
+        iconName="trending"
         color="emerald"
       />
     </div>
-    <div id="kpi-pin-clicks">
+    <div id="kpi-clicks">
       <KPIStatCard
-        title="Pin Clicks"
+        title="Total Pin Clicks"
         value="---"
-        subtitle="0.00% pin click rate"
-        iconName="clock"
-        color="amber"
+        subtitle="Close-up pin views"
+        iconName="eye"
+        color="slate"
       />
     </div>
-    <div id="kpi-outbound-clicks">
+    <div id="kpi-conversions">
       <KPIStatCard
         title="Outbound & Saves"
         value="---"
-        subtitle="0 outbound • 0 saves"
-        iconName="check-circle"
-        color="slate"
+        subtitle="High-intent actions"
+        iconName="check"
+        color="amber"
       />
     </div>
   </div>
 
-  <!-- Top Pins Section -->
-  <div class="rounded-2xl border border-border bg-card shadow-sm mb-8 overflow-hidden">
-    <!-- Header with Sort Tabs -->
-    <div class="flex flex-col gap-3 border-b border-border p-5 sm:flex-row sm:items-center sm:justify-between">
+  <!-- Ranked Top Pins Table (1-50) -->
+  <div class="mb-10 rounded-2xl border border-border bg-card shadow-sm">
+    <!-- Header with 5 Sort Mode Tabs -->
+    <div class="flex flex-col gap-4 border-b border-border p-4 sm:flex-row sm:items-center sm:justify-between">
       <div>
-        <h3 class="text-base font-bold text-foreground">Top Performing Pins</h3>
-        <p class="text-xs text-muted-foreground">Ranked pin performance across 5 canonical sort metrics</p>
+        <h2 class="text-base font-bold text-foreground">Ranked Pin Performance</h2>
+        <p class="text-xs text-muted-foreground">Top 50 pins ranked by Pinterest API v5 across 5 core metrics</p>
       </div>
 
-      <!-- Sort Modes Switcher Tabs -->
-      <div class="inline-flex flex-wrap rounded-xl border border-border bg-background p-1 shadow-sm" id="sort-toggles">
+      <!-- 5 Sort Tabs -->
+      <div class="flex flex-wrap items-center gap-1.5 rounded-xl border border-border bg-muted/40 p-1">
         <button
           data-sort="IMPRESSION"
-          class="sort-tab active rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-sm transition-all"
+          class="sort-tab active rounded-lg bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground shadow-sm transition-all"
         >
           Impressions
         </button>
         <button
           data-sort="OUTBOUND_CLICK"
-          class="sort-tab rounded-lg px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-all hover:text-foreground"
+          class="sort-tab rounded-lg px-3 py-1 text-xs font-semibold text-muted-foreground transition-all hover:text-foreground"
         >
           Outbound Clicks
         </button>
         <button
           data-sort="SAVE"
-          class="sort-tab rounded-lg px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-all hover:text-foreground"
+          class="sort-tab rounded-lg px-3 py-1 text-xs font-semibold text-muted-foreground transition-all hover:text-foreground"
         >
           Saves
         </button>
         <button
           data-sort="ENGAGEMENT"
-          class="sort-tab rounded-lg px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-all hover:text-foreground"
+          class="sort-tab rounded-lg px-3 py-1 text-xs font-semibold text-muted-foreground transition-all hover:text-foreground"
         >
           Engagements
         </button>
         <button
           data-sort="PIN_CLICK"
-          class="sort-tab rounded-lg px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-all hover:text-foreground"
+          class="sort-tab rounded-lg px-3 py-1 text-xs font-semibold text-muted-foreground transition-all hover:text-foreground"
         >
           Pin Clicks
         </button>
       </div>
     </div>
 
-    <!-- Ranked Top Pins Table -->
+    <!-- Top Pins Table Container -->
     <div class="overflow-x-auto">
       <table class="w-full text-left text-xs">
-        <thead class="border-b border-border bg-muted/40 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+        <thead class="border-b border-border bg-muted/20 text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
           <tr>
-            <th class="py-3.5 px-4 w-16 text-center">Rank</th>
-            <th class="py-3.5 px-4 min-w-[280px]">Pin Details</th>
-            <th class="py-3.5 px-4 text-right">Impressions</th>
-            <th class="py-3.5 px-4 text-right">Engagements</th>
-            <th class="py-3.5 px-4 text-right">Outbound Clicks</th>
-            <th class="py-3.5 px-4 text-right">Saves</th>
-            <th class="py-3.5 px-4 text-right">Pin Clicks</th>
-            <th class="py-3.5 px-4 text-center">Status</th>
+            <th class="py-3 px-4 w-12 text-center">Rank</th>
+            <th class="py-3 px-4 min-w-[240px]">Pin Details</th>
+            <th class="py-3 px-4 text-right">Impressions</th>
+            <th class="py-3 px-4 text-right">Engagements</th>
+            <th class="py-3 px-4 text-right">Outbound Clicks</th>
+            <th class="py-3 px-4 text-right">Saves</th>
+            <th class="py-3 px-4 text-right">Pin Clicks</th>
+            <th class="py-3 px-4 text-center">Status</th>
           </tr>
         </thead>
         <tbody id="top-pins-tbody" class="divide-y divide-border">
@@ -212,184 +228,521 @@ export const prerender = false;
       </table>
     </div>
   </div>
+
+  <!-- Connected Pinterest Accounts Section (CRUD Table) -->
+  <div class="mb-10 rounded-2xl border border-border bg-card shadow-sm">
+    <div class="flex flex-col gap-3 border-b border-border p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <h2 class="text-base font-bold text-foreground">Pinterest Connections</h2>
+        <p class="text-xs text-muted-foreground">Manage active accounts for scheduled analytics ingestion and reporting</p>
+      </div>
+      <button
+        id="add-connection-btn"
+        class="inline-flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2 text-xs font-bold text-primary-foreground shadow-sm hover:bg-primary/90 transition-all self-start sm:self-auto"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+        <span>Add Connection</span>
+      </button>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="w-full text-left text-xs">
+        <thead class="border-b border-border bg-muted/20 text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
+          <tr>
+            <th class="py-3 px-4">Account Name</th>
+            <th class="py-3 px-4 text-center">Analytics Status</th>
+            <th class="py-3 px-4">Created Date</th>
+            <th class="py-3 px-4 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="connections-tbody" class="divide-y divide-border">
+          <tr>
+            <td colspan="4" class="py-8 text-center text-muted-foreground">Loading connections...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- Settings Slide-over Drawer (FastCron, Webhooks, Schedules) -->
+  <!-- ========================================================================= -->
+  <div id="settings-drawer" class="fixed inset-0 z-50 hidden overflow-hidden">
+    <!-- Backdrop -->
+    <div id="settings-drawer-backdrop" class="absolute inset-0 bg-background/80 backdrop-blur-sm transition-opacity"></div>
+
+    <div class="fixed inset-y-0 right-0 flex max-w-full pl-10">
+      <div class="w-screen max-w-md border-l border-border bg-card p-6 shadow-2xl flex flex-col justify-between overflow-y-auto">
+        <div>
+          <!-- Drawer Header -->
+          <div class="flex items-center justify-between pb-4 border-b border-border mb-6">
+            <div>
+              <h3 class="text-base font-bold text-foreground">Analytics Settings</h3>
+              <p class="text-xs text-muted-foreground">Configure Make.com pipelines & FastCron automation</p>
+            </div>
+            <button id="close-settings-drawer-btn" class="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+
+          <!-- Settings Form -->
+          <form id="settings-form" class="space-y-6">
+            <!-- Channel A: Account Analytics -->
+            <div class="space-y-3 rounded-xl border border-border/80 bg-muted/20 p-4">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-foreground">Pipeline A (Account Analytics)</span>
+                <span id="drawer-channel-a-badge" class="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                  Synced
+                </span>
+              </div>
+              <div>
+                <label class="block text-[11px] font-semibold text-foreground mb-1">Make.com Webhook URL</label>
+                <input
+                  type="url"
+                  id="setting-analytics-webhook"
+                  placeholder="https://hook.eu1.make.com/..."
+                  class="w-full rounded-xl border border-border bg-card px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="block text-[11px] font-semibold text-foreground mb-1">Sync Time (HH:MM)</label>
+                  <input
+                    type="text"
+                    id="setting-analytics-time"
+                    placeholder="04:00"
+                    class="w-full rounded-xl border border-border bg-card px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+                <div class="flex items-end gap-1.5">
+                  <button
+                    type="button"
+                    id="ping-analytics-btn"
+                    class="w-full rounded-xl border border-border bg-card px-2.5 py-2 text-[11px] font-semibold text-foreground hover:bg-muted transition-all"
+                  >
+                    Test Ping
+                  </button>
+                  <button
+                    type="button"
+                    id="run-analytics-btn"
+                    class="w-full rounded-xl bg-primary/10 border border-primary/20 px-2.5 py-2 text-[11px] font-semibold text-primary hover:bg-primary/20 transition-all"
+                  >
+                    Run Now
+                  </button>
+                </div>
+              </div>
+              <button
+                type="button"
+                id="sync-fastcron-a-btn"
+                class="w-full rounded-xl border border-border bg-muted/60 px-3 py-1.5 text-[11px] font-semibold text-foreground hover:bg-muted transition-all"
+              >
+                ⚡ Sync Schedule to FastCron
+              </button>
+            </div>
+
+            <!-- Channel B: Top Pins -->
+            <div class="space-y-3 rounded-xl border border-border/80 bg-muted/20 p-4">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-foreground">Pipeline B (Ranked Top Pins)</span>
+                <span id="drawer-channel-b-badge" class="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                  Synced
+                </span>
+              </div>
+              <div>
+                <label class="block text-[11px] font-semibold text-foreground mb-1">Make.com Webhook URL</label>
+                <input
+                  type="url"
+                  id="setting-top-pins-webhook"
+                  placeholder="https://hook.eu1.make.com/..."
+                  class="w-full rounded-xl border border-border bg-card px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="block text-[11px] font-semibold text-foreground mb-1">Sync Time (HH:MM)</label>
+                  <input
+                    type="text"
+                    id="setting-top-pins-time"
+                    placeholder="04:30"
+                    class="w-full rounded-xl border border-border bg-card px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+                <div class="flex items-end gap-1.5">
+                  <button
+                    type="button"
+                    id="ping-top-pins-btn"
+                    class="w-full rounded-xl border border-border bg-card px-2.5 py-2 text-[11px] font-semibold text-foreground hover:bg-muted transition-all"
+                  >
+                    Test Ping
+                  </button>
+                  <button
+                    type="button"
+                    id="run-top-pins-btn"
+                    class="w-full rounded-xl bg-primary/10 border border-primary/20 px-2.5 py-2 text-[11px] font-semibold text-primary hover:bg-primary/20 transition-all"
+                  >
+                    Run Now
+                  </button>
+                </div>
+              </div>
+              <button
+                type="button"
+                id="sync-fastcron-b-btn"
+                class="w-full rounded-xl border border-border bg-muted/60 px-3 py-1.5 text-[11px] font-semibold text-foreground hover:bg-muted transition-all"
+              >
+                ⚡ Sync Schedule to FastCron
+              </button>
+            </div>
+
+            <!-- FastCron API Token & Options -->
+            <div class="space-y-3">
+              <div>
+                <label class="block text-xs font-bold text-foreground mb-1">FastCron API Token (Write-Only)</label>
+                <input
+                  type="password"
+                  id="setting-fastcron-token"
+                  placeholder="Enter token to overwrite (or leave blank to keep)"
+                  class="w-full rounded-xl border border-border bg-card px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+                <p class="text-[10px] text-muted-foreground mt-1">
+                  Stored securely in Project 1. Never displayed in plain text.
+                </p>
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-foreground mb-1">Timezone</label>
+                <select
+                  id="setting-timezone"
+                  class="w-full rounded-xl border border-border bg-card px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  <option value="UTC">UTC (Coordinated Universal Time)</option>
+                  <option value="America/New_York">America/New_York (EST/EDT)</option>
+                  <option value="America/Los_Angeles">America/Los_Angeles (PST/PDT)</option>
+                  <option value="Europe/London">Europe/London (GMT/BST)</option>
+                  <option value="Europe/Paris">Europe/Paris (CET/CEST)</option>
+                </select>
+              </div>
+
+              <div class="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="setting-auto-backfill"
+                  class="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                />
+                <label for="setting-auto-backfill" class="text-xs font-semibold text-foreground cursor-pointer">
+                  Auto-backfill 90 days of data on new account connection
+                </label>
+              </div>
+            </div>
+
+            <!-- Status message container -->
+            <div id="settings-status-msg" class="hidden rounded-xl p-3 text-xs font-medium"></div>
+
+            <div class="pt-4 border-t border-border">
+              <button
+                type="submit"
+                id="save-settings-btn"
+                class="w-full rounded-xl bg-primary py-2.5 text-xs font-bold text-primary-foreground shadow-sm hover:bg-primary/90 transition-all"
+              >
+                Save Settings
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- Connection Modal (Create / Edit) -->
+  <!-- ========================================================================= -->
+  <div id="connection-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-background/80 backdrop-blur-sm p-4">
+    <div class="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl">
+      <div class="flex items-center justify-between pb-3 border-b border-border mb-4">
+        <h3 id="connection-modal-title" class="text-base font-bold text-foreground">Add Pinterest Connection</h3>
+        <button id="close-connection-modal-btn" class="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <form id="connection-form" class="space-y-4">
+        <input type="hidden" id="conn-edit-id" value="" />
+        <div>
+          <label class="block text-xs font-semibold text-foreground mb-1">Account Display Name</label>
+          <input
+            type="text"
+            id="conn-account-name"
+            required
+            placeholder="e.g. HealthyBites_US"
+            class="w-full rounded-xl border border-border bg-card px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+        </div>
+
+        <div class="flex items-center gap-2">
+          <input
+            type="checkbox"
+            id="conn-analytics-enabled"
+            checked
+            class="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+          />
+          <label for="conn-analytics-enabled" class="text-xs font-semibold text-foreground cursor-pointer">
+            Analytics enabled (allow scheduled sync runs)
+          </label>
+        </div>
+
+        <div id="connection-modal-error" class="hidden rounded-xl bg-destructive/10 p-3 text-xs font-semibold text-destructive"></div>
+
+        <div class="flex items-center justify-end gap-3 pt-3 border-t border-border">
+          <button
+            type="button"
+            id="cancel-connection-modal-btn"
+            class="rounded-xl border border-border px-4 py-2 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-all"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            id="submit-connection-modal-btn"
+            class="rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground shadow-sm hover:bg-primary/90 transition-all"
+          >
+            Save Connection
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Delete Confirmation Modal -->
+  <div id="delete-connection-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-background/80 backdrop-blur-sm p-4">
+    <div class="w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-2xl">
+      <h3 class="text-base font-bold text-foreground mb-2">Delete Connection?</h3>
+      <p class="text-xs text-muted-foreground mb-4">
+        This will disable future sync runs for this account. Historical analytics and top pins snapshots will be safely preserved in Project 3.
+      </p>
+      <input type="hidden" id="delete-conn-id" value="" />
+      <div class="flex items-center justify-end gap-3">
+        <button
+          type="button"
+          id="cancel-delete-modal-btn"
+          class="rounded-xl border border-border px-4 py-2 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          id="confirm-delete-modal-btn"
+          class="rounded-xl bg-destructive px-4 py-2 text-xs font-bold text-destructive-foreground hover:bg-destructive/90"
+        >
+          Delete Account
+        </button>
+      </div>
+    </div>
+  </div>
 </Layout>
 
 <script>
-  let currentWorkspaceId = '';
-  let currentConnectionId = '';
   let currentWindowDays = 30;
   let currentSortBy = 'IMPRESSION';
-  let accountsList = [];
+  let currentConnectionId = '';
+  let activeConnectionsList = [];
 
-  // Helper: Format number with commas
-  function formatNum(n) {
-    if (n === undefined || n === null) return '0';
-    return Number(n).toLocaleString();
+  function formatNum(num) {
+    if (num === null || num === undefined) return '---';
+    return Number(num).toLocaleString('en-US');
   }
 
-  // Helper: Format percent
-  function formatPct(r) {
-    if (r === undefined || r === null) return '0.00%';
-    return (Number(r) * 100).toFixed(2) + '%';
+  function formatPct(rate) {
+    if (rate === null || rate === undefined) return '0.00%';
+    return (Number(rate) * 100).toFixed(2) + '%';
   }
 
-  // Initialize Page
   async function initAnalytics() {
-    // Read workspace cookie or fallback
-    const match = document.cookie.match(/(^|;)\s*pinorbit_workspace_id=([^;]+)/);
-    currentWorkspaceId = match ? match[2] : '';
-
-    await fetchAccounts();
+    await loadConnections();
+    await loadSettings();
+    await loadAnalyticsData();
     setupEventListeners();
   }
 
-  // Fetch connected accounts for dropdown
-  async function fetchAccounts() {
+  // Load Connections for Select dropdown & CRUD Table
+  async function loadConnections() {
     try {
-      const res = await fetch('/api/admin/bootstrap'); // or direct client fetch
-    } catch {}
+      const res = await fetch('/api/analytics/connections');
+      const json = await res.json();
+      const accounts = json.data || [];
+      activeConnectionsList = accounts;
 
-    // Fetch accounts directly
-    try {
-      const resp = await fetch(`/api/accounts?workspace_id=${currentWorkspaceId}`);
-      if (resp.ok) {
-        const data = await resp.json();
-        accountsList = data.accounts || [];
-      }
-    } catch {
-      accountsList = [];
-    }
+      const select = document.getElementById('analytics-account-select');
+      const tbody = document.getElementById('connections-tbody');
 
-    const select = document.getElementById('analytics-account-select');
-    if (!select) return;
-
-    if (!accountsList || accountsList.length === 0) {
-      select.innerHTML = '<option value="">No Pinterest accounts connected</option>';
-      renderEmptyState('No Pinterest accounts found in this workspace. Connect an account in Accounts tab.');
-      return;
-    }
-
-    select.innerHTML = accountsList
-      .map(
-        (acc) =>
-          `<option value="${acc.id}" ${acc.id === currentConnectionId ? 'selected' : ''}>${acc.account_name} ${acc.is_active ? '' : '(Revoked)'}</option>`
-      )
-      .join('');
-
-    currentConnectionId = accountsList[0].id;
-    loadAnalyticsData();
-  }
-
-  // Load Overview KPIs and Top Pins
-  async function loadAnalyticsData() {
-    if (!currentConnectionId) return;
-
-    // Load Overview
-    try {
-      const ovResp = await fetch(
-        `/api/analytics/overview?workspace_id=${encodeURIComponent(currentWorkspaceId)}&connection_id=${encodeURIComponent(currentConnectionId)}&window_days=${currentWindowDays}`
-      );
-      const cacheStatus = ovResp.headers.get('X-Cache-Status') || 'HIT';
-      
-      const cacheBadge = document.getElementById('cache-status-badge');
-      if (cacheBadge) {
-        cacheBadge.textContent = `Edge Cache: ${cacheStatus}`;
-        cacheBadge.className = `rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-          cacheStatus === 'HIT'
-            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-            : 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
-        }`;
+      if (select) {
+        select.innerHTML = '';
+        if (accounts.length === 0) {
+          select.innerHTML = '<option value="">No Pinterest accounts connected</option>';
+        } else {
+          accounts.forEach((acc, index) => {
+            const opt = document.createElement('option');
+            opt.value = acc.id;
+            opt.textContent = acc.account_name || `Account ${index + 1}`;
+            select.appendChild(opt);
+          });
+          currentConnectionId = accounts[0].id;
+        }
       }
 
-      if (ovResp.ok) {
-        const result = await ovResp.json();
-        if (result.success && result.data) {
-          renderKPIs(result.data);
+      if (tbody) {
+        if (accounts.length === 0) {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="4" class="py-8 text-center text-muted-foreground">
+                No connected Pinterest accounts found. Click "+ Add Connection" above to configure.
+              </td>
+            </tr>
+          `;
+        } else {
+          tbody.innerHTML = accounts
+            .map((acc) => {
+              const statusBadge = acc.analytics_enabled
+                ? '<span class="inline-flex rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">Active</span>'
+                : '<span class="inline-flex rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">Disabled</span>';
+
+              const createdDate = acc.created_at ? new Date(acc.created_at).toLocaleDateString() : '---';
+
+              return `
+                <tr class="hover:bg-muted/30 transition-colors">
+                  <td class="py-3 px-4 font-bold text-foreground">${acc.account_name}</td>
+                  <td class="py-3 px-4 text-center">${statusBadge}</td>
+                  <td class="py-3 px-4 text-muted-foreground">${createdDate}</td>
+                  <td class="py-3 px-4 text-right">
+                    <div class="inline-flex items-center gap-2">
+                      <button data-action="sync-now" data-id="${acc.id}" class="rounded-lg border border-border px-2.5 py-1 text-[11px] font-semibold hover:bg-muted">Sync Now</button>
+                      <button data-action="edit-conn" data-id="${acc.id}" class="rounded-lg border border-border px-2.5 py-1 text-[11px] font-semibold hover:bg-muted">Edit</button>
+                      <button data-action="delete-conn" data-id="${acc.id}" class="rounded-lg border border-destructive/20 text-destructive px-2.5 py-1 text-[11px] font-semibold hover:bg-destructive/10">Delete</button>
+                    </div>
+                  </td>
+                </tr>
+              `;
+            })
+            .join('');
         }
       }
     } catch (e) {
-      console.error('Error fetching overview KPIs:', e);
-    }
-
-    // Load Top Pins
-    await loadTopPins();
-  }
-
-  // Render KPI values
-  function renderKPIs(data) {
-    // Total Impressions
-    const impEl = document.querySelector('#kpi-impressions .text-3xl');
-    if (impEl) impEl.textContent = formatNum(data.impressions);
-
-    // Total Engagements
-    const engEl = document.querySelector('#kpi-engagements .text-3xl');
-    const engSubEl = document.querySelector('#kpi-engagements p');
-    if (engEl) engEl.textContent = formatNum(data.engagements);
-    if (engSubEl) engSubEl.textContent = `${formatPct(data.engagementRate)} engagement rate`;
-
-    // Pin Clicks
-    const clickEl = document.querySelector('#kpi-pin-clicks .text-3xl');
-    const clickSubEl = document.querySelector('#kpi-pin-clicks p');
-    if (clickEl) clickEl.textContent = formatNum(data.pinClicks);
-    if (clickSubEl) clickSubEl.textContent = `${formatPct(data.pinClickRate)} pin click rate`;
-
-    // Outbound & Saves
-    const outEl = document.querySelector('#kpi-outbound-clicks .text-3xl');
-    const outSubEl = document.querySelector('#kpi-outbound-clicks p');
-    if (outEl) outEl.textContent = formatNum((data.outboundClicks || 0) + (data.saves || 0));
-    if (outSubEl) outSubEl.textContent = `${formatNum(data.outboundClicks)} outbound • ${formatNum(data.saves)} saves`;
-
-    // Last Ingested Time
-    const lastSyncEl = document.getElementById('sync-last-time');
-    if (lastSyncEl) {
-      lastSyncEl.textContent = data.lastIngestedAt
-        ? new Date(data.lastIngestedAt).toLocaleDateString(undefined, {
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-          })
-        : 'Never';
+      console.error('Error loading connections:', e);
     }
   }
 
-  // Load Top Pins
-  async function loadTopPins() {
-    const tbody = document.getElementById('top-pins-tbody');
-    if (!tbody) return;
-
-    tbody.innerHTML = `
-      <tr>
-        <td colspan="8" class="py-12 text-center text-muted-foreground animate-pulse">
-          Loading top pins for ${currentSortBy}...
-        </td>
-      </tr>
-    `;
-
+  // Load Settings for Drawer
+  async function loadSettings() {
     try {
-      const resp = await fetch(
-        `/api/analytics/top-pins?workspace_id=${encodeURIComponent(currentWorkspaceId)}&connection_id=${encodeURIComponent(currentConnectionId)}&sort_by=${currentSortBy}&limit=50`
-      );
+      const res = await fetch('/api/analytics/settings');
+      const json = await res.json();
+      if (!json.success || !json.data) return;
 
-      if (!resp.ok) {
-        tbody.innerHTML = `
-          <tr>
-            <td colspan="8" class="py-8 text-center text-rose-500">
-              Failed to load top pins.
-            </td>
-          </tr>
-        `;
-        return;
+      const d = json.data;
+      const setVal = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.value = val || '';
+      };
+
+      setVal('setting-analytics-webhook', d.analytics_webhook_url);
+      setVal('setting-top_pins-webhook', d.top_pins_webhook_url);
+      setVal('setting-analytics-time', d.analytics_sync_time || '04:00');
+      setVal('setting-top-pins-time', d.top_pins_sync_time || '04:30');
+      setVal('setting-timezone', d.timezone || 'UTC');
+
+      const tokenEl = document.getElementById('setting-fastcron-token');
+      if (tokenEl) {
+        tokenEl.placeholder = d.has_fastcron_token ? '•••••••• (Configured)' : 'Enter FastCron API Token';
       }
 
-      const result = await resp.json();
-      const pins = result.data || [];
+      const backfillEl = document.getElementById('setting-auto-backfill');
+      if (backfillEl) {
+        backfillEl.checked = Boolean(d.auto_backfill_on_connect);
+      }
+
+      // Update status badges
+      const updateBadge = (id, status) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (status === 'synced') {
+          el.className = 'rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400';
+          el.textContent = 'Synced';
+        } else if (status === 'error') {
+          el.className = 'rounded-full bg-rose-500/10 px-2 py-0.5 text-[10px] font-semibold text-rose-600 dark:text-rose-400';
+          el.textContent = 'Error';
+        } else {
+          el.className = 'rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400';
+          el.textContent = 'Pending';
+        }
+      };
+
+      updateBadge('channel-a-status-badge', d.analytics_schedule_status);
+      updateBadge('channel-b-status-badge', d.top_pins_schedule_status);
+      updateBadge('drawer-channel-a-badge', d.analytics_schedule_status);
+      updateBadge('drawer-channel-b-badge', d.top_pins_schedule_status);
+    } catch (e) {
+      console.error('Error loading settings:', e);
+    }
+  }
+
+  // Load KPI Overview and Top Pins Data
+  async function loadAnalyticsData() {
+    if (!currentConnectionId) return;
+    await Promise.all([loadOverview(), loadTopPins()]);
+  }
+
+  async function loadOverview() {
+    try {
+      const res = await fetch(`/api/analytics/overview?days=${currentWindowDays}&connection_id=${currentConnectionId}`);
+      const cacheStatus = res.headers.get('x-cache-status') || 'DIRECT';
+      const cacheBadge = document.getElementById('cache-status-badge');
+      if (cacheBadge) {
+        cacheBadge.textContent = `Edge Cache: ${cacheStatus}`;
+        cacheBadge.className =
+          cacheStatus === 'HIT'
+            ? 'rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400'
+            : 'rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-semibold text-blue-600 dark:text-blue-400';
+      }
+
+      const json = await res.json();
+      if (!json.success || !json.data) return;
+
+      const d = json.data;
+      const setCard = (id, val, sub) => {
+        const el = document.getElementById(id);
+        if (el) {
+          const valEl = el.querySelector('.text-2xl');
+          if (valEl) valEl.textContent = val;
+          const subEl = el.querySelector('.text-muted-foreground.text-xs');
+          if (subEl && sub) subEl.textContent = sub;
+        }
+      };
+
+      setCard('kpi-impressions', formatNum(d.impressions), `Rate: ${formatPct(d.engagementRate)}`);
+      setCard('kpi-engagements', formatNum(d.engagements), `Rate: ${formatPct(d.engagementRate)}`);
+      setCard('kpi-clicks', formatNum(d.pinClicks), `Rate: ${formatPct(d.pinClickRate)}`);
+      setCard('kpi-conversions', `${formatNum(d.outboundClicks)} / ${formatNum(d.saves)}`, `Outbound Rate: ${formatPct(d.outboundClickRate)}`);
+
+      const lastTimeEl = document.getElementById('sync-last-time');
+      if (lastTimeEl) {
+        lastTimeEl.textContent = d.lastIngestedAt ? new Date(d.lastIngestedAt).toLocaleTimeString() : 'Recent';
+      }
+    } catch (e) {
+      console.error('Error fetching overview:', e);
+    }
+  }
+
+  async function loadTopPins() {
+    try {
+      const res = await fetch(`/api/analytics/top-pins?sort_by=${currentSortBy}&days=${currentWindowDays}&connection_id=${currentConnectionId}`);
+      const json = await res.json();
+      const pins = json.data || [];
+      const tbody = document.getElementById('top-pins-tbody');
+      if (!tbody) return;
 
       if (pins.length === 0) {
         tbody.innerHTML = `
           <tr>
             <td colspan="8" class="py-12 text-center text-muted-foreground">
-              No top pins recorded yet for this sort mode. Daily sync will populate ranked pins.
+              No top pins recorded for this window. Data will populate after the next Make.com sync run.
             </td>
           </tr>
         `;
@@ -465,19 +818,6 @@ export const prerender = false;
     }
   }
 
-  function renderEmptyState(msg) {
-    const tbody = document.getElementById('top-pins-tbody');
-    if (tbody) {
-      tbody.innerHTML = `
-        <tr>
-          <td colspan="8" class="py-12 text-center text-muted-foreground">
-            ${msg}
-          </td>
-        </tr>
-      `;
-    }
-  }
-
   // Setup Event Handlers
   function setupEventListeners() {
     // Account select change
@@ -524,6 +864,293 @@ export const prerender = false;
     if (refreshBtn) {
       refreshBtn.addEventListener('click', () => {
         loadAnalyticsData();
+      });
+    }
+
+    // Settings Drawer Open / Close
+    const openDrawerBtn = document.getElementById('open-settings-drawer-btn');
+    const closeDrawerBtn = document.getElementById('close-settings-drawer-btn');
+    const drawerBackdrop = document.getElementById('settings-drawer-backdrop');
+    const drawer = document.getElementById('settings-drawer');
+
+    const toggleDrawer = (open) => {
+      if (drawer) {
+        if (open) {
+          drawer.classList.remove('hidden');
+          loadSettings();
+        } else {
+          drawer.classList.add('hidden');
+        }
+      }
+    };
+
+    if (openDrawerBtn) openDrawerBtn.addEventListener('click', () => toggleDrawer(true));
+    if (closeDrawerBtn) closeDrawerBtn.addEventListener('click', () => toggleDrawer(false));
+    if (drawerBackdrop) drawerBackdrop.addEventListener('click', () => toggleDrawer(false));
+
+    // FastCron Schedule Sync Buttons in Drawer
+    const setupFastCronSyncBtn = (btnId, channel) => {
+      const btn = document.getElementById(btnId);
+      if (btn) {
+        btn.addEventListener('click', async () => {
+          btn.textContent = 'Syncing...';
+          btn.disabled = true;
+          try {
+            const res = await fetch('/api/analytics/schedule/sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ channel }),
+            });
+            const json = await res.json();
+            alert(json.success ? json.message : `FastCron Sync Failed: ${json.error}`);
+            loadSettings();
+          } catch (e) {
+            alert('Failed to contact FastCron schedule endpoint: ' + e.message);
+          } finally {
+            btn.textContent = '⚡ Sync Schedule to FastCron';
+            btn.disabled = false;
+          }
+        });
+      }
+    };
+    setupFastCronSyncBtn('sync-fastcron-a-btn', 'analytics');
+    setupFastCronSyncBtn('sync-fastcron-b-btn', 'top_pins');
+
+    // Ping & Run Now Buttons in Drawer
+    const setupPingBtn = (btnId, channel) => {
+      const btn = document.getElementById(btnId);
+      if (btn) {
+        btn.addEventListener('click', async () => {
+          btn.textContent = 'Pinging...';
+          try {
+            const res = await fetch('/api/analytics/trigger-sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ channel, is_ping: true }),
+            });
+            const json = await res.json();
+            alert(json.success ? `Ping Succeeded (HTTP ${json.status || 200})` : `Ping Failed: ${json.error}`);
+          } catch (e) {
+            alert('Ping request error: ' + e.message);
+          } finally {
+            btn.textContent = 'Test Ping';
+          }
+        });
+      }
+    };
+    setupPingBtn('ping-analytics-btn', 'analytics');
+    setupPingBtn('ping-top-pins-btn', 'top_pins');
+
+    const setupRunBtn = (btnId, channel) => {
+      const btn = document.getElementById(btnId);
+      if (btn) {
+        btn.addEventListener('click', async () => {
+          btn.textContent = 'Triggering...';
+          try {
+            const res = await fetch('/api/analytics/trigger-sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ channel, connection_id: currentConnectionId }),
+            });
+            const json = await res.json();
+            alert(json.success ? json.message : `Trigger Failed: ${json.error}`);
+          } catch (e) {
+            alert('Trigger request error: ' + e.message);
+          } finally {
+            btn.textContent = 'Run Now';
+          }
+        });
+      }
+    };
+    setupRunBtn('run-analytics-btn', 'analytics');
+    setupRunBtn('run-top-pins-btn', 'top_pins');
+
+    // Save Settings Form
+    const settingsForm = document.getElementById('settings-form');
+    if (settingsForm) {
+      settingsForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const submitBtn = document.getElementById('save-settings-btn');
+        const statusMsg = document.getElementById('settings-status-msg');
+        if (submitBtn) {
+          submitBtn.textContent = 'Saving...';
+          submitBtn.disabled = true;
+        }
+
+        const payload = {
+          analytics_webhook_url: document.getElementById('setting-analytics-webhook').value,
+          top_pins_webhook_url: document.getElementById('setting-top-pins-webhook').value,
+          analytics_sync_time: document.getElementById('setting-analytics-time').value,
+          top_pins_sync_time: document.getElementById('setting-top-pins-time').value,
+          timezone: document.getElementById('setting-timezone').value,
+          fastcron_token: document.getElementById('setting-fastcron-token').value,
+          auto_backfill_on_connect: document.getElementById('setting-auto-backfill').checked,
+        };
+
+        try {
+          const res = await fetch('/api/analytics/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          const json = await res.json();
+          if (statusMsg) {
+            statusMsg.classList.remove('hidden');
+            if (json.success) {
+              statusMsg.className = 'rounded-xl bg-emerald-500/10 p-3 text-xs font-semibold text-emerald-600 dark:text-emerald-400';
+              statusMsg.textContent = 'Settings saved successfully!';
+              await loadSettings();
+            } else {
+              statusMsg.className = 'rounded-xl bg-destructive/10 p-3 text-xs font-semibold text-destructive';
+              statusMsg.textContent = `Error: ${json.error}`;
+            }
+          }
+        } catch (err) {
+          if (statusMsg) {
+            statusMsg.classList.remove('hidden');
+            statusMsg.className = 'rounded-xl bg-destructive/10 p-3 text-xs font-semibold text-destructive';
+            statusMsg.textContent = 'Network error while saving settings.';
+          }
+        } finally {
+          if (submitBtn) {
+            submitBtn.textContent = 'Save Settings';
+            submitBtn.disabled = false;
+          }
+        }
+      });
+    }
+
+    // Connection CRUD Modal handlers
+    const connModal = document.getElementById('connection-modal');
+    const openAddConnBtn = document.getElementById('add-connection-btn');
+    const closeConnModalBtn = document.getElementById('close-connection-modal-btn');
+    const cancelConnModalBtn = document.getElementById('cancel-connection-modal-btn');
+    const connForm = document.getElementById('connection-form');
+
+    const toggleConnModal = (open, isEdit = false, data = {}) => {
+      if (connModal) {
+        if (open) {
+          connModal.classList.remove('hidden');
+          connModal.classList.add('flex');
+          document.getElementById('connection-modal-title').textContent = isEdit ? 'Edit Pinterest Connection' : 'Add Pinterest Connection';
+          document.getElementById('conn-edit-id').value = isEdit ? data.id : '';
+          document.getElementById('conn-account-name').value = isEdit ? data.account_name : '';
+          document.getElementById('conn-analytics-enabled').checked = isEdit ? data.analytics_enabled : true;
+          document.getElementById('connection-modal-error').classList.add('hidden');
+        } else {
+          connModal.classList.add('hidden');
+          connModal.classList.remove('flex');
+        }
+      }
+    };
+
+    if (openAddConnBtn) openAddConnBtn.addEventListener('click', () => toggleConnModal(true, false));
+    if (closeConnModalBtn) closeConnModalBtn.addEventListener('click', () => toggleConnModal(false));
+    if (cancelConnModalBtn) cancelConnModalBtn.addEventListener('click', () => toggleConnModal(false));
+
+    // Connection Form Submit (Create vs Edit)
+    if (connForm) {
+      connForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const editId = document.getElementById('conn-edit-id').value;
+        const accountName = document.getElementById('conn-account-name').value;
+        const analyticsEnabled = document.getElementById('conn-analytics-enabled').checked;
+        const errorDiv = document.getElementById('connection-modal-error');
+
+        const isEdit = Boolean(editId);
+        const url = isEdit ? `/api/analytics/connections/${editId}` : '/api/analytics/connections';
+        const method = isEdit ? 'PATCH' : 'POST';
+
+        try {
+          const res = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ account_name: accountName, analytics_enabled: analyticsEnabled }),
+          });
+          const json = await res.json();
+          if (json.success) {
+            toggleConnModal(false);
+            await loadConnections();
+            await loadAnalyticsData();
+          } else {
+            errorDiv.textContent = json.error || 'Failed to save connection.';
+            errorDiv.classList.remove('hidden');
+          }
+        } catch (err) {
+          errorDiv.textContent = err.message || 'Network error.';
+          errorDiv.classList.remove('hidden');
+        }
+      });
+    }
+
+    // Connection Table Action Delegation (Sync Now, Edit, Delete)
+    const connTbody = document.getElementById('connections-tbody');
+    if (connTbody) {
+      connTbody.addEventListener('click', (e) => {
+        const btn = e.target.closest('button');
+        if (!btn) return;
+        const action = btn.getAttribute('data-action');
+        const id = btn.getAttribute('data-id');
+        const acc = activeConnectionsList.find((a) => a.id === id);
+
+        if (action === 'edit-conn' && acc) {
+          toggleConnModal(true, true, acc);
+        } else if (action === 'delete-conn') {
+          const delModal = document.getElementById('delete-connection-modal');
+          document.getElementById('delete-conn-id').value = id;
+          if (delModal) {
+            delModal.classList.remove('hidden');
+            delModal.classList.add('flex');
+          }
+        } else if (action === 'sync-now') {
+          btn.textContent = 'Syncing...';
+          fetch('/api/analytics/trigger-sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ channel: 'analytics', connection_id: id }),
+          })
+            .then((r) => r.json())
+            .then((j) => alert(j.success ? j.message : `Sync failed: ${j.error}`))
+            .finally(() => {
+              btn.textContent = 'Sync Now';
+            });
+        }
+      });
+    }
+
+    // Delete Modal Actions
+    const cancelDeleteBtn = document.getElementById('cancel-delete-modal-btn');
+    const confirmDeleteBtn = document.getElementById('confirm-delete-modal-btn');
+    const delModal = document.getElementById('delete-connection-modal');
+
+    if (cancelDeleteBtn) {
+      cancelDeleteBtn.addEventListener('click', () => {
+        if (delModal) {
+          delModal.classList.add('hidden');
+          delModal.classList.remove('flex');
+        }
+      });
+    }
+
+    if (confirmDeleteBtn) {
+      confirmDeleteBtn.addEventListener('click', async () => {
+        const id = document.getElementById('delete-conn-id').value;
+        try {
+          const res = await fetch(`/api/analytics/connections/${id}`, { method: 'DELETE' });
+          const json = await res.json();
+          if (json.success) {
+            if (delModal) {
+              delModal.classList.add('hidden');
+              delModal.classList.remove('flex');
+            }
+            await loadConnections();
+            await loadAnalyticsData();
+          } else {
+            alert('Delete failed: ' + json.error);
+          }
+        } catch (e) {
+          alert('Delete error: ' + e.message);
+        }
       });
     }
   }

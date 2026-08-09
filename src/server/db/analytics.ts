@@ -5,6 +5,8 @@ import type {
   TopPinSnapshot,
   DailyWorkspaceMetric,
   PinnerSortBy,
+  WorkspaceAnalyticsSettings,
+  PinnerConnection,
 } from '../../lib/types';
 
 export interface ImportSessionRecord {
@@ -500,5 +502,165 @@ export const analyticsDb = {
       total_clicks,
       engagement_rate: Math.min(1.0, engagement_rate),
     };
+  },
+
+  // ============================================================================
+  // Project 1 Control Plane Settings & Connection Management (V15)
+  // ============================================================================
+
+  /**
+   * Retrieves workspace analytics settings.
+   */
+  async getWorkspaceAnalyticsSettings(
+    workspaceId: string
+  ): Promise<WorkspaceAnalyticsSettings | null> {
+    if (!workspaceId) {
+      throw new Error('Tenant Boundary Violation: workspaceId is required.');
+    }
+
+    const schedulingAdmin = dbClients.getSchedulingAdmin();
+    const { data, error } = await schedulingAdmin
+      .from('workspace_analytics_settings')
+      .select('*')
+      .eq('workspace_id', workspaceId)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data as WorkspaceAnalyticsSettings | null;
+  },
+
+  /**
+   * Upserts workspace analytics settings.
+   */
+  async upsertWorkspaceAnalyticsSettings(
+    workspaceId: string,
+    settings: Partial<WorkspaceAnalyticsSettings>
+  ): Promise<WorkspaceAnalyticsSettings> {
+    if (!workspaceId) {
+      throw new Error('Tenant Boundary Violation: workspaceId is required.');
+    }
+
+    const schedulingAdmin = dbClients.getSchedulingAdmin();
+    const payload = {
+      ...settings,
+      workspace_id: workspaceId,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data, error } = await schedulingAdmin
+      .from('workspace_analytics_settings')
+      .upsert(payload, { onConflict: 'workspace_id' })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data as WorkspaceAnalyticsSettings;
+  },
+
+  /**
+   * Lists active Pinterest connections in a workspace (filtering out soft-deleted).
+   */
+  async listWorkspaceConnections(workspaceId: string): Promise<PinnerConnection[]> {
+    if (!workspaceId) {
+      throw new Error('Tenant Boundary Violation: workspaceId is required.');
+    }
+
+    const schedulingAdmin = dbClients.getSchedulingAdmin();
+    const { data, error } = await schedulingAdmin
+      .from('accounts')
+      .select('id, workspace_id, account_name, is_active, analytics_enabled, deleted_at, created_at, last_published_at')
+      .eq('workspace_id', workspaceId)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return (data as PinnerConnection[]) || [];
+  },
+
+  /**
+   * Creates a new Pinterest connection in Project 1 accounts.
+   */
+  async createWorkspaceConnection(
+    workspaceId: string,
+    accountName: string,
+    analyticsEnabled = true
+  ): Promise<PinnerConnection> {
+    if (!workspaceId || !accountName) {
+      throw new Error('Validation Error: workspaceId and accountName are required.');
+    }
+
+    const schedulingAdmin = dbClients.getSchedulingAdmin();
+    const { data, error } = await schedulingAdmin
+      .from('accounts')
+      .insert({
+        workspace_id: workspaceId,
+        account_name: accountName.trim(),
+        is_active: true,
+        analytics_enabled: analyticsEnabled,
+      })
+      .select('id, workspace_id, account_name, is_active, analytics_enabled, deleted_at, created_at, last_published_at')
+      .single();
+
+    if (error) throw error;
+    return data as PinnerConnection;
+  },
+
+  /**
+   * Updates an existing connection in Project 1 accounts.
+   */
+  async updateWorkspaceConnection(
+    workspaceId: string,
+    connectionId: string,
+    updates: { account_name?: string; analytics_enabled?: boolean }
+  ): Promise<PinnerConnection> {
+    if (!workspaceId || !connectionId) {
+      throw new Error('Validation Error: workspaceId and connectionId are required.');
+    }
+
+    const schedulingAdmin = dbClients.getSchedulingAdmin();
+    const updatePayload: Record<string, any> = {};
+    if (updates.account_name !== undefined) {
+      updatePayload.account_name = updates.account_name.trim();
+    }
+    if (updates.analytics_enabled !== undefined) {
+      updatePayload.analytics_enabled = updates.analytics_enabled;
+    }
+
+    const { data, error } = await schedulingAdmin
+      .from('accounts')
+      .update(updatePayload)
+      .eq('id', connectionId)
+      .eq('workspace_id', workspaceId)
+      .select('id, workspace_id, account_name, is_active, analytics_enabled, deleted_at, created_at, last_published_at')
+      .single();
+
+    if (error) throw error;
+    return data as PinnerConnection;
+  },
+
+  /**
+   * Soft-deletes a Pinterest connection in Project 1 accounts.
+   */
+  async softDeleteWorkspaceConnection(
+    workspaceId: string,
+    connectionId: string
+  ): Promise<boolean> {
+    if (!workspaceId || !connectionId) {
+      throw new Error('Validation Error: workspaceId and connectionId are required.');
+    }
+
+    const schedulingAdmin = dbClients.getSchedulingAdmin();
+    const { error } = await schedulingAdmin
+      .from('accounts')
+      .update({
+        is_active: false,
+        analytics_enabled: false,
+        deleted_at: new Date().toISOString(),
+      })
+      .eq('id', connectionId)
+      .eq('workspace_id', workspaceId);
+
+    if (error) throw error;
+    return true;
   },
 };

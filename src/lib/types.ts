@@ -463,13 +463,14 @@ export interface PinnerErrorDetails {
 export interface PinnerIngestPayload {
   success: boolean;
   request_id?: string;
+  channel?: 'account_analytics' | 'top_pins' | string;
   workspace_id: string;
   connection_id: string;
   request_context?: PinnerMakeRequestContext;
-  account_analytics?: any;
-  top_pins_analytics?: {
+  account_analytics?: any | null;
+  top_pins_analytics?: ({
     [key in PinnerSortBy]?: any;
-  } & Record<string, any>;
+  } & Record<string, any>) | null;
   raw_headers?: Record<string, any>;
   error_details?: PinnerErrorDetails;
 }
@@ -491,4 +492,95 @@ export interface PinnerOverviewKPIs {
   connectionId: string;
   workspaceId: string;
 }
+
+// ==============================================================================
+// V15 Control Plane & Settings Types
+// ==============================================================================
+
+export interface WorkspaceAnalyticsSettings {
+  id: string;
+  workspace_id: string;
+  analytics_webhook_url?: string | null;
+  top_pins_webhook_url?: string | null;
+  analytics_sync_time: string;
+  top_pins_sync_time: string;
+  timezone: string;
+  analytics_enabled: boolean;
+  top_pins_enabled: boolean;
+  auto_backfill_on_connect: boolean;
+  fastcron_token?: string | null;
+  analytics_fastcron_job_id?: string | null;
+  top_pins_fastcron_job_id?: string | null;
+  analytics_schedule_status: 'pending' | 'synced' | 'error';
+  top_pins_schedule_status: 'pending' | 'synced' | 'error';
+  last_synced_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkspaceAnalyticsSettingsResponse {
+  workspace_id: string;
+  analytics_webhook_url: string | null;
+  top_pins_webhook_url: string | null;
+  analytics_sync_time: string;
+  top_pins_sync_time: string;
+  timezone: string;
+  analytics_enabled: boolean;
+  top_pins_enabled: boolean;
+  auto_backfill_on_connect: boolean;
+  has_fastcron_token: boolean;
+  fastcron_token_masked: string | null;
+  has_ingest_secret: boolean;
+  analytics_schedule_status: 'pending' | 'synced' | 'error';
+  top_pins_schedule_status: 'pending' | 'synced' | 'error';
+  analytics_fastcron_job_id?: string | null;
+  top_pins_fastcron_job_id?: string | null;
+  last_synced_at?: string | null;
+}
+
+export interface PinnerConnection {
+  id: string;
+  workspace_id: string;
+  account_name: string;
+  is_active: boolean;
+  analytics_enabled: boolean;
+  deleted_at?: string | null;
+  created_at: string;
+  last_published_at?: string | null;
+  last_synced_at?: string | null;
+}
+
+export interface PinnerConnectionInput {
+  account_name: string;
+  analytics_enabled?: boolean;
+}
+
+export interface ScheduleSyncRequest {
+  channel: 'analytics' | 'top_pins';
+}
+
+export interface ScheduleSyncResponse {
+  success: boolean;
+  channel: 'analytics' | 'top_pins';
+  schedule_status: 'synced' | 'error';
+  fastcron_job_id?: string | null;
+  message?: string;
+  error?: string;
+}
+
+export interface TriggerSyncRequest {
+  channel: 'analytics' | 'top_pins';
+  connection_id?: string;
+}
+
+export interface TriggerSyncResponse {
+  success: boolean;
+  channel: 'analytics' | 'top_pins';
+  startDate: string;
+  endDate: string;
+  webhookResponseStatus?: number;
+  message?: string;
+  error?: string;
+}
+
 

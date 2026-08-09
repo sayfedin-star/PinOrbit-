@@ -11,6 +11,7 @@ export interface ServerEnvConfig {
   ANALYTICS_SUPABASE_SECRET_KEY: string;
   INGEST_SECRET_KEY: string;
   SNITCH_WEBHOOK_URL: string;
+  FASTCRON_API_TOKEN: string;
 }
 
 /**
@@ -43,6 +44,7 @@ export function getServerEnv(runtimeEnv?: Record<string, any>): ServerEnvConfig 
 
   const INGEST_SECRET_KEY = env.INGEST_SECRET_KEY || 'pinorbit_ingest_secret_dev';
   const SNITCH_WEBHOOK_URL = env.SNITCH_WEBHOOK_URL || '';
+  const FASTCRON_API_TOKEN = env.FASTCRON_API_TOKEN || '';
 
   return {
     SCHEDULING_SUPABASE_URL,
@@ -54,6 +56,7 @@ export function getServerEnv(runtimeEnv?: Record<string, any>): ServerEnvConfig 
     ANALYTICS_SUPABASE_SECRET_KEY,
     INGEST_SECRET_KEY,
     SNITCH_WEBHOOK_URL,
+    FASTCRON_API_TOKEN,
   };
 }
 

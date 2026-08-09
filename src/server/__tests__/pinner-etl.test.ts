@@ -192,7 +192,7 @@ describe('Pinner Analytics ETL Processor Suite', () => {
       workspaceId,
       expect.objectContaining({
         account_id: connectionId,
-        source_type: 'pinterest_api_sync',
+        source_type: 'pinterest_full_sync',
         status: 'completed',
       })
     );
@@ -300,5 +300,64 @@ describe('Pinner Analytics ETL Processor Suite', () => {
     expect(pinnerETL.getFailureStreak(workspaceId)).toBe(2);
     expect(snitchSpy).toHaveBeenCalledWith(workspaceId, connectionId, 2, payload.error_details);
     expect(secondResult.snitchAlerted).toBe(true);
+  });
+
+  it('processes Account Analytics-only payload without top_pins_analytics', async () => {
+    const payload: PinnerIngestPayload = {
+      success: true,
+      channel: 'account_analytics',
+      workspace_id: workspaceId,
+      connection_id: connectionId,
+      request_context: {
+        start_date: '2026-08-01',
+        end_date: '2026-08-08',
+        job_type: 'daily_sync',
+      },
+      account_analytics: samplePinterestDailyAnalytics,
+      top_pins_analytics: null, // Null top pins
+    };
+
+    const result = await pinnerETL.processIngestionPayload(payload);
+    expect(result.success).toBe(true);
+    expect(result.persisted).toBe(true);
+    expect(analyticsDb.upsertAccountDailyMetrics).toHaveBeenCalled();
+    expect(analyticsDb.upsertTopPinsSnapshots).not.toHaveBeenCalled();
+  });
+
+  it('processes Top Pins-only payload without account_analytics', async () => {
+    const payload: PinnerIngestPayload = {
+      success: true,
+      channel: 'top_pins',
+      workspace_id: workspaceId,
+      connection_id: connectionId,
+      request_context: {
+        start_date: '2026-08-01',
+        end_date: '2026-08-08',
+        job_type: 'daily_sync',
+      },
+      account_analytics: null, // Null account analytics
+      top_pins_analytics: samplePinterestTopPins,
+    };
+
+    const result = await pinnerETL.processIngestionPayload(payload);
+    expect(result.success).toBe(true);
+    expect(result.persisted).toBe(true);
+    expect(analyticsDb.upsertAccountDailyMetrics).not.toHaveBeenCalled();
+    expect(analyticsDb.upsertTopPinsSnapshots).toHaveBeenCalled();
+  });
+
+  it('rejects payload when success=true but both channels are null', async () => {
+    const payload: PinnerIngestPayload = {
+      success: true,
+      workspace_id: workspaceId,
+      connection_id: connectionId,
+      account_analytics: null,
+      top_pins_analytics: null,
+    };
+
+    const result = await pinnerETL.processIngestionPayload(payload);
+    expect(result.success).toBe(false);
+    expect(result.persisted).toBe(false);
+    expect(result.error).toContain('At least one analytics channel');
   });
 });

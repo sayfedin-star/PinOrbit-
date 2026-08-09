@@ -259,7 +259,7 @@ export const pinnerETL = {
       try {
         accountAnalytics = JSON.parse(accountAnalytics);
       } catch {
-        accountAnalytics = {};
+        accountAnalytics = null;
       }
     }
 
@@ -268,8 +268,40 @@ export const pinnerETL = {
       try {
         topPinsAnalytics = JSON.parse(topPinsAnalytics);
       } catch {
-        topPinsAnalytics = {};
+        topPinsAnalytics = null;
       }
+    }
+
+    const hasAccountAnalytics = Boolean(
+      accountAnalytics &&
+        (accountAnalytics?.all?.daily_metrics?.length > 0 ||
+          accountAnalytics?.all?.summary_metrics)
+    );
+
+    const hasTopPinsAnalytics = Boolean(
+      topPinsAnalytics &&
+        Object.keys(topPinsAnalytics).length > 0 &&
+        Object.values(topPinsAnalytics).some(
+          (val: any) => Array.isArray(val?.pins) && val.pins.length > 0
+        )
+    );
+
+    // Strict V15 rule: At least one channel must be non-null on success
+    if (!hasAccountAnalytics && !hasTopPinsAnalytics) {
+      return {
+        success: false,
+        persisted: false,
+        workspaceId,
+        connectionId,
+        dailyRowsIngested: 0,
+        summarySaved: false,
+        topPinsIngested: 0,
+        workspaceRollupsUpdated: 0,
+        revoked: false,
+        snitchAlerted: false,
+        error:
+          'Payload rejected: At least one analytics channel (account_analytics or top_pins_analytics) must be provided when success is true.',
+      };
     }
 
     // Dates for window
@@ -316,31 +348,34 @@ export const pinnerETL = {
     }
 
     // --- 2. Account Summary Parsing ---
-    const summaryMetricsRaw = accountAnalytics?.all?.summary_metrics || {};
-    const normalizedSummary = normalizeMetrics(summaryMetricsRaw);
-    const summaryRow: Partial<AccountAnalyticsSummary> = {
-      workspace_id: workspaceId,
-      connection_id: connectionId,
-      window_start: windowStart,
-      window_end: windowEnd,
-      summary_impressions: normalizedSummary.impressions,
-      summary_engagements: normalizedSummary.engagements,
-      summary_outbound_clicks: normalizedSummary.outbound_clicks,
-      summary_pin_clicks: normalizedSummary.pin_clicks,
-      summary_saves: normalizedSummary.saves,
-      summary_video_10s_view: normalizedSummary.video_10s_view,
-      summary_video_mrc_view: normalizedSummary.video_mrc_view,
-      summary_video_start: normalizedSummary.video_start,
-      summary_quartile_95_percent_view: normalizedSummary.quartile_95_percent_view,
-      summary_engagement_rate: normalizedSummary.engagement_rate,
-      summary_outbound_click_rate: normalizedSummary.outbound_click_rate,
-      summary_pin_click_rate: normalizedSummary.pin_click_rate,
-      summary_save_rate: normalizedSummary.save_rate,
-      summary_video_avg_watch_time: normalizedSummary.video_avg_watch_time,
-      summary_video_v50_watch_time: normalizedSummary.video_v50_watch_time,
-      raw_summary: summaryMetricsRaw,
-      recorded_at: nowIso,
-    };
+    const summaryMetricsRaw = accountAnalytics?.all?.summary_metrics || null;
+    let summaryRow: Partial<AccountAnalyticsSummary> | null = null;
+    if (summaryMetricsRaw) {
+      const normalizedSummary = normalizeMetrics(summaryMetricsRaw);
+      summaryRow = {
+        workspace_id: workspaceId,
+        connection_id: connectionId,
+        window_start: windowStart,
+        window_end: windowEnd,
+        summary_impressions: normalizedSummary.impressions,
+        summary_engagements: normalizedSummary.engagements,
+        summary_outbound_clicks: normalizedSummary.outbound_clicks,
+        summary_pin_clicks: normalizedSummary.pin_clicks,
+        summary_saves: normalizedSummary.saves,
+        summary_video_10s_view: normalizedSummary.video_10s_view,
+        summary_video_mrc_view: normalizedSummary.video_mrc_view,
+        summary_video_start: normalizedSummary.video_start,
+        summary_quartile_95_percent_view: normalizedSummary.quartile_95_percent_view,
+        summary_engagement_rate: normalizedSummary.engagement_rate,
+        summary_outbound_click_rate: normalizedSummary.outbound_click_rate,
+        summary_pin_click_rate: normalizedSummary.pin_click_rate,
+        summary_save_rate: normalizedSummary.save_rate,
+        summary_video_avg_watch_time: normalizedSummary.video_avg_watch_time,
+        summary_video_v50_watch_time: normalizedSummary.video_v50_watch_time,
+        raw_summary: summaryMetricsRaw,
+        recorded_at: nowIso,
+      };
+    }
 
     // --- 3. Top Pins Snapshots Parsing (5 Sort Modes) ---
     const sortModes: PinnerSortBy[] = [
@@ -424,7 +459,7 @@ export const pinnerETL = {
       });
     }
 
-    // --- 4. Derived Workspace Metrics Rollup (Filter data_status == 'READY') ---
+    // --- 4. Derived Workspace Metrics Rollup ---
     const workspaceDailyMap = new Map<string, Partial<DailyWorkspaceMetric>>();
 
     for (const daily of dailyRows) {
@@ -458,32 +493,43 @@ export const pinnerETL = {
       workspaceDailyMap.set(dateKey, existing);
     }
 
-    // Add top pins aggregates to the latest date
-    const latestDate = windowEnd.split('T')[0];
-    const latestWorkspaceMetric = workspaceDailyMap.get(latestDate) || {
-      workspace_id: workspaceId,
-      metric_date: latestDate,
-      total_impressions: 0,
-      total_engagements: 0,
-      total_saves: 0,
-      total_outbound_clicks: 0,
-      total_pin_clicks: 0,
-      total_profile_visits: 0,
-      top_pin_impressions: 0,
-      top_pin_outbound_clicks: 0,
-      top_pin_saves: 0,
-      active_top_pins_count: 0,
-      recorded_at: nowIso,
-    };
+    // Add top pins aggregates if present
+    if (topPinRows.length > 0) {
+      const latestDate = windowEnd.split('T')[0];
+      const latestWorkspaceMetric = workspaceDailyMap.get(latestDate) || {
+        workspace_id: workspaceId,
+        metric_date: latestDate,
+        total_impressions: 0,
+        total_engagements: 0,
+        total_saves: 0,
+        total_outbound_clicks: 0,
+        total_pin_clicks: 0,
+        total_profile_visits: 0,
+        top_pin_impressions: 0,
+        top_pin_outbound_clicks: 0,
+        top_pin_saves: 0,
+        active_top_pins_count: 0,
+        recorded_at: nowIso,
+      };
 
-    // Calculate unique top pins in impression sort mode
-    const impressionTopPins = topPinRows.filter((p) => p.sort_by === 'IMPRESSION');
-    latestWorkspaceMetric.active_top_pins_count = impressionTopPins.length;
-    latestWorkspaceMetric.top_pin_impressions = impressionTopPins.reduce((acc, p) => acc + (p.impressions || 0), 0);
-    latestWorkspaceMetric.top_pin_outbound_clicks = impressionTopPins.reduce((acc, p) => acc + (p.outbound_clicks || 0), 0);
-    latestWorkspaceMetric.top_pin_saves = impressionTopPins.reduce((acc, p) => acc + (p.saves || 0), 0);
+      const impressionTopPins = topPinRows.filter((p) => p.sort_by === 'IMPRESSION');
+      latestWorkspaceMetric.active_top_pins_count = impressionTopPins.length;
+      latestWorkspaceMetric.top_pin_impressions = impressionTopPins.reduce(
+        (acc, p) => acc + (p.impressions || 0),
+        0
+      );
+      latestWorkspaceMetric.top_pin_outbound_clicks = impressionTopPins.reduce(
+        (acc, p) => acc + (p.outbound_clicks || 0),
+        0
+      );
+      latestWorkspaceMetric.top_pin_saves = impressionTopPins.reduce(
+        (acc, p) => acc + (p.saves || 0),
+        0
+      );
 
-    workspaceDailyMap.set(latestDate, latestWorkspaceMetric);
+      workspaceDailyMap.set(latestDate, latestWorkspaceMetric);
+    }
+
     const workspaceRollupRows = Array.from(workspaceDailyMap.values());
 
     // =========================================================================
@@ -498,7 +544,9 @@ export const pinnerETL = {
       );
     }
 
-    await analyticsDb.upsertAccountSummary(workspaceId, connectionId, summaryRow);
+    if (summaryRow) {
+      await analyticsDb.upsertAccountSummary(workspaceId, connectionId, summaryRow);
+    }
 
     let topPinsUpsertCount = 0;
     if (topPinRows.length > 0) {
@@ -524,10 +572,12 @@ export const pinnerETL = {
     // =========================================================================
     // Operational Tracking in Project 1
     // =========================================================================
-    const totalRowsCount = dailyRows.length + topPinRows.length + 1;
+    const totalRowsCount = dailyRows.length + topPinRows.length + (summaryRow ? 1 : 0);
+    const channelName = payload.channel || (hasAccountAnalytics && hasTopPinsAnalytics ? 'full_sync' : hasAccountAnalytics ? 'account_analytics' : 'top_pins');
+
     await analyticsDb.recordOperationalImportSession(workspaceId, {
       account_id: connectionId,
-      source_type: 'pinterest_api_sync',
+      source_type: `pinterest_${channelName}`,
       source_label: requestContext?.job_type || 'daily_sync',
       total_rows: totalRowsCount,
       valid_rows: totalRowsCount,
