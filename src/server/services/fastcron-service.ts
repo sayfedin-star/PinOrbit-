@@ -256,8 +256,11 @@ export const fastcronService = {
       expression: cronValidation.cron,
       timezone: settings?.timezone || 'UTC',
       url: webhookUrl!,
+      httpMethod: 'POST',
       http_method: 'POST',
+      httpHeaders: 'Content-Type: application/json',
       http_headers: 'Content-Type: application/json',
+      postData: postData,
       post_data: postData,
       instances: 1,
       notify: true,
@@ -273,14 +276,17 @@ export const fastcronService = {
       // If both channels are being created together, batch_add is available
       action = 'cron_batch_add';
       const cronTopPins = this.parseTimeToCron(connection.top_pins_sync_time || '04:30');
-      jobParams.jobs = [
+      const batchItems = [
         {
           name: `PinOrbit analytics — ${workspaceId.substring(0, 8)} — ${connection.display_name}`,
           expression: cronValidation.cron,
           timezone: settings?.timezone || 'UTC',
           url: webhookUrl!,
+          httpMethod: 'POST',
           http_method: 'POST',
+          httpHeaders: 'Content-Type: application/json',
           http_headers: 'Content-Type: application/json',
+          postData: JSON.stringify({ job_type: 'daily_sync', channel: 'account_analytics', connection_id: connectionId }),
           post_data: JSON.stringify({ job_type: 'daily_sync', channel: 'account_analytics', connection_id: connectionId }),
           instances: 1,
           notify: true,
@@ -290,13 +296,18 @@ export const fastcronService = {
           expression: cronTopPins.cron || '30 4 * * *',
           timezone: settings?.timezone || 'UTC',
           url: connection.top_pins_webhook_url,
+          httpMethod: 'POST',
           http_method: 'POST',
+          httpHeaders: 'Content-Type: application/json',
           http_headers: 'Content-Type: application/json',
+          postData: JSON.stringify({ job_type: 'daily_sync', channel: 'top_pins', connection_id: connectionId }),
           post_data: JSON.stringify({ job_type: 'daily_sync', channel: 'top_pins', connection_id: connectionId }),
           instances: 1,
           notify: true,
         },
       ];
+      jobParams.data = batchItems;
+      jobParams.jobs = batchItems;
     }
 
     const callResult = await this.fastcronCall(action, jobParams, token);

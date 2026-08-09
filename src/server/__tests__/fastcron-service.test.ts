@@ -11,7 +11,7 @@ vi.mock('../db/analytics', () => ({
   },
 }));
 
-describe('FastCron Full Service Suite (V19 Strict Directive A1 & B6)', () => {
+describe('FastCron Full Service Suite (V19 Strict Directive A1, B6 & Hotfix 3 POST Mandatory)', () => {
   const workspaceId = '00000000-0000-0000-0000-000000000001';
   const connectionId = 'conn-uuid-12345';
   const mockRuntimeEnv = { FASTCRON_API_TOKEN: 'valid_env_fastcron_token_12345' };
@@ -84,10 +84,13 @@ describe('FastCron Full Service Suite (V19 Strict Directive A1 & B6)', () => {
     fetchSpy.mockRestore();
   });
 
-  it('B6: syncScheduleWithFastCron handles cron_add vs cron_edit vs batch_add matrix', async () => {
-    let capturedUrl = '';
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((async (url: string) => {
-      capturedUrl = url;
+  it('F1, F2, F4: syncScheduleWithFastCron asserts httpMethod === "POST" in outgoing payloads for cron_add, cron_batch_add, and cron_edit', async () => {
+    let capturedCalls: Array<{ url: string; body: any }> = [];
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((async (url: string, init?: any) => {
+      capturedCalls.push({
+        url,
+        body: init?.body ? JSON.parse(init.body) : null,
+      });
       return {
         status: 200,
         ok: true,
@@ -95,7 +98,37 @@ describe('FastCron Full Service Suite (V19 Strict Directive A1 & B6)', () => {
       } as any;
     }) as any);
 
-    // 1. Initial sync (both missing -> cron_batch_add when top_pins webhook also configured)
+    (analyticsDb.getWorkspaceAnalyticsSettings as any).mockResolvedValue({
+      fastcron_token: 'db_token_1234567890',
+    });
+
+    // 1. Single cron_add (when only one webhook is configured)
+    (analyticsDb.getWorkspaceConnection as any).mockResolvedValue({
+      id: connectionId,
+      workspace_id: workspaceId,
+      display_name: 'test_pinner',
+      analytics_webhook_url: 'https://hook.make.com/analytics',
+      top_pins_webhook_url: null,
+      analytics_sync_time: '04:00',
+      analytics_fastcron_job_id: null,
+      top_pins_fastcron_job_id: null,
+    });
+
+    const addRes = await fastcronService.syncScheduleWithFastCron(
+      workspaceId,
+      connectionId,
+      'analytics',
+      mockRuntimeEnv
+    );
+    expect(addRes.success).toBe(true);
+
+    const addCall = capturedCalls[0];
+    expect(addCall.url).toContain('/cron_add');
+    expect(addCall.body.httpMethod).toBe('POST');
+    expect(addCall.body.httpHeaders).toBe('Content-Type: application/json');
+    expect(addCall.body.postData).toBeDefined();
+
+    // 2. cron_batch_add (both missing and both webhooks configured)
     (analyticsDb.getWorkspaceConnection as any).mockResolvedValue({
       id: connectionId,
       workspace_id: workspaceId,
@@ -107,9 +140,6 @@ describe('FastCron Full Service Suite (V19 Strict Directive A1 & B6)', () => {
       analytics_fastcron_job_id: null,
       top_pins_fastcron_job_id: null,
     });
-    (analyticsDb.getWorkspaceAnalyticsSettings as any).mockResolvedValue({
-      fastcron_token: 'db_token_1234567890',
-    });
 
     const batchAddRes = await fastcronService.syncScheduleWithFastCron(
       workspaceId,
@@ -118,9 +148,19 @@ describe('FastCron Full Service Suite (V19 Strict Directive A1 & B6)', () => {
       mockRuntimeEnv
     );
     expect(batchAddRes.success).toBe(true);
-    expect(capturedUrl).toContain('/cron_batch_add');
 
-    // 2. Edit existing job -> cron_edit
+    const batchCall = capturedCalls[1];
+    expect(batchCall.url).toContain('/cron_batch_add');
+    const batchItems = batchCall.body.data || batchCall.body.jobs;
+    expect(Array.isArray(batchItems)).toBe(true);
+    expect(batchItems.length).toBe(2);
+    for (const item of batchItems) {
+      expect(item.httpMethod).toBe('POST');
+      expect(item.httpHeaders).toBe('Content-Type: application/json');
+      expect(item.postData).toBeDefined();
+    }
+
+    // 3. cron_edit (existing job id -> converts / ensures POST)
     (analyticsDb.getWorkspaceConnection as any).mockResolvedValue({
       id: connectionId,
       workspace_id: workspaceId,
@@ -137,7 +177,13 @@ describe('FastCron Full Service Suite (V19 Strict Directive A1 & B6)', () => {
       mockRuntimeEnv
     );
     expect(editRes.success).toBe(true);
-    expect(capturedUrl).toContain('/cron_edit');
+
+    const editCall = capturedCalls[2];
+    expect(editCall.url).toContain('/cron_edit');
+    expect(editCall.body.id).toBe(7788);
+    expect(editCall.body.httpMethod).toBe('POST');
+    expect(editCall.body.httpHeaders).toBe('Content-Type: application/json');
+    expect(editCall.body.postData).toBeDefined();
 
     fetchSpy.mockRestore();
   });
