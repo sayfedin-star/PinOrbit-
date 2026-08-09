@@ -66,7 +66,7 @@ describe('Manual Trigger & Test Ping Sync Suite (V19 Safe Lifecycle & cron_run)'
     fetchSpy.mockRestore();
   });
 
-  it('B6: Falls back gracefully to legacy direct POST when job ID is not configured', async () => {
+  it('R2 / B6: Falls back gracefully to legacy direct POST with Content-Type: application/json and all 5 mappable fields', async () => {
     (analyticsDb.getWorkspaceConnection as any).mockResolvedValue({
       id: connectionId,
       workspace_id: workspaceId,
@@ -78,9 +78,11 @@ describe('Manual Trigger & Test Ping Sync Suite (V19 Safe Lifecycle & cron_run)'
       fastcron_token: null,
     });
 
+    let sentHeaders: any = null;
     let sentPayload: any = null;
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((async (url: string, init: any) => {
       expect(url).toBe('https://hook.make.com/pipeline-a');
+      sentHeaders = init.headers;
       sentPayload = JSON.parse(init.body);
       return { ok: true, status: 200 } as any;
     }) as any);
@@ -94,17 +96,23 @@ describe('Manual Trigger & Test Ping Sync Suite (V19 Safe Lifecycle & cron_run)'
     );
 
     expect(result.success).toBe(true);
+
+    // R2: Verify Content-Type is explicitly application/json
+    expect(sentHeaders).toBeDefined();
+    expect(sentHeaders['Content-Type']).toBe('application/json');
+
+    // R2: Verify 5 distinct mappable fields for Make.com webhook detection
     expect(sentPayload).toBeDefined();
-    expect(sentPayload.job_type).toBe('manual_sync');
-    expect(sentPayload.channel).toBe('account_analytics');
     expect(sentPayload.connection_id).toBe(connectionId);
     expect(sentPayload.start_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(sentPayload.end_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(sentPayload.job_type).toBe('manual_sync');
+    expect(sentPayload.channel).toBe('account_analytics');
 
     fetchSpy.mockRestore();
   });
 
-  it('formats Test Ping payload correctly when mode is ping', async () => {
+  it('formats Test Ping payload correctly with Content-Type: application/json when mode is ping', async () => {
     (analyticsDb.getWorkspaceConnection as any).mockResolvedValue({
       id: connectionId,
       workspace_id: workspaceId,
@@ -112,8 +120,10 @@ describe('Manual Trigger & Test Ping Sync Suite (V19 Safe Lifecycle & cron_run)'
       analytics_webhook_url: 'https://hook.make.com/pipeline-a',
     });
 
+    let sentHeaders: any = null;
     let sentPayload: any = null;
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((async (_url: string, init: any) => {
+      sentHeaders = init.headers;
       sentPayload = JSON.parse(init.body);
       return { ok: true, status: 200 } as any;
     }) as any);
@@ -127,6 +137,7 @@ describe('Manual Trigger & Test Ping Sync Suite (V19 Safe Lifecycle & cron_run)'
     );
 
     expect(result.success).toBe(true);
+    expect(sentHeaders['Content-Type']).toBe('application/json');
     expect(sentPayload.job_type).toBe('ping');
     expect(sentPayload.channel).toBe('account_analytics');
     expect(sentPayload.connection_id).toBe(connectionId);

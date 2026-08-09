@@ -11,8 +11,9 @@ node_modules/
 .env.*.local
 .dev.vars
 *.local
-secrets/
+/secrets/
 local-secrets.*
+!src/pages/api/analytics/secrets/
 
 # database dumps & temporary exports
 dumps/
