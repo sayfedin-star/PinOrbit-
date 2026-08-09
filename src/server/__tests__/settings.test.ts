@@ -14,10 +14,10 @@ vi.mock('../db/analytics', () => ({
 }));
 
 vi.mock('../db/clients', () => ({
-  getServerEnv: vi.fn().mockReturnValue({
+  getServerEnv: vi.fn().mockImplementation((runtimeEnv?: any) => ({
     INGEST_SECRET_KEY: 'test_ingest_key',
-    FASTCRON_API_TOKEN: 'default_fastcron_token_12345',
-  }),
+    FASTCRON_API_TOKEN: runtimeEnv && 'FASTCRON_API_TOKEN' in runtimeEnv ? runtimeEnv.FASTCRON_API_TOKEN : 'default_fastcron_token_12345',
+  })),
 }));
 
 vi.mock('../auth/workspace-guard', () => ({
@@ -291,6 +291,94 @@ describe('Pinner Analytics Settings & Security Suite (V20.1 Per-Pipeline Date Of
       locals,
     } as any);
     expect(res7.status).toBe(422);
+
+    // 8. R16: Invalid fastcron_token (< 16 chars)
+    const res8 = await postConnSettingsHandler({
+      params: { id: connectionId },
+      request: new Request('http://localhost', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fastcron_token: 'short_token' }),
+      }),
+      locals,
+    } as any);
+    expect(res8.status).toBe(422);
+    const json8 = await res8.json();
+    expect(json8.error).toContain('FastCron API Token must be at least 16 characters');
+  });
+
+  it('R16.3: accepts valid per-connection fastcron_token and GET masks it as has_fastcron_token boolean', async () => {
+    (analyticsDb.getWorkspaceConnection as any).mockResolvedValue({
+      id: connectionId,
+      workspace_id: workspaceId,
+      display_name: 'hymumdotcom',
+      fastcron_token: 'custom_conn_token_123456789',
+    });
+
+    (analyticsDb.updateWorkspaceConnection as any).mockResolvedValue({
+      id: connectionId,
+      display_name: 'hymumdotcom',
+      fastcron_token: 'custom_conn_token_123456789',
+    });
+
+    const locals = { user: { id: 'u1' }, supabase: {}, activeWorkspaceId: workspaceId };
+
+    // 1. GET response verification
+    const getRes = await getConnSettingsHandler({
+      params: { id: connectionId },
+      locals,
+    } as any);
+    expect(getRes.status).toBe(200);
+    const getJson = await getRes.json();
+    expect(getJson.success).toBe(true);
+    expect(getJson.data.has_fastcron_token).toBe(true);
+    expect((getJson.data as any).fastcron_token).toBeUndefined();
+    expect(JSON.stringify(getJson)).not.toContain('custom_conn_token_123456789');
+
+    // 2. POST update verification
+    const postRes = await postConnSettingsHandler({
+      params: { id: connectionId },
+      request: new Request('http://localhost', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fastcron_token: 'custom_conn_token_123456789' }),
+      }),
+      locals,
+    } as any);
+    expect(postRes.status).toBe(200);
+    expect(analyticsDb.updateWorkspaceConnection).toHaveBeenCalledWith(
+      workspaceId,
+      connectionId,
+      expect.objectContaining({ fastcron_token: 'custom_conn_token_123456789' })
+    );
+  });
+
+  it('R16.3: FastCron token resolution hierarchy: connection -> workspace -> env -> null', () => {
+    const runtimeEnv = { FASTCRON_API_TOKEN: 'env_token_value_123456' };
+
+    // 1. Connection token takes highest priority
+    const t1 = fastcronService.resolveFastCronToken(
+      'conn_token_value_123456',
+      'workspace_token_value_123456',
+      runtimeEnv
+    );
+    expect(t1).toBe('conn_token_value_123456');
+
+    // 2. Workspace token used if connection token is null/empty
+    const t2 = fastcronService.resolveFastCronToken(
+      null,
+      'workspace_token_value_123456',
+      runtimeEnv
+    );
+    expect(t2).toBe('workspace_token_value_123456');
+
+    // 3. Env token used if connection & workspace tokens are null
+    const t3 = fastcronService.resolveFastCronToken(null, null, runtimeEnv);
+    expect(t3).toBe('env_token_value_123456');
+
+    // 4. Null returned if all are absent or < 16 chars
+    const t4 = fastcronService.resolveFastCronToken('', 'short', { FASTCRON_API_TOKEN: '' });
+    expect(t4).toBeNull();
   });
 
   it('V23: top_pins offset or parameter change resets top_pins_schedule_status to pending', async () => {

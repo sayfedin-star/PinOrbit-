@@ -542,7 +542,8 @@ export interface AnalyticsConnection {
   top_pins_num_of_pins?: number;
   top_pins_sort_modes?: string[];
 
-  // FastCron Execution Options (V23)
+  // FastCron Execution Options (V23 & R16)
+  fastcron_token?: string | null;
   fastcron_notify?: boolean;
   fastcron_timeout?: number;
   fastcron_instances?: number;
@@ -589,6 +590,7 @@ export interface AnalyticsConnectionSettingsResponse {
   top_pins_end_offset_days?: number;
   top_pins_num_of_pins?: number;
   top_pins_sort_modes?: string[];
+  has_fastcron_token?: boolean;
   fastcron_notify?: boolean;
   fastcron_timeout?: number;
   fastcron_instances?: number;

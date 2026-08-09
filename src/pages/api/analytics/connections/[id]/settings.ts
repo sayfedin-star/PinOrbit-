@@ -80,6 +80,7 @@ export const GET: APIRoute = async ({ params, locals }) => {
         'ENGAGEMENT',
         'PIN_CLICK',
       ],
+      has_fastcron_token: Boolean(connection.fastcron_token && connection.fastcron_token.trim().length >= 16),
       fastcron_notify: connection.fastcron_notify ?? true,
       fastcron_timeout: connection.fastcron_timeout ?? 30,
       fastcron_instances: connection.fastcron_instances ?? 1,
@@ -398,6 +399,22 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
       updates.fastcron_notify = body.fastcron_notify;
     }
 
+    // Validate R16: fastcron_token (write-only; if provided length >= 16 else 422)
+    if (body.fastcron_token !== undefined) {
+      if (body.fastcron_token === null || body.fastcron_token === '') {
+        updates.fastcron_token = null;
+      } else {
+        const tok = String(body.fastcron_token).trim();
+        if (tok.length < 16) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'FastCron API Token must be at least 16 characters.' }),
+            { status: 422, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+        updates.fastcron_token = tok;
+      }
+    }
+
     // Workspace-level Timezone
     if (body.timezone !== undefined) {
       const tz = String(body.timezone).trim();
@@ -432,6 +449,7 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
         'ENGAGEMENT',
         'PIN_CLICK',
       ],
+      has_fastcron_token: Boolean(updated.fastcron_token && updated.fastcron_token.trim().length >= 16),
       fastcron_notify: updated.fastcron_notify ?? true,
       fastcron_timeout: updated.fastcron_timeout ?? 30,
       fastcron_instances: updated.fastcron_instances ?? 1,

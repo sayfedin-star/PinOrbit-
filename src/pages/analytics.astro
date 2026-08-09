@@ -477,9 +477,30 @@ export const prerender = false;
               </div>
             </div>
 
-            <!-- V23 FastCron Options Card -->
+            <!-- V23 & R16 FastCron Options Card -->
             <div class="space-y-3 rounded-xl border border-border/80 bg-muted/20 p-4">
-              <span class="text-xs font-bold text-foreground">FastCron Execution Options</span>
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-foreground">FastCron Execution Options</span>
+                <span id="fastcron-token-status-badge" class="rounded-full bg-slate-500/10 px-2 py-0.5 text-[10px] font-semibold text-slate-600 dark:text-slate-400">
+                  Token: Workspace Default
+                </span>
+              </div>
+
+              <!-- Connection-Specific FastCron Token (Write-Only) -->
+              <div class="space-y-1">
+                <label class="block text-[10px] font-semibold text-muted-foreground">FastCron API Token (Write-Only Override)</label>
+                <input
+                  type="password"
+                  id="setting-fastcron-token"
+                  placeholder="Leave empty to use workspace default..."
+                  autocomplete="new-password"
+                  class="w-full rounded-xl border border-border bg-card px-2.5 py-1.5 text-xs text-foreground font-mono focus:border-primary focus:outline-none"
+                />
+                <p class="text-[10px] text-muted-foreground">
+                  Overrides the workspace FastCron API token specifically for this connection.
+                </p>
+              </div>
+
               <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                 <div>
                   <label class="block text-[10px] font-semibold text-muted-foreground mb-1">Email Failure Notify</label>
@@ -834,7 +855,19 @@ export const prerender = false;
       }
     });
 
-    // V23 FastCron Options
+    // V23 FastCron Options & R16 Per-Connection Token
+    const tokenBadge = document.getElementById('fastcron-token-status-badge');
+    const tokenInput = document.getElementById('setting-fastcron-token') as HTMLInputElement;
+    if (tokenInput) tokenInput.value = '';
+    if (tokenBadge) {
+      if (conn.has_fastcron_token) {
+        tokenBadge.textContent = 'Token: •••••••• (Custom)';
+        tokenBadge.className = 'rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400';
+      } else {
+        tokenBadge.textContent = 'Token: Workspace Default';
+        tokenBadge.className = 'rounded-full bg-slate-500/10 px-2 py-0.5 text-[10px] font-semibold text-slate-600 dark:text-slate-400';
+      }
+    }
     (document.getElementById('setting-fastcron-notify') as HTMLSelectElement).value = conn.fastcron_notify === false ? 'false' : 'true';
     (document.getElementById('setting-fastcron-timeout') as HTMLInputElement).value = conn.fastcron_timeout || 30;
     (document.getElementById('setting-fastcron-instances') as HTMLInputElement).value = conn.fastcron_instances !== undefined ? conn.fastcron_instances : 1;
@@ -1006,6 +1039,12 @@ export const prerender = false;
         fastcron_instances: parseInt((document.getElementById('setting-fastcron-instances') as HTMLInputElement).value || '1', 10),
         timezone: (document.getElementById('setting-workspace-timezone') as HTMLSelectElement).value,
       };
+
+      const fastcronTokenInput = document.getElementById('setting-fastcron-token') as HTMLInputElement;
+      const fastcronTokenVal = fastcronTokenInput ? fastcronTokenInput.value.trim() : '';
+      if (fastcronTokenVal) {
+        (payload as any).fastcron_token = fastcronTokenVal;
+      }
 
       try {
         const json = await safeFetchJson(`/api/analytics/connections/${connId}/settings`, {
