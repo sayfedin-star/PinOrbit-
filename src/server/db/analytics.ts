@@ -61,6 +61,25 @@ export const analyticsDb = {
     }
 
     const analyticsClient = dbClients.getAnalytics();
+
+    // R5.2 Stale Sweeper: update prior processing runs older than 30 minutes to failed
+    try {
+      const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+      await analyticsClient
+        .from('analytics_ingestion_runs')
+        .update({
+          status: 'failed',
+          error_details: { error: 'stale_processing_timeout' },
+          completed_at: new Date().toISOString(),
+        })
+        .eq('connection_id', run.connection_id)
+        .eq('channel', run.channel)
+        .eq('status', 'processing')
+        .lt('started_at', thirtyMinutesAgo);
+    } catch (sweepErr) {
+      console.warn('[AnalyticsDb] Stale sweeper failed non-fatally:', sweepErr);
+    }
+
     const { data, error } = await analyticsClient
       .from('analytics_ingestion_runs')
       .insert({

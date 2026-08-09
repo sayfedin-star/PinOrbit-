@@ -10,7 +10,7 @@ vi.mock('../db/analytics', () => ({
   },
 }));
 
-describe('FastCron Per-Connection Schedule Synchronization Suite (V19)', () => {
+describe('FastCron Per-Connection Schedule Synchronization Suite (V19 & R6)', () => {
   const workspaceId = '00000000-0000-0000-0000-000000000001';
   const connectionId = 'a1b2c3d4-e5f6-7890-1234-56789abcdef0';
 
@@ -39,10 +39,14 @@ describe('FastCron Per-Connection Schedule Synchronization Suite (V19)', () => {
   });
 
   it('handles FastCron API creation (cron_add) vs edit (cron_edit) for connection', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((async (url: string) => {
+    const fetchCalls: Array<{ url: string; body: any }> = [];
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((async (url: string, init?: any) => {
+      const body = init?.body ? JSON.parse(init.body) : {};
+      fetchCalls.push({ url: url.toString(), body });
       return {
         ok: true,
-        json: async () => ({ status: 'OK', id: 9988 }),
+        status: 200,
+        json: async () => ({ status: 'OK', id: 9988, data: { id: 9988 } }),
       } as any;
     }) as any);
 
@@ -71,9 +75,9 @@ describe('FastCron Per-Connection Schedule Synchronization Suite (V19)', () => {
     expect(addResult.success).toBe(true);
     expect(addResult.schedule_status).toBe('synced');
     expect(addResult.fastcron_job_id).toBe(9988);
-    expect(fetchSpy.mock.calls[0][0].toString()).toContain('/cron_add');
+    expect(fetchCalls.some((c) => c.url.includes('/cron_add'))).toBe(true);
 
-    // Subsequent sync with existing job id -> cron_edit
+    // Subsequent sync with existing job id -> cron_get + cron_edit
     (analyticsDb.getWorkspaceConnection as any).mockResolvedValue({
       id: connectionId,
       workspace_id: workspaceId,
@@ -90,9 +94,9 @@ describe('FastCron Per-Connection Schedule Synchronization Suite (V19)', () => {
       {}
     );
     expect(editResult.success).toBe(true);
-    expect(fetchSpy.mock.calls[1][0].toString()).toContain('/cron_edit');
-    const sentEditBody = JSON.parse(fetchSpy.mock.calls[1][1].body);
-    expect(sentEditBody.id).toBe(9988);
+    const editCall = fetchCalls.find((c) => c.url.includes('/cron_edit'));
+    expect(editCall).toBeDefined();
+    expect(editCall?.body.id).toBe(9988);
 
     fetchSpy.mockRestore();
   });

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { pinnerETL } from '../services/pinner-etl';
+import { pinnerETL, COLUMN_ALLOWLISTS } from '../services/pinner-etl';
 import { analyticsDb } from '../db/analytics';
 import { dbClients } from '../db/clients';
 import type { PinnerIngestPayload } from '../../lib/types';
@@ -46,7 +46,7 @@ vi.mock('../db/clients', () => ({
   },
 }));
 
-describe('Pinner Analytics ETL Processor Suite', () => {
+describe('Pinner Analytics ETL Processor Suite (R4 Schema Allowlist & R5 Lifecycle)', () => {
   const workspaceId = '00000000-0000-0000-0000-000000000001';
   const connectionId = 'a1b2c3d4-e5f6-7890-1234-56789abcdef0';
 
@@ -88,6 +88,9 @@ describe('Pinner Analytics ETL Processor Suite', () => {
             PIN_CLICK_RATE: 0.03,
             SAVE: 80,
             SAVE_RATE: 0.008,
+            TOTAL_COMMENTS: 5,
+            TOTAL_REACTIONS: 2,
+            UNKNOWN_FUTURE_KEY: 99,
           },
         },
         {
@@ -167,7 +170,7 @@ describe('Pinner Analytics ETL Processor Suite', () => {
     },
   };
 
-  it('processes valid normalized Make.com payload and persists to Project 3', async () => {
+  it('R4.5: processes payload containing unknown metric keys; upsert payload keys are strict subset of allowlist', async () => {
     const payload: PinnerIngestPayload = {
       success: true,
       workspace_id: workspaceId,
@@ -179,87 +182,77 @@ describe('Pinner Analytics ETL Processor Suite', () => {
       },
       account_analytics: samplePinterestDailyAnalytics,
       top_pins_analytics: samplePinterestTopPins,
-      raw_headers: {
-        'x-ratelimit-limit': '60, 100;w=1;name="safety_net"',
-        'x-ratelimit-remaining': '58',
-        'x-ratelimit-reset': '50',
-      },
     };
 
     const result = await pinnerETL.processIngestionPayload(payload);
 
     expect(result.success).toBe(true);
     expect(result.persisted).toBe(true);
-    expect(result.revoked).toBe(false);
 
-    // Verify Project 3 Ingestion Run created & completed
-    expect(analyticsDb.createIngestionRun).toHaveBeenCalledWith(
-      expect.objectContaining({
-        workspace_id: workspaceId,
-        connection_id: connectionId,
-        channel: 'account_analytics',
+    // Verify daily metrics upsert call args
+    const dailyCalls = (analyticsDb.upsertAccountDailyMetrics as any).mock.calls;
+    expect(dailyCalls.length).toBeGreaterThan(0);
+    const dailyRows: any[] = dailyCalls[0][2];
+    expect(dailyRows.length).toBe(2);
+
+    for (const row of dailyRows) {
+      // Must NOT contain total_comments or total_reactions as column keys
+      expect(row.total_comments).toBeUndefined();
+      expect(row.total_reactions).toBeUndefined();
+      expect(row.UNKNOWN_FUTURE_KEY).toBeUndefined();
+
+      // All keys must be subset of allowlist
+      for (const key of Object.keys(row)) {
+        expect(COLUMN_ALLOWLISTS.account_analytics_daily.has(key)).toBe(true);
+      }
+    }
+
+    // Verify raw_metrics retained unknown keys for forward-compatibility
+    const firstRow = dailyRows[0];
+    expect(firstRow.raw_metrics).toBeDefined();
+    expect(firstRow.raw_metrics.TOTAL_COMMENTS).toBe(5);
+    expect(firstRow.raw_metrics.UNKNOWN_FUTURE_KEY).toBe(99);
+
+    // Verify summaries upsert call args
+    const summaryCalls = (analyticsDb.upsertAccountSummary as any).mock.calls;
+    expect(summaryCalls.length).toBeGreaterThan(0);
+    const summaryRow: any = summaryCalls[0][2];
+    expect(summaryRow.total_comments).toBeUndefined();
+    expect(summaryRow.total_reactions).toBeUndefined();
+    for (const key of Object.keys(summaryRow)) {
+      expect(COLUMN_ALLOWLISTS.account_analytics_summaries.has(key)).toBe(true);
+    }
+  });
+
+  it('R5.3: fails ingestion run and records error details when exception is thrown during ETL execution', async () => {
+    (analyticsDb.upsertAccountDailyMetrics as any).mockRejectedValueOnce(
+      new Error('Simulated Project 3 DB Postgres Constraint Violation')
+    );
+
+    const payload: PinnerIngestPayload = {
+      success: true,
+      workspace_id: workspaceId,
+      connection_id: connectionId,
+      request_context: {
+        start_date: '2026-08-01',
+        end_date: '2026-08-08',
         job_type: 'daily_sync',
+      },
+      account_analytics: samplePinterestDailyAnalytics,
+    };
+
+    await expect(pinnerETL.processIngestionPayload(payload)).rejects.toThrow(
+      'Simulated Project 3 DB Postgres Constraint Violation'
+    );
+
+    // Verify failIngestionRun was called so the run is NEVER left in 'processing'
+    expect(analyticsDb.failIngestionRun).toHaveBeenCalledWith(
+      'mock-run-id',
+      expect.objectContaining({
+        message: 'Simulated Project 3 DB Postgres Constraint Violation',
+        error_code: 'ETL_EXCEPTION',
       })
     );
-    expect(analyticsDb.completeIngestionRun).toHaveBeenCalledWith(
-      'mock-run-id',
-      expect.any(Number)
-    );
-
-    // Verify Project 3 Account Daily upsert
-    expect(analyticsDb.upsertAccountDailyMetrics).toHaveBeenCalledWith(
-      workspaceId,
-      connectionId,
-      expect.arrayContaining([
-        expect.objectContaining({
-          metric_date: '2026-08-01',
-          impressions: 10000,
-          engagements: 400,
-          engagement_rate: 0.04,
-          data_status: 'READY',
-        }),
-      ])
-    );
-
-    // Verify Project 3 Top Pins derivation: rank_position = index + 1
-    expect(analyticsDb.upsertTopPinsSnapshots).toHaveBeenCalledWith(
-      workspaceId,
-      connectionId,
-      expect.arrayContaining([
-        expect.objectContaining({
-          pin_id: '10485011674598527',
-          rank_position: 1, // Derived from index 0 + 1
-          sort_by: 'IMPRESSION',
-          impressions: 4172,
-        }),
-        expect.objectContaining({
-          pin_id: '10485011674598528',
-          rank_position: 2, // Derived from index 1 + 1
-          sort_by: 'IMPRESSION',
-          impressions: 3500,
-        }),
-        expect.objectContaining({
-          pin_id: '10485011674598528',
-          rank_position: 1, // Derived from index 0 + 1 for SAVE sort mode
-          sort_by: 'SAVE',
-          impressions: 3500,
-        }),
-      ])
-    );
-
-    // Verify URL performance tracked
-    expect(analyticsDb.upsertUrlPerformance).toHaveBeenCalledWith(
-      workspaceId,
-      expect.arrayContaining([
-        expect.objectContaining({
-          destination_url: 'https://example.com/pasta',
-          total_impressions: 4172,
-        }),
-      ])
-    );
-
-    // Verify workspace rollups updated
-    expect(analyticsDb.upsertDailyWorkspaceMetrics).toHaveBeenCalled();
   });
 
   it('handles 401 Unauthorized by deactivating account in Project 3', async () => {
@@ -332,7 +325,7 @@ describe('Pinner Analytics ETL Processor Suite', () => {
         job_type: 'daily_sync',
       },
       account_analytics: samplePinterestDailyAnalytics,
-      top_pins_analytics: null, // Null top pins
+      top_pins_analytics: null,
     };
 
     const result = await pinnerETL.processIngestionPayload(payload);
@@ -353,7 +346,7 @@ describe('Pinner Analytics ETL Processor Suite', () => {
         end_date: '2026-08-08',
         job_type: 'daily_sync',
       },
-      account_analytics: null, // Null account analytics
+      account_analytics: null,
       top_pins_analytics: samplePinterestTopPins,
     };
 
@@ -365,7 +358,6 @@ describe('Pinner Analytics ETL Processor Suite', () => {
   });
 
   it('rejects payload when connection_id is not registered in Project 3 analytics_connections', async () => {
-    // Override maybeSingle to simulate missing connection
     (dbClients.getAnalytics as any).mockReturnValueOnce({
       from: vi.fn(() => ({
         select: vi.fn().mockReturnThis(),

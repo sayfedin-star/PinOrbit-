@@ -240,6 +240,20 @@ export const fastcronService = {
       };
     }
 
+    // R6.1 Reconcile Algorithm Step 1 & 2: Check storedId with cron_get
+    let storedId = isAnalytics ? connection.analytics_fastcron_job_id : connection.top_pins_fastcron_job_id;
+    let verifiedJobId: number | null = null;
+
+    if (storedId) {
+      const getRes = await this.fastcronCall('cron_get', { id: storedId }, token);
+      if (getRes.success && (getRes.data?.id || getRes.data?.data?.id || getRes.data?.status === 'OK')) {
+        verifiedJobId = storedId;
+      } else {
+        console.warn(`[FastCron] Stored job ${storedId} for ${channel} not found in FastCron (404/deleted). Treating as missing.`);
+        storedId = null;
+      }
+    }
+
     // Prepare FastCron job parameters with per-pipeline offsets (V20.1)
     const startOffset = isAnalytics
       ? (connection.analytics_start_offset_days ?? 7)
@@ -264,12 +278,10 @@ export const fastcronService = {
           top_pins_end_offset_days: endOffset,
         });
 
-    const isEdit = Boolean(existingJobId);
-    const bothMissing =
-      !connection.analytics_fastcron_job_id && !connection.top_pins_fastcron_job_id;
+    const jobName = `PinOrbit ${isAnalytics ? 'analytics' : 'top-pins'} — ${workspaceId.substring(0, 8)} — ${connection.display_name}`;
 
     const jobParams: Record<string, any> = {
-      name: `PinOrbit ${isAnalytics ? 'analytics' : 'top-pins'} — ${workspaceId.substring(0, 8)} — ${connection.display_name}`,
+      name: jobName,
       expression: cronValidation.cron,
       timezone: settings?.timezone || 'UTC',
       url: webhookUrl!,
@@ -283,123 +295,194 @@ export const fastcronService = {
       notify: true,
     };
 
-    if (isEdit && existingJobId) {
-      jobParams.id = existingJobId;
-    }
-
-    // Action routing
-    let action = isEdit ? 'cron_edit' : 'cron_add';
-    if (!isEdit && bothMissing && channel === 'analytics' && connection.top_pins_webhook_url) {
-      // If both channels are being created together, batch_add is available
-      action = 'cron_batch_add';
-      const cronTopPins = this.parseTimeToCron(connection.top_pins_sync_time || '04:30');
-      const batchItems = [
-        {
-          name: `PinOrbit analytics — ${workspaceId.substring(0, 8)} — ${connection.display_name}`,
-          expression: cronValidation.cron,
-          timezone: settings?.timezone || 'UTC',
-          url: webhookUrl!,
-          httpMethod: 'POST',
-          http_method: 'POST',
-          httpHeaders: 'Content-Type: application/json',
-          http_headers: 'Content-Type: application/json',
-          postData: JSON.stringify({
-            job_type: 'daily_sync',
-            channel: 'account_analytics',
-            connection_id: connectionId,
-            analytics_start_offset_days: connection.analytics_start_offset_days ?? 7,
-            analytics_end_offset_days: connection.analytics_end_offset_days ?? 1,
-          }),
-          post_data: JSON.stringify({
-            job_type: 'daily_sync',
-            channel: 'account_analytics',
-            connection_id: connectionId,
-            analytics_start_offset_days: connection.analytics_start_offset_days ?? 7,
-            analytics_end_offset_days: connection.analytics_end_offset_days ?? 1,
-          }),
-          instances: 1,
-          notify: true,
-        },
-        {
-          name: `PinOrbit top-pins — ${workspaceId.substring(0, 8)} — ${connection.display_name}`,
-          expression: cronTopPins.cron || '30 4 * * *',
-          timezone: settings?.timezone || 'UTC',
-          url: connection.top_pins_webhook_url,
-          httpMethod: 'POST',
-          http_method: 'POST',
-          httpHeaders: 'Content-Type: application/json',
-          http_headers: 'Content-Type: application/json',
-          postData: JSON.stringify({
-            job_type: 'daily_sync',
-            channel: 'top_pins',
-            connection_id: connectionId,
-            top_pins_start_offset_days: connection.top_pins_start_offset_days ?? 7,
-            top_pins_end_offset_days: connection.top_pins_end_offset_days ?? 2,
-          }),
-          post_data: JSON.stringify({
-            job_type: 'daily_sync',
-            channel: 'top_pins',
-            connection_id: connectionId,
-            top_pins_start_offset_days: connection.top_pins_start_offset_days ?? 7,
-            top_pins_end_offset_days: connection.top_pins_end_offset_days ?? 2,
-          }),
-          instances: 1,
-          notify: true,
-        },
-      ];
-      jobParams.data = batchItems;
-      jobParams.jobs = batchItems;
-    }
-
-    const callResult = await this.fastcronCall(action, jobParams, token);
-
-    if (callResult.success) {
-      const returnedId =
-        callResult.data?.id ||
-        callResult.data?.data?.id ||
-        (Array.isArray(callResult.data?.ids) ? callResult.data.ids[0] : null) ||
-        existingJobId;
-
-      const jobId = returnedId ? parseInt(String(returnedId), 10) : existingJobId;
-
-      const updates: any = {};
-      if (isAnalytics) {
-        if (jobId) updates.analytics_fastcron_job_id = jobId;
-        updates.analytics_schedule_status = 'synced';
-        updates.analytics_cron_expression = cronValidation.cron;
-      } else {
-        if (jobId) updates.top_pins_fastcron_job_id = jobId;
-        updates.top_pins_schedule_status = 'synced';
-        updates.top_pins_cron_expression = cronValidation.cron;
+    if (verifiedJobId) {
+      // Step 2 Found: Execute cron_edit
+      jobParams.id = verifiedJobId;
+      const editResult = await this.fastcronCall('cron_edit', jobParams, token);
+      if (!editResult.success) {
+        const statusField = isAnalytics ? 'analytics_schedule_status' : 'top_pins_schedule_status';
+        await analyticsDb.updateWorkspaceConnection(workspaceId, connectionId, {
+          [statusField]: 'error',
+        });
+        return {
+          success: false,
+          connection_id: connectionId,
+          channel,
+          schedule_status: 'error',
+          error: editResult.error || 'Failed to update FastCron schedule.',
+        };
       }
-
-      await analyticsDb.updateWorkspaceConnection(workspaceId, connectionId, updates);
-
-      return {
-        success: true,
-        connection_id: connectionId,
-        channel,
-        schedule_status: 'synced',
-        fastcron_job_id: jobId,
-        message: `FastCron schedule successfully ${isEdit ? 'updated' : 'created'} for ${channel}.`,
-      };
     } else {
-      const updates: any = {};
-      if (isAnalytics) {
-        updates.analytics_schedule_status = 'error';
-      } else {
-        updates.top_pins_schedule_status = 'error';
-      }
-      await analyticsDb.updateWorkspaceConnection(workspaceId, connectionId, updates);
+      // Step 3 Missing: Create job (cron_batch_add ONLY when BOTH channels missing and both URLs configured)
+      const otherChannelStoredId = isAnalytics ? connection.top_pins_fastcron_job_id : connection.analytics_fastcron_job_id;
+      const bothMissing = !storedId && !otherChannelStoredId;
 
-      return {
-        success: false,
-        connection_id: connectionId,
-        channel,
-        schedule_status: 'error',
-        error: callResult.error || 'FastCron API returned an error.',
-      };
+      if (bothMissing && channel === 'analytics' && connection.top_pins_webhook_url) {
+        const cronTopPins = this.parseTimeToCron(connection.top_pins_sync_time || '04:30');
+        const batchItems = [
+          {
+            name: `PinOrbit analytics — ${workspaceId.substring(0, 8)} — ${connection.display_name}`,
+            expression: cronValidation.cron,
+            timezone: settings?.timezone || 'UTC',
+            url: webhookUrl!,
+            httpMethod: 'POST',
+            http_method: 'POST',
+            httpHeaders: 'Content-Type: application/json',
+            http_headers: 'Content-Type: application/json',
+            postData: JSON.stringify({
+              job_type: 'daily_sync',
+              channel: 'account_analytics',
+              connection_id: connectionId,
+              analytics_start_offset_days: connection.analytics_start_offset_days ?? 7,
+              analytics_end_offset_days: connection.analytics_end_offset_days ?? 1,
+            }),
+            post_data: JSON.stringify({
+              job_type: 'daily_sync',
+              channel: 'account_analytics',
+              connection_id: connectionId,
+              analytics_start_offset_days: connection.analytics_start_offset_days ?? 7,
+              analytics_end_offset_days: connection.analytics_end_offset_days ?? 1,
+            }),
+            instances: 1,
+            notify: true,
+          },
+          {
+            name: `PinOrbit top-pins — ${workspaceId.substring(0, 8)} — ${connection.display_name}`,
+            expression: cronTopPins.cron || '30 4 * * *',
+            timezone: settings?.timezone || 'UTC',
+            url: connection.top_pins_webhook_url,
+            httpMethod: 'POST',
+            http_method: 'POST',
+            httpHeaders: 'Content-Type: application/json',
+            http_headers: 'Content-Type: application/json',
+            postData: JSON.stringify({
+              job_type: 'daily_sync',
+              channel: 'top_pins',
+              connection_id: connectionId,
+              top_pins_start_offset_days: connection.top_pins_start_offset_days ?? 7,
+              top_pins_end_offset_days: connection.top_pins_end_offset_days ?? 2,
+            }),
+            post_data: JSON.stringify({
+              job_type: 'daily_sync',
+              channel: 'top_pins',
+              connection_id: connectionId,
+              top_pins_start_offset_days: connection.top_pins_start_offset_days ?? 7,
+              top_pins_end_offset_days: connection.top_pins_end_offset_days ?? 2,
+            }),
+            instances: 1,
+            notify: true,
+          },
+        ];
+
+        const batchRes = await this.fastcronCall(
+          'cron_batch_add',
+          { data: batchItems, jobs: batchItems, timezone: settings?.timezone || 'UTC' },
+          token
+        );
+
+        if (!batchRes.success) {
+          await analyticsDb.updateWorkspaceConnection(workspaceId, connectionId, {
+            analytics_schedule_status: 'error',
+          });
+          return {
+            success: false,
+            connection_id: connectionId,
+            channel,
+            schedule_status: 'error',
+            error: batchRes.error || 'FastCron batch creation failed.',
+          };
+        }
+
+        // Step 4: IMMEDIATELY persist returned ids
+        const ids = batchRes.data?.ids || batchRes.data?.data?.ids || [];
+        const idA = ids[0] ? parseInt(String(ids[0]), 10) : null;
+        const idB = ids[1] ? parseInt(String(ids[1]), 10) : null;
+        verifiedJobId = idA;
+
+        await analyticsDb.updateWorkspaceConnection(workspaceId, connectionId, {
+          analytics_fastcron_job_id: idA,
+          top_pins_fastcron_job_id: idB,
+          analytics_schedule_status: 'synced',
+          analytics_cron_expression: cronValidation.cron,
+          ...(idB
+            ? {
+                top_pins_schedule_status: 'synced',
+                top_pins_cron_expression: cronTopPins.cron || '30 4 * * *',
+              }
+            : {}),
+        });
+      } else {
+        // Single cron_add
+        const addRes = await this.fastcronCall('cron_add', jobParams, token);
+        if (!addRes.success) {
+          const statusField = isAnalytics ? 'analytics_schedule_status' : 'top_pins_schedule_status';
+          await analyticsDb.updateWorkspaceConnection(workspaceId, connectionId, {
+            [statusField]: 'error',
+          });
+          return {
+            success: false,
+            connection_id: connectionId,
+            channel,
+            schedule_status: 'error',
+            error: addRes.error || 'FastCron creation failed.',
+          };
+        }
+
+        const returnedId =
+          addRes.data?.id ||
+          addRes.data?.data?.id ||
+          (Array.isArray(addRes.data?.ids) ? addRes.data.ids[0] : null);
+        verifiedJobId = returnedId ? parseInt(String(returnedId), 10) : null;
+
+        // Step 4: IMMEDIATELY persist returned id
+        await analyticsDb.updateWorkspaceConnection(workspaceId, connectionId, {
+          [isAnalytics ? 'analytics_fastcron_job_id' : 'top_pins_fastcron_job_id']: verifiedJobId,
+          [isAnalytics ? 'analytics_schedule_status' : 'top_pins_schedule_status']: 'synced',
+          [isAnalytics ? 'analytics_cron_expression' : 'top_pins_cron_expression']: cronValidation.cron,
+        });
+      }
     }
+
+    // R6.2 Orphan Cleanup: cron_list keyword "PinOrbit", delete any job id != verifiedJobId matching webhook URL
+    try {
+      const listRes = await this.fastcronCall('cron_list', { keyword: 'PinOrbit' }, token);
+      const jobsList = listRes.data?.jobs || listRes.data?.data || (Array.isArray(listRes.data) ? listRes.data : []);
+      if (Array.isArray(jobsList)) {
+        for (const job of jobsList) {
+          if (job.url && job.url.trim() === webhookUrl!.trim()) {
+            const jId = parseInt(String(job.id), 10);
+            if (verifiedJobId && jId !== verifiedJobId) {
+              console.log(`[FastCron] Removing orphan duplicate job ${jId} for URL ${webhookUrl}`);
+              await this.fastcronCall('cron_delete', { id: jId }, token);
+            }
+          }
+        }
+      }
+    } catch (cleanErr) {
+      console.warn('[FastCron] Orphan cleanup non-fatal warning:', cleanErr);
+    }
+
+    // Final DB update ensuring status is synced
+    const updates: any = {};
+    if (isAnalytics) {
+      if (verifiedJobId) updates.analytics_fastcron_job_id = verifiedJobId;
+      updates.analytics_schedule_status = 'synced';
+      updates.analytics_cron_expression = cronValidation.cron;
+    } else {
+      if (verifiedJobId) updates.top_pins_fastcron_job_id = verifiedJobId;
+      updates.top_pins_schedule_status = 'synced';
+      updates.top_pins_cron_expression = cronValidation.cron;
+    }
+    await analyticsDb.updateWorkspaceConnection(workspaceId, connectionId, updates);
+
+    return {
+      success: true,
+      connection_id: connectionId,
+      channel,
+      schedule_status: 'synced',
+      fastcron_job_id: verifiedJobId,
+      message: `FastCron schedule successfully synced for ${channel}.`,
+    };
   },
 
   /**

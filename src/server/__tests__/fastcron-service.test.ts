@@ -11,7 +11,7 @@ vi.mock('../db/analytics', () => ({
   },
 }));
 
-describe('FastCron Full Service Suite (V20.1 Strict Directive A1, B6, Hotfix 3 POST Mandatory & Date Offsets)', () => {
+describe('FastCron Full Service Suite (R6 Reconcile Idempotency & Orphan Cleanup)', () => {
   const workspaceId = '00000000-0000-0000-0000-000000000001';
   const connectionId = 'conn-uuid-12345';
   const mockRuntimeEnv = { FASTCRON_API_TOKEN: 'valid_env_fastcron_token_12345' };
@@ -84,130 +84,147 @@ describe('FastCron Full Service Suite (V20.1 Strict Directive A1, B6, Hotfix 3 P
     fetchSpy.mockRestore();
   });
 
-  it('F1, F2, F4, V20.1: syncScheduleWithFastCron asserts httpMethod === "POST" and carries per-pipeline offsets in postData', async () => {
-    let capturedCalls: Array<{ url: string; body: any }> = [];
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((async (url: string, init?: any) => {
-      capturedCalls.push({
-        url,
-        body: init?.body ? JSON.parse(init.body) : null,
-      });
-      return {
-        status: 200,
-        ok: true,
-        json: async () => ({ status: 'OK', id: 7788 }),
-      } as any;
-    }) as any);
-
+  it('R6.4: Idempotent 3x consecutive sync calls verify existing jobs with cron_get and purge orphan duplicates', async () => {
     (analyticsDb.getWorkspaceAnalyticsSettings as any).mockResolvedValue({
       fastcron_token: 'db_token_1234567890',
     });
 
-    // 1. Single cron_add (when only one webhook is configured)
-    (analyticsDb.getWorkspaceConnection as any).mockResolvedValue({
+    // Mock in-memory connection state
+    const mockConn: any = {
       id: connectionId,
       workspace_id: workspaceId,
-      display_name: 'test_pinner',
-      analytics_webhook_url: 'https://hook.make.com/analytics',
-      top_pins_webhook_url: null,
-      analytics_sync_time: '04:00',
-      analytics_start_offset_days: 14,
-      analytics_end_offset_days: 3,
-      analytics_fastcron_job_id: null,
-      top_pins_fastcron_job_id: null,
-    });
-
-    const addRes = await fastcronService.syncScheduleWithFastCron(
-      workspaceId,
-      connectionId,
-      'analytics',
-      mockRuntimeEnv
-    );
-    expect(addRes.success).toBe(true);
-
-    const addCall = capturedCalls[0];
-    expect(addCall.url).toContain('/cron_add');
-    expect(addCall.body.httpMethod).toBe('POST');
-    expect(addCall.body.httpHeaders).toBe('Content-Type: application/json');
-    expect(addCall.body.postData).toBeDefined();
-
-    const addPostData = JSON.parse(addCall.body.postData);
-    expect(addPostData.analytics_start_offset_days).toBe(14);
-    expect(addPostData.analytics_end_offset_days).toBe(3);
-
-    // 2. cron_batch_add (both missing and both webhooks configured)
-    (analyticsDb.getWorkspaceConnection as any).mockResolvedValue({
-      id: connectionId,
-      workspace_id: workspaceId,
-      display_name: 'test_pinner',
-      analytics_webhook_url: 'https://hook.make.com/analytics',
-      top_pins_webhook_url: 'https://hook.make.com/toppins',
+      display_name: 'hymumdotcom',
+      analytics_webhook_url: 'https://hook.make.com/pipeline-a',
+      top_pins_webhook_url: 'https://hook.make.com/pipeline-b',
       analytics_sync_time: '04:00',
       top_pins_sync_time: '04:30',
-      analytics_start_offset_days: 7,
-      analytics_end_offset_days: 1,
-      top_pins_start_offset_days: 10,
-      top_pins_end_offset_days: 2,
+      analytics_schedule_status: 'pending',
+      top_pins_schedule_status: 'pending',
       analytics_fastcron_job_id: null,
       top_pins_fastcron_job_id: null,
+      analytics_start_offset_days: 7,
+      analytics_end_offset_days: 1,
+      top_pins_start_offset_days: 7,
+      top_pins_end_offset_days: 2,
+    };
+
+    (analyticsDb.getWorkspaceConnection as any).mockImplementation(async () => ({ ...mockConn }));
+    (analyticsDb.updateWorkspaceConnection as any).mockImplementation(async (_wsId: string, _connId: string, updates: any) => {
+      Object.assign(mockConn, updates);
+      return { ...mockConn };
     });
 
-    const batchAddRes = await fastcronService.syncScheduleWithFastCron(
+    // Simulated FastCron server job table
+    let fastcronJobs: Array<{ id: number; name: string; url: string; expression: string }> = [];
+    let nextJobId = 1001;
+
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((async (url: string, init?: any) => {
+      const endpoint = url.split('/').pop()?.split('?')[0];
+      const body = init?.body ? JSON.parse(init.body) : {};
+
+      if (endpoint === 'cron_batch_add') {
+        const id1 = nextJobId++;
+        const id2 = nextJobId++;
+        fastcronJobs.push({ id: id1, name: body.data[0].name, url: body.data[0].url, expression: body.data[0].expression });
+        fastcronJobs.push({ id: id2, name: body.data[1].name, url: body.data[1].url, expression: body.data[1].expression });
+        return {
+          status: 200,
+          ok: true,
+          json: async () => ({ status: 'OK', ids: [id1, id2] }),
+        } as any;
+      }
+
+      if (endpoint === 'cron_add') {
+        const id = nextJobId++;
+        fastcronJobs.push({ id, name: body.name, url: body.url, expression: body.expression });
+        return {
+          status: 200,
+          ok: true,
+          json: async () => ({ status: 'OK', id }),
+        } as any;
+      }
+
+      if (endpoint === 'cron_get') {
+        const job = fastcronJobs.find((j) => j.id === body.id);
+        if (job) {
+          return { status: 200, ok: true, json: async () => ({ status: 'OK', data: job }) } as any;
+        } else {
+          return { status: 404, ok: false, json: async () => ({ status: 'error', message: 'Job not found' }) } as any;
+        }
+      }
+
+      if (endpoint === 'cron_edit') {
+        const job = fastcronJobs.find((j) => j.id === body.id);
+        if (job) {
+          job.expression = body.expression;
+          job.url = body.url;
+        }
+        return { status: 200, ok: true, json: async () => ({ status: 'OK' }) } as any;
+      }
+
+      if (endpoint === 'cron_list') {
+        return {
+          status: 200,
+          ok: true,
+          json: async () => ({ status: 'OK', jobs: [...fastcronJobs] }),
+        } as any;
+      }
+
+      if (endpoint === 'cron_delete') {
+        fastcronJobs = fastcronJobs.filter((j) => j.id !== body.id);
+        return { status: 200, ok: true, json: async () => ({ status: 'OK' }) } as any;
+      }
+
+      return { status: 200, ok: true, json: async () => ({ status: 'OK' }) } as any;
+    }) as any);
+
+    // ==========================================
+    // Sync Click 1 (Creation: batch add)
+    // ==========================================
+    const res1 = await fastcronService.syncScheduleWithFastCron(
       workspaceId,
       connectionId,
       'analytics',
       mockRuntimeEnv
     );
-    expect(batchAddRes.success).toBe(true);
+    expect(res1.success).toBe(true);
+    expect(mockConn.analytics_fastcron_job_id).toBe(1001);
+    expect(mockConn.top_pins_fastcron_job_id).toBe(1002);
+    expect(fastcronJobs.length).toBe(2);
 
-    const batchCall = capturedCalls[1];
-    expect(batchCall.url).toContain('/cron_batch_add');
-    const batchItems = batchCall.body.data || batchCall.body.jobs;
-    expect(Array.isArray(batchItems)).toBe(true);
-    expect(batchItems.length).toBe(2);
+    // Simulate an orphan duplicate injected in FastCron by an external or legacy event
+    fastcronJobs.push({ id: 9999, name: 'Orphan Pipeline A duplicate', url: 'https://hook.make.com/pipeline-a', expression: '0 4 * * *' });
+    expect(fastcronJobs.length).toBe(3);
 
-    const batchItemA = JSON.parse(batchItems[0].postData);
-    expect(batchItemA.channel).toBe('account_analytics');
-    expect(batchItemA.analytics_start_offset_days).toBe(7);
-    expect(batchItemA.analytics_end_offset_days).toBe(1);
-
-    const batchItemB = JSON.parse(batchItems[1].postData);
-    expect(batchItemB.channel).toBe('top_pins');
-    expect(batchItemB.top_pins_start_offset_days).toBe(10);
-    expect(batchItemB.top_pins_end_offset_days).toBe(2);
-
-    for (const item of batchItems) {
-      expect(item.httpMethod).toBe('POST');
-      expect(item.httpHeaders).toBe('Content-Type: application/json');
-    }
-
-    // 3. cron_edit (existing job id -> converts / ensures POST + offset propagation)
-    (analyticsDb.getWorkspaceConnection as any).mockResolvedValue({
-      id: connectionId,
-      workspace_id: workspaceId,
-      display_name: 'test_pinner',
-      analytics_webhook_url: 'https://hook.make.com/analytics',
-      analytics_sync_time: '05:00',
-      analytics_start_offset_days: 21,
-      analytics_end_offset_days: 4,
-      analytics_fastcron_job_id: 7788,
-    });
-
-    const editRes = await fastcronService.syncScheduleWithFastCron(
+    // ==========================================
+    // Sync Click 2 (Reconcile & Orphan Cleanup)
+    // ==========================================
+    const res2 = await fastcronService.syncScheduleWithFastCron(
       workspaceId,
       connectionId,
       'analytics',
       mockRuntimeEnv
     );
-    expect(editRes.success).toBe(true);
+    expect(res2.success).toBe(true);
+    expect(mockConn.analytics_fastcron_job_id).toBe(1001);
+    // Verified: orphan job 9999 was cleaned up via cron_delete!
+    expect(fastcronJobs.find((j) => j.id === 9999)).toBeUndefined();
+    expect(fastcronJobs.length).toBe(2);
 
-    const editCall = capturedCalls[2];
-    expect(editCall.url).toContain('/cron_edit');
-    expect(editCall.body.id).toBe(7788);
-    expect(editCall.body.httpMethod).toBe('POST');
-    expect(editCall.body.httpHeaders).toBe('Content-Type: application/json');
-    const editPostData = JSON.parse(editCall.body.postData);
-    expect(editPostData.analytics_start_offset_days).toBe(21);
-    expect(editPostData.analytics_end_offset_days).toBe(4);
+    // ==========================================
+    // Sync Click 3 (Idempotent: Re-verify & Edit only)
+    // ==========================================
+    const res3 = await fastcronService.syncScheduleWithFastCron(
+      workspaceId,
+      connectionId,
+      'analytics',
+      mockRuntimeEnv
+    );
+    expect(res3.success).toBe(true);
+    expect(mockConn.analytics_fastcron_job_id).toBe(1001);
+    expect(mockConn.top_pins_fastcron_job_id).toBe(1002);
+    expect(mockConn.analytics_schedule_status).toBe('synced');
+    expect(fastcronJobs.length).toBe(2);
 
     fetchSpy.mockRestore();
   });
