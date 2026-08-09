@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { fastcronService } from '../services/fastcron-service';
 import { analyticsDb } from '../db/analytics';
-import { dbClients } from '../db/clients';
 
 vi.mock('../db/analytics', () => ({
   analyticsDb: {
@@ -11,15 +10,7 @@ vi.mock('../db/analytics', () => ({
   },
 }));
 
-vi.mock('../db/clients', () => ({
-  dbClients: {
-    getConfig: vi.fn().mockReturnValue({
-      FASTCRON_API_TOKEN: '',
-    }),
-  },
-}));
-
-describe('FastCron Per-Connection Schedule Synchronization Suite (V16)', () => {
+describe('FastCron Per-Connection Schedule Synchronization Suite (V19)', () => {
   const workspaceId = '00000000-0000-0000-0000-000000000001';
   const connectionId = 'a1b2c3d4-e5f6-7890-1234-56789abcdef0';
 
@@ -29,17 +20,21 @@ describe('FastCron Per-Connection Schedule Synchronization Suite (V16)', () => {
 
   it('resolves FastCron token from DB first, then environment', () => {
     // 1. DB token takes priority
-    (dbClients.getConfig as any).mockReturnValue({ FASTCRON_API_TOKEN: 'env_token_1234567890' });
-    const resolvedDb = fastcronService.resolveFastCronToken('db_token_1234567890');
+    const resolvedDb = fastcronService.resolveFastCronToken('db_token_1234567890', {
+      FASTCRON_API_TOKEN: 'env_token_1234567890',
+    });
     expect(resolvedDb).toBe('db_token_1234567890');
 
     // 2. Env fallback when DB token absent
-    const resolvedEnv = fastcronService.resolveFastCronToken(null);
+    const resolvedEnv = fastcronService.resolveFastCronToken(null, {
+      FASTCRON_API_TOKEN: 'env_token_1234567890',
+    });
     expect(resolvedEnv).toBe('env_token_1234567890');
 
     // 3. Null when both absent
-    (dbClients.getConfig as any).mockReturnValue({ FASTCRON_API_TOKEN: '' });
-    const resolvedNone = fastcronService.resolveFastCronToken(null);
+    const resolvedNone = fastcronService.resolveFastCronToken(null, {
+      FASTCRON_API_TOKEN: '',
+    });
     expect(resolvedNone).toBeNull();
   });
 
@@ -59,6 +54,7 @@ describe('FastCron Per-Connection Schedule Synchronization Suite (V16)', () => {
       analytics_webhook_url: 'https://hook.make.com/pipeline-a',
       analytics_sync_time: '04:00',
       analytics_fastcron_job_id: null,
+      top_pins_webhook_url: null,
     });
 
     (analyticsDb.getWorkspaceAnalyticsSettings as any).mockResolvedValue({
@@ -69,7 +65,8 @@ describe('FastCron Per-Connection Schedule Synchronization Suite (V16)', () => {
     const addResult = await fastcronService.syncScheduleWithFastCron(
       workspaceId,
       connectionId,
-      'analytics'
+      'analytics',
+      {}
     );
     expect(addResult.success).toBe(true);
     expect(addResult.schedule_status).toBe('synced');
@@ -89,11 +86,13 @@ describe('FastCron Per-Connection Schedule Synchronization Suite (V16)', () => {
     const editResult = await fastcronService.syncScheduleWithFastCron(
       workspaceId,
       connectionId,
-      'analytics'
+      'analytics',
+      {}
     );
     expect(editResult.success).toBe(true);
     expect(fetchSpy.mock.calls[1][0].toString()).toContain('/cron_edit');
-    expect(fetchSpy.mock.calls[1][0].toString()).toContain('id=9988');
+    const sentEditBody = JSON.parse(fetchSpy.mock.calls[1][1].body);
+    expect(sentEditBody.id).toBe(9988);
 
     fetchSpy.mockRestore();
   });
@@ -112,12 +111,12 @@ describe('FastCron Per-Connection Schedule Synchronization Suite (V16)', () => {
       workspace_id: workspaceId,
       fastcron_token: null,
     });
-    (dbClients.getConfig as any).mockReturnValue({ FASTCRON_API_TOKEN: '' });
 
     const result = await fastcronService.syncScheduleWithFastCron(
       workspaceId,
       connectionId,
-      'analytics'
+      'analytics',
+      { FASTCRON_API_TOKEN: '' }
     );
     expect(result.success).toBe(false);
     expect(result.schedule_status).toBe('error');

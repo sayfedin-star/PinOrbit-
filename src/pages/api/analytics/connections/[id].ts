@@ -10,6 +10,7 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
   const schedulingClient = locals.supabase;
   const workspaceId = locals.activeWorkspaceId;
   const connectionId = params.id;
+  const runtimeEnv = (locals as any)?.runtime?.env || (locals as any)?.runtimeEnv || {};
 
   if (!user || !schedulingClient) {
     return new Response(
@@ -88,7 +89,43 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
       updates.display_name = displayName;
     }
     if (body.analytics_enabled !== undefined) {
-      updates.analytics_enabled = Boolean(body.analytics_enabled);
+      const nextEnabled = Boolean(body.analytics_enabled);
+      updates.analytics_enabled = nextEnabled;
+
+      // Safe lifecycle: Enable / Disable FastCron jobs accordingly
+      if (nextEnabled !== existing.analytics_enabled) {
+        if (nextEnabled) {
+          if (existing.analytics_fastcron_job_id) {
+            await fastcronService.enableFastCronJob(
+              workspaceId,
+              existing.analytics_fastcron_job_id,
+              runtimeEnv
+            );
+          }
+          if (existing.top_pins_fastcron_job_id) {
+            await fastcronService.enableFastCronJob(
+              workspaceId,
+              existing.top_pins_fastcron_job_id,
+              runtimeEnv
+            );
+          }
+        } else {
+          if (existing.analytics_fastcron_job_id) {
+            await fastcronService.disableFastCronJob(
+              workspaceId,
+              existing.analytics_fastcron_job_id,
+              runtimeEnv
+            );
+          }
+          if (existing.top_pins_fastcron_job_id) {
+            await fastcronService.disableFastCronJob(
+              workspaceId,
+              existing.top_pins_fastcron_job_id,
+              runtimeEnv
+            );
+          }
+        }
+      }
     }
 
     const updated = await analyticsDb.updateWorkspaceConnection(
@@ -125,6 +162,7 @@ export const DELETE: APIRoute = async ({ params, locals }) => {
   const schedulingClient = locals.supabase;
   const workspaceId = locals.activeWorkspaceId;
   const connectionId = params.id;
+  const runtimeEnv = (locals as any)?.runtime?.env || (locals as any)?.runtimeEnv || {};
 
   if (!user || !schedulingClient) {
     return new Response(
@@ -183,12 +221,20 @@ export const DELETE: APIRoute = async ({ params, locals }) => {
       );
     }
 
-    // Best-effort: Delete FastCron jobs if present
+    // Safe lifecycle 3a: soft-delete disables both FastCron jobs (cron_disable)
     if (existing.analytics_fastcron_job_id) {
-      await fastcronService.deleteFastCronJob(workspaceId, existing.analytics_fastcron_job_id);
+      await fastcronService.disableFastCronJob(
+        workspaceId,
+        existing.analytics_fastcron_job_id,
+        runtimeEnv
+      );
     }
     if (existing.top_pins_fastcron_job_id) {
-      await fastcronService.deleteFastCronJob(workspaceId, existing.top_pins_fastcron_job_id);
+      await fastcronService.disableFastCronJob(
+        workspaceId,
+        existing.top_pins_fastcron_job_id,
+        runtimeEnv
+      );
     }
 
     // Soft delete in Project 3: sets analytics_enabled = false, deleted_at = now()

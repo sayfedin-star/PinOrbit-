@@ -1,9 +1,11 @@
 import { analyticsDb } from '../db/analytics';
-import { dbClients } from '../db/clients';
+import { getServerEnv } from '../db/clients';
 import type {
   ScheduleSyncResponse,
   TriggerSyncResponse,
 } from '../../lib/types';
+
+export const FASTCRON_BASE = 'https://www.fastcron.com/api/v1';
 
 const ALLOWED_WEBHOOK_HOSTS = [
   'hook.make.com',
@@ -14,7 +16,79 @@ const ALLOWED_WEBHOOK_HOSTS = [
   'hook.integromat.com',
 ];
 
+export const SORT_MODES = [
+  'IMPRESSION',
+  'OUTBOUND_CLICK',
+  'SAVE',
+  'ENGAGEMENT',
+  'PIN_CLICK',
+];
+
 export const fastcronService = {
+  /**
+   * Dispatches a request to FastCron API.
+   * Strategy:
+   * 1. Primary: POST JSON body.
+   * 2. Fallback: On 404/405, fallback to GET query-string.
+   * 3. Surface errors verbatim.
+   */
+  async fastcronCall(
+    action: string,
+    params: Record<string, any>,
+    token: string
+  ): Promise<{ success: boolean; data?: any; error?: string }> {
+    const url = `${FASTCRON_BASE}/${action}`;
+    const payload = { token, ...params };
+
+    try {
+      let res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(8000),
+      });
+
+      if (res.status === 404 || res.status === 405) {
+        const searchParams = new URLSearchParams();
+        for (const [key, value] of Object.entries(payload)) {
+          if (value !== undefined && value !== null) {
+            searchParams.append(key, typeof value === 'object' ? JSON.stringify(value) : String(value));
+          }
+        }
+        res = await fetch(`${url}?${searchParams.toString()}`, {
+          method: 'GET',
+          signal: AbortSignal.timeout(8000),
+        });
+      }
+
+      const data = await res.json().catch(() => ({}));
+
+      if (
+        data.status === 'OK' ||
+        data.status === 'success' ||
+        data.id ||
+        data?.data?.id ||
+        Array.isArray(data) ||
+        Array.isArray(data?.data)
+      ) {
+        return { success: true, data };
+      }
+
+      const errorMsg =
+        data.message ||
+        data.error ||
+        data.err_message ||
+        (typeof data === 'string' && data.length > 0 ? data : `FastCron returned HTTP ${res.status}`);
+
+      return { success: false, data, error: errorMsg };
+    } catch (err: any) {
+      return {
+        success: false,
+        error: err.message || 'FastCron network request failed',
+      };
+    }
+  },
+
   /**
    * Validates webhook URL format and domain allowlist.
    */
@@ -73,11 +147,14 @@ export const fastcronService = {
   /**
    * Resolves the active FastCron token (Workspace DB token → env FASTCRON_API_TOKEN → null).
    */
-  resolveFastCronToken(dbToken?: string | null): string | null {
+  resolveFastCronToken(
+    dbToken: string | null | undefined,
+    runtimeEnv: Record<string, any>
+  ): string | null {
     if (dbToken && dbToken.trim().length >= 16) {
       return dbToken.trim();
     }
-    const env = dbClients.getConfig();
+    const env = getServerEnv(runtimeEnv);
     if (env.FASTCRON_API_TOKEN && env.FASTCRON_API_TOKEN.trim().length >= 16) {
       return env.FASTCRON_API_TOKEN.trim();
     }
@@ -86,11 +163,13 @@ export const fastcronService = {
 
   /**
    * Synchronizes schedule for a specific connection & channel with FastCron API.
+   * Handles batch_add when both jobs are unconfigured, or add/edit accordingly.
    */
   async syncScheduleWithFastCron(
     workspaceId: string,
     connectionId: string,
-    channel: 'analytics' | 'top_pins'
+    channel: 'analytics' | 'top_pins',
+    runtimeEnv: Record<string, any>
   ): Promise<ScheduleSyncResponse> {
     const connection = await analyticsDb.getWorkspaceConnection(workspaceId, connectionId);
     if (!connection) {
@@ -146,7 +225,7 @@ export const fastcronService = {
     }
 
     // Resolve Token
-    const token = this.resolveFastCronToken(settings?.fastcron_token);
+    const token = this.resolveFastCronToken(settings?.fastcron_token, runtimeEnv);
     if (!token) {
       const statusField = isAnalytics ? 'analytics_schedule_status' : 'top_pins_schedule_status';
       await analyticsDb.updateWorkspaceConnection(workspaceId, connectionId, {
@@ -161,7 +240,7 @@ export const fastcronService = {
       };
     }
 
-    // Prepare FastCron payload
+    // Prepare FastCron job parameters
     const postData = JSON.stringify({
       job_type: 'daily_sync',
       channel: isAnalytics ? 'account_analytics' : 'top_pins',
@@ -169,76 +248,90 @@ export const fastcronService = {
     });
 
     const isEdit = Boolean(existingJobId);
-    const endpoint = isEdit
-      ? 'https://api.fastcron.com/v1/cron_edit'
-      : 'https://api.fastcron.com/v1/cron_add';
+    const bothMissing =
+      !connection.analytics_fastcron_job_id && !connection.top_pins_fastcron_job_id;
 
-    const params = new URLSearchParams();
-    params.append('token', token);
+    const jobParams: Record<string, any> = {
+      name: `PinOrbit ${isAnalytics ? 'analytics' : 'top-pins'} — ${workspaceId.substring(0, 8)} — ${connection.display_name}`,
+      expression: cronValidation.cron,
+      timezone: settings?.timezone || 'UTC',
+      url: webhookUrl!,
+      http_method: 'POST',
+      http_headers: 'Content-Type: application/json',
+      post_data: postData,
+      instances: 1,
+      notify: true,
+    };
+
     if (isEdit && existingJobId) {
-      params.append('id', String(existingJobId));
+      jobParams.id = existingJobId;
     }
-    params.append(
-      'name',
-      `PinOrbit ${isAnalytics ? 'analytics' : 'top-pins'} — ${workspaceId.substring(0, 8)} — ${connection.display_name}`
-    );
-    params.append('expression', cronValidation.cron);
-    params.append('timezone', settings?.timezone || 'UTC');
-    params.append('url', webhookUrl!);
-    params.append('http_method', 'POST');
-    params.append('http_headers', 'Content-Type: application/json');
-    params.append('post_data', postData);
 
-    try {
-      const res = await fetch(`${endpoint}?${params.toString()}`, {
-        method: 'GET',
-        signal: AbortSignal.timeout(8000),
-      });
+    // Action routing
+    let action = isEdit ? 'cron_edit' : 'cron_add';
+    if (!isEdit && bothMissing && channel === 'analytics' && connection.top_pins_webhook_url) {
+      // If both channels are being created together, batch_add is available
+      action = 'cron_batch_add';
+      const cronTopPins = this.parseTimeToCron(connection.top_pins_sync_time || '04:30');
+      jobParams.jobs = [
+        {
+          name: `PinOrbit analytics — ${workspaceId.substring(0, 8)} — ${connection.display_name}`,
+          expression: cronValidation.cron,
+          timezone: settings?.timezone || 'UTC',
+          url: webhookUrl!,
+          http_method: 'POST',
+          http_headers: 'Content-Type: application/json',
+          post_data: JSON.stringify({ job_type: 'daily_sync', channel: 'account_analytics', connection_id: connectionId }),
+          instances: 1,
+          notify: true,
+        },
+        {
+          name: `PinOrbit top-pins — ${workspaceId.substring(0, 8)} — ${connection.display_name}`,
+          expression: cronTopPins.cron || '30 4 * * *',
+          timezone: settings?.timezone || 'UTC',
+          url: connection.top_pins_webhook_url,
+          http_method: 'POST',
+          http_headers: 'Content-Type: application/json',
+          post_data: JSON.stringify({ job_type: 'daily_sync', channel: 'top_pins', connection_id: connectionId }),
+          instances: 1,
+          notify: true,
+        },
+      ];
+    }
 
-      const data = await res.json().catch(() => ({}));
+    const callResult = await this.fastcronCall(action, jobParams, token);
 
-      if (data.status === 'OK' || data.status === 'success' || data.id || data?.data?.id) {
-        const jobId = parseInt(String(data.id || data?.data?.id || existingJobId), 10);
-        const updates: any = {};
-        if (isAnalytics) {
-          updates.analytics_fastcron_job_id = jobId;
-          updates.analytics_schedule_status = 'synced';
-          updates.analytics_cron_expression = cronValidation.cron;
-        } else {
-          updates.top_pins_fastcron_job_id = jobId;
-          updates.top_pins_schedule_status = 'synced';
-          updates.top_pins_cron_expression = cronValidation.cron;
-        }
+    if (callResult.success) {
+      const returnedId =
+        callResult.data?.id ||
+        callResult.data?.data?.id ||
+        (Array.isArray(callResult.data?.ids) ? callResult.data.ids[0] : null) ||
+        existingJobId;
 
-        await analyticsDb.updateWorkspaceConnection(workspaceId, connectionId, updates);
+      const jobId = returnedId ? parseInt(String(returnedId), 10) : existingJobId;
 
-        return {
-          success: true,
-          connection_id: connectionId,
-          channel,
-          schedule_status: 'synced',
-          fastcron_job_id: jobId,
-          message: `FastCron schedule successfully ${isEdit ? 'updated' : 'created'} for ${channel}.`,
-        };
+      const updates: any = {};
+      if (isAnalytics) {
+        if (jobId) updates.analytics_fastcron_job_id = jobId;
+        updates.analytics_schedule_status = 'synced';
+        updates.analytics_cron_expression = cronValidation.cron;
       } else {
-        const errorMsg = data.message || data.error || 'FastCron API returned an error.';
-        const updates: any = {};
-        if (isAnalytics) {
-          updates.analytics_schedule_status = 'error';
-        } else {
-          updates.top_pins_schedule_status = 'error';
-        }
-        await analyticsDb.updateWorkspaceConnection(workspaceId, connectionId, updates);
-
-        return {
-          success: false,
-          connection_id: connectionId,
-          channel,
-          schedule_status: 'error',
-          error: errorMsg,
-        };
+        if (jobId) updates.top_pins_fastcron_job_id = jobId;
+        updates.top_pins_schedule_status = 'synced';
+        updates.top_pins_cron_expression = cronValidation.cron;
       }
-    } catch (err: any) {
+
+      await analyticsDb.updateWorkspaceConnection(workspaceId, connectionId, updates);
+
+      return {
+        success: true,
+        connection_id: connectionId,
+        channel,
+        schedule_status: 'synced',
+        fastcron_job_id: jobId,
+        message: `FastCron schedule successfully ${isEdit ? 'updated' : 'created'} for ${channel}.`,
+      };
+    } else {
       const updates: any = {};
       if (isAnalytics) {
         updates.analytics_schedule_status = 'error';
@@ -252,43 +345,71 @@ export const fastcronService = {
         connection_id: connectionId,
         channel,
         schedule_status: 'error',
-        error: `Failed to contact FastCron API: ${err.message}`,
+        error: callResult.error || 'FastCron API returned an error.',
       };
     }
   },
 
   /**
-   * Deletes a FastCron job via cron_delete API (best effort).
+   * Disables a FastCron job via cron_disable (safe soft-delete / pause).
    */
-  async deleteFastCronJob(
+  async disableFastCronJob(
     workspaceId: string,
-    jobId?: number | null
+    jobId: number | null | undefined,
+    runtimeEnv: Record<string, any>
   ): Promise<boolean> {
     if (!jobId) return true;
     const settings = await analyticsDb.getWorkspaceAnalyticsSettings(workspaceId);
-    const token = this.resolveFastCronToken(settings?.fastcron_token);
+    const token = this.resolveFastCronToken(settings?.fastcron_token, runtimeEnv);
     if (!token) return false;
 
-    try {
-      const res = await fetch(
-        `https://api.fastcron.com/v1/cron_delete?token=${encodeURIComponent(token)}&id=${jobId}`,
-        { method: 'GET', signal: AbortSignal.timeout(6000) }
-      );
-      return res.ok;
-    } catch (e) {
-      console.warn('[FastCron] Failed to delete cron job id:', jobId, e);
-      return false;
-    }
+    const res = await this.fastcronCall('cron_disable', { id: jobId }, token);
+    return res.success;
   },
 
   /**
-   * Dispatches manual sync or test ping to a connection's Make.com webhook.
+   * Enables a FastCron job via cron_enable (re-enable connection).
+   */
+  async enableFastCronJob(
+    workspaceId: string,
+    jobId: number | null | undefined,
+    runtimeEnv: Record<string, any>
+  ): Promise<boolean> {
+    if (!jobId) return true;
+    const settings = await analyticsDb.getWorkspaceAnalyticsSettings(workspaceId);
+    const token = this.resolveFastCronToken(settings?.fastcron_token, runtimeEnv);
+    if (!token) return false;
+
+    const res = await this.fastcronCall('cron_enable', { id: jobId }, token);
+    return res.success;
+  },
+
+  /**
+   * Deletes a FastCron job via cron_delete API (reserved for stale 404 cleanup).
+   */
+  async deleteFastCronJob(
+    workspaceId: string,
+    jobId: number | null | undefined,
+    runtimeEnv: Record<string, any>
+  ): Promise<boolean> {
+    if (!jobId) return true;
+    const settings = await analyticsDb.getWorkspaceAnalyticsSettings(workspaceId);
+    const token = this.resolveFastCronToken(settings?.fastcron_token, runtimeEnv);
+    if (!token) return false;
+
+    const res = await this.fastcronCall('cron_delete', { id: jobId }, token);
+    return res.success;
+  },
+
+  /**
+   * Dispatches manual sync via cron_run (with legacy direct POST fallback) or test ping.
    */
   async triggerManualSync(
     workspaceId: string,
     connectionId: string,
     channel: 'analytics' | 'top_pins',
-    mode: 'ping' | 'sync' = 'sync'
+    mode: 'ping' | 'sync',
+    runtimeEnv: Record<string, any>
   ): Promise<TriggerSyncResponse> {
     const connection = await analyticsDb.getWorkspaceConnection(workspaceId, connectionId);
     if (!connection) {
@@ -357,7 +478,55 @@ export const fastcronService = {
     const startDate = startDateObj.toISOString().split('T')[0];
     const endDate = endDateObj.toISOString().split('T')[0];
 
-    const payload = isAnalytics
+    const jobId = isAnalytics
+      ? connection.analytics_fastcron_job_id
+      : connection.top_pins_fastcron_job_id;
+
+    const settings = await analyticsDb.getWorkspaceAnalyticsSettings(workspaceId);
+    const token = this.resolveFastCronToken(settings?.fastcron_token, runtimeEnv);
+
+    // If Job ID and Token exist -> Dispatches cron_run
+    if (jobId && token) {
+      const payload = JSON.stringify({
+        job_type: 'manual_sync',
+        channel: isAnalytics ? 'account_analytics' : 'top_pins',
+        connection_id: connectionId,
+        start_date: startDate,
+        end_date: endDate,
+        ...(channel === 'top_pins' && { sort_modes: SORT_MODES }),
+      });
+
+      const cronRunRes = await this.fastcronCall(
+        'cron_run',
+        { id: jobId, payload },
+        token
+      );
+
+      if (cronRunRes.success) {
+        return {
+          success: true,
+          connection_id: connectionId,
+          channel,
+          mode: 'sync',
+          startDate,
+          endDate,
+          message: `Successfully triggered manual sync via FastCron cron_run for ${channel}.`,
+        };
+      } else {
+        return {
+          success: false,
+          connection_id: connectionId,
+          channel,
+          mode: 'sync',
+          startDate,
+          endDate,
+          error: cronRunRes.error || 'FastCron cron_run execution failed.',
+        };
+      }
+    }
+
+    // Legacy Fallback: Direct POST to channel webhook
+    const directPayload = isAnalytics
       ? {
           connection_id: connectionId,
           start_date: startDate,
@@ -369,7 +538,7 @@ export const fastcronService = {
           connection_id: connectionId,
           start_date: startDate,
           end_date: endDate,
-          sort_modes: ['IMPRESSION', 'OUTBOUND_CLICK', 'SAVE', 'ENGAGEMENT', 'PIN_CLICK'],
+          sort_modes: SORT_MODES,
           job_type: 'manual_sync',
           channel: 'top_pins',
         };
@@ -378,7 +547,7 @@ export const fastcronService = {
       const res = await fetch(webhookUrl!, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(directPayload),
         signal: AbortSignal.timeout(8000),
       });
 
@@ -405,5 +574,37 @@ export const fastcronService = {
         error: `Webhook dispatch failed: ${err.message}`,
       };
     }
+  },
+
+  /**
+   * Fetches FastCron execution history logs for observability.
+   */
+  async getCronLogs(
+    workspaceId: string,
+    jobId: number | null | undefined,
+    runtimeEnv: Record<string, any>
+  ): Promise<{ success: boolean; logs?: any[]; error?: string }> {
+    if (!jobId) {
+      return { success: false, error: 'job_not_configured' };
+    }
+
+    const settings = await analyticsDb.getWorkspaceAnalyticsSettings(workspaceId);
+    const token = this.resolveFastCronToken(settings?.fastcron_token, runtimeEnv);
+    if (!token) {
+      return { success: false, error: 'FastCron API token not configured.' };
+    }
+
+    const res = await this.fastcronCall('cron_logs', { id: jobId }, token);
+    if (!res.success) {
+      return { success: false, error: res.error || 'Failed to fetch FastCron logs.' };
+    }
+
+    const logs =
+      res.data?.logs ||
+      res.data?.data?.logs ||
+      res.data?.data ||
+      (Array.isArray(res.data) ? res.data : []);
+
+    return { success: true, logs: Array.isArray(logs) ? logs : [] };
   },
 };

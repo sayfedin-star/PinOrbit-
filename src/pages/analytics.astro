@@ -328,14 +328,24 @@ export const prerender = false;
                   </button>
                 </div>
               </div>
-              <button
-                type="button"
-                id="sync-fastcron-a-btn"
-                disabled
-                class="w-full rounded-xl border border-border bg-muted/60 px-3 py-1.5 text-[11px] font-semibold text-foreground hover:bg-muted transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                ⚡ Sync Schedule to FastCron
-              </button>
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  id="sync-fastcron-a-btn"
+                  disabled
+                  class="flex-1 rounded-xl border border-border bg-muted/60 px-3 py-1.5 text-[11px] font-semibold text-foreground hover:bg-muted transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  ⚡ Sync Schedule
+                </button>
+                <button
+                  type="button"
+                  id="view-logs-a-btn"
+                  class="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-1.5 text-[11px] font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-all"
+                  title="View FastCron Logs for Pipeline A"
+                >
+                  📋 View Logs
+                </button>
+              </div>
 
               <!-- Last Runs Strip for Pipeline A -->
               <div class="pt-2 border-t border-border/50">
@@ -392,14 +402,24 @@ export const prerender = false;
                   </button>
                 </div>
               </div>
-              <button
-                type="button"
-                id="sync-fastcron-b-btn"
-                disabled
-                class="w-full rounded-xl border border-border bg-muted/60 px-3 py-1.5 text-[11px] font-semibold text-foreground hover:bg-muted transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                ⚡ Sync Schedule to FastCron
-              </button>
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  id="sync-fastcron-b-btn"
+                  disabled
+                  class="flex-1 rounded-xl border border-border bg-muted/60 px-3 py-1.5 text-[11px] font-semibold text-foreground hover:bg-muted transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  ⚡ Sync Schedule
+                </button>
+                <button
+                  type="button"
+                  id="view-logs-b-btn"
+                  class="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-1.5 text-[11px] font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-all"
+                  title="View FastCron Logs for Pipeline B"
+                >
+                  📋 View Logs
+                </button>
+              </div>
 
               <!-- Last Runs Strip for Pipeline B -->
               <div class="pt-2 border-t border-border/50">
@@ -564,6 +584,39 @@ export const prerender = false;
         >
           Delete Account
         </button>
+      </div>
+  <!-- FastCron Observability Logs Modal -->
+  <div id="cron-logs-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-background/80 backdrop-blur-sm p-4">
+    <div class="w-full max-w-2xl rounded-2xl border border-border bg-card p-6 shadow-2xl flex flex-col max-h-[85vh]">
+      <div class="flex items-center justify-between pb-3 border-b border-border mb-4">
+        <div class="flex items-center gap-2">
+          <h3 id="cron-logs-modal-title" class="text-base font-bold text-foreground">FastCron Execution Logs</h3>
+          <span id="cron-logs-channel-badge" class="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
+            Pipeline
+          </span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button
+            id="refresh-cron-logs-btn"
+            class="rounded-lg border border-border p-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-all"
+            title="Refresh Logs"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+              <path d="M3 3v5h5"/>
+              <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/>
+              <path d="M16 21h5v-5"/>
+            </svg>
+          </button>
+          <button id="close-cron-logs-modal-btn" class="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Logs Content Body -->
+      <div id="cron-logs-container" class="flex-1 overflow-y-auto space-y-2 font-mono text-xs p-2 bg-muted/20 rounded-xl border border-border/60">
+        <div class="text-center py-8 text-muted-foreground">Loading FastCron logs...</div>
       </div>
     </div>
   </div>
@@ -1081,7 +1134,7 @@ export const prerender = false;
           } catch (e) {
             alert('Failed to contact FastCron schedule endpoint: ' + e.message);
           } finally {
-            btn.textContent = '⚡ Sync Schedule to FastCron';
+            btn.textContent = '⚡ Sync Schedule';
             btn.disabled = false;
           }
         });
@@ -1089,6 +1142,99 @@ export const prerender = false;
     };
     setupFastCronSyncBtn('sync-fastcron-a-btn', 'analytics');
     setupFastCronSyncBtn('sync-fastcron-b-btn', 'top_pins');
+
+    // FastCron Observability Logs Modal Handlers
+    const cronLogsModal = document.getElementById('cron-logs-modal');
+    const closeCronLogsBtn = document.getElementById('close-cron-logs-modal-btn');
+    const refreshCronLogsBtn = document.getElementById('refresh-cron-logs-btn');
+    let activeLogChannel = 'analytics';
+
+    async function loadAndShowCronLogs(channel) {
+      activeLogChannel = channel;
+      const connId = document.getElementById('drawer-connection-id').value;
+      if (!connId) return;
+
+      const badge = document.getElementById('cron-logs-channel-badge');
+      if (badge) {
+        badge.textContent = channel === 'analytics' ? 'Pipeline A (Analytics)' : 'Pipeline B (Top Pins)';
+      }
+
+      const container = document.getElementById('cron-logs-container');
+      if (container) {
+        container.innerHTML = '<div class="text-center py-8 text-muted-foreground">Fetching FastCron execution logs...</div>';
+      }
+
+      if (cronLogsModal) {
+        cronLogsModal.classList.remove('hidden');
+        cronLogsModal.classList.add('flex');
+      }
+
+      try {
+        const res = await fetch(`/api/analytics/cron/logs?connection_id=${connId}&channel=${channel}`);
+        const json = await res.json();
+
+        if (!container) return;
+
+        if (json.success && Array.isArray(json.logs)) {
+          if (json.logs.length === 0) {
+            container.innerHTML = '<div class="text-center py-8 text-muted-foreground">No execution logs recorded yet for this job in FastCron.</div>';
+          } else {
+            container.innerHTML = json.logs.map((log) => {
+              const statusClass = log.status === 'OK' || log.http_status === 200 || log.status === 'success'
+                ? 'text-emerald-500'
+                : 'text-rose-500';
+              return `
+                <div class="rounded-lg border border-border bg-card p-3 space-y-1.5 shadow-sm">
+                  <div class="flex items-center justify-between text-[11px]">
+                    <span class="font-bold text-foreground">${log.date || log.time || log.created_at || 'Recent Execution'}</span>
+                    <span class="font-bold ${statusClass}">HTTP ${log.http_status || log.status || 'OK'} (${log.duration || log.time_taken || '<1'}s)</span>
+                  </div>
+                  <div class="text-[11px] text-muted-foreground break-all bg-muted/30 p-2 rounded">
+                    ${log.output || log.response || log.error || 'Execution completed.'}
+                  </div>
+                </div>
+              `;
+            }).join('');
+          }
+        } else {
+          container.innerHTML = `
+            <div class="p-4 rounded-lg bg-destructive/10 text-destructive text-xs">
+              <span class="font-bold">FastCron Log Error:</span> ${json.error || 'Failed to load logs.'}
+              ${json.error === 'job_not_configured' ? '<p class="mt-1 text-[11px] opacity-80">Click "Sync Schedule" first to register this pipeline with FastCron.</p>' : ''}
+            </div>
+          `;
+        }
+      } catch (err) {
+        if (container) {
+          container.innerHTML = `<div class="p-4 rounded-lg bg-destructive/10 text-destructive text-xs">Network error: ${err.message}</div>`;
+        }
+      }
+    }
+
+    if (closeCronLogsBtn) {
+      closeCronLogsBtn.addEventListener('click', () => {
+        if (cronLogsModal) {
+          cronLogsModal.classList.add('hidden');
+          cronLogsModal.classList.remove('flex');
+        }
+      });
+    }
+
+    if (refreshCronLogsBtn) {
+      refreshCronLogsBtn.addEventListener('click', () => {
+        loadAndShowCronLogs(activeLogChannel);
+      });
+    }
+
+    const viewLogsABtn = document.getElementById('view-logs-a-btn');
+    if (viewLogsABtn) {
+      viewLogsABtn.addEventListener('click', () => loadAndShowCronLogs('analytics'));
+    }
+
+    const viewLogsBBtn = document.getElementById('view-logs-b-btn');
+    if (viewLogsBBtn) {
+      viewLogsBBtn.addEventListener('click', () => loadAndShowCronLogs('top_pins'));
+    }
 
     // Ping & Run Now Buttons in Drawer
     const setupPingBtn = (btnId, channel) => {

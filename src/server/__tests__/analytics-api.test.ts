@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { POST as ingestHandler } from '../../pages/api/internal/pinterest/ingest';
 import { pinnerAnalyticsService } from '../services/pinner-analytics-service';
+import { dbClients } from '../db/clients';
 
 vi.mock('../services/pinner-etl', () => ({
   pinnerETL: {
@@ -14,20 +15,47 @@ vi.mock('../services/pinner-etl', () => ({
   },
 }));
 
-vi.mock('../db/clients', () => ({
-  getServerEnv: vi.fn().mockReturnValue({
-    INGEST_SECRET_KEY: 'correct_secret_key_123',
-  }),
-  dbClients: {
-    getConfig: vi.fn().mockReturnValue({
+vi.mock('../db/clients', () => {
+  const mockAnalytics = {
+    from: vi.fn(),
+  };
+
+  return {
+    getServerEnv: vi.fn().mockReturnValue({
       INGEST_SECRET_KEY: 'correct_secret_key_123',
     }),
-    getSchedulingAdmin: vi.fn(),
-    getAnalytics: vi.fn(),
-  },
-}));
+    dbClients: {
+      getAnalytics: vi.fn().mockReturnValue(mockAnalytics),
+      getConfig: vi.fn().mockReturnValue({
+        INGEST_SECRET_KEY: 'correct_secret_key_123',
+      }),
+      getSchedulingAdmin: vi.fn(),
+    },
+  };
+});
 
 describe('Pinner Analytics API & Ingest Endpoint Security Suite', () => {
+  const mockWsId = '00000000-0000-0000-0000-000000000001';
+  const mockConnId = 'a1b2c3d4-e5f6-7890-1234-56789abcdef0';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (dbClients.getAnalytics() as any).from.mockReturnValue({
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      is: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: {
+          id: mockConnId,
+          workspace_id: mockWsId,
+          analytics_enabled: true,
+          deleted_at: null,
+        },
+        error: null,
+      }),
+    });
+  });
+
   it('rejects POST /api/internal/pinterest/ingest with 401 when x-ingest-secret is missing or invalid', async () => {
     const req = new Request('http://localhost:4321/api/internal/pinterest/ingest', {
       method: 'POST',
@@ -36,12 +64,12 @@ describe('Pinner Analytics API & Ingest Endpoint Security Suite', () => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        workspace_id: '00000000-0000-0000-0000-000000000001',
-        connection_id: 'a1b2c3d4-e5f6-7890-1234-56789abcdef0',
+        workspace_id: mockWsId,
+        connection_id: mockConnId,
       }),
     });
 
-    const response = await ingestHandler({ request: req, locals: {} } as any);
+    const response = await ingestHandler({ request: req, locals: { runtime: { env: {} } } } as any);
     expect(response.status).toBe(401);
     const body = await response.json();
     expect(body.success).toBe(false);
@@ -57,14 +85,14 @@ describe('Pinner Analytics API & Ingest Endpoint Security Suite', () => {
       },
       body: JSON.stringify({
         success: true,
-        workspace_id: '00000000-0000-0000-0000-000000000001',
-        connection_id: 'a1b2c3d4-e5f6-7890-1234-56789abcdef0',
+        workspace_id: mockWsId,
+        connection_id: mockConnId,
         account_analytics: {},
         top_pins_analytics: {},
       }),
     });
 
-    const response = await ingestHandler({ request: req, locals: {} } as any);
+    const response = await ingestHandler({ request: req, locals: { runtime: { env: {} } } } as any);
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.success).toBe(true);

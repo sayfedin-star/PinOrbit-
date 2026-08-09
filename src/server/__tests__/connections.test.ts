@@ -16,6 +16,8 @@ vi.mock('../db/analytics', () => ({
 
 vi.mock('../services/fastcron-service', () => ({
   fastcronService: {
+    disableFastCronJob: vi.fn().mockResolvedValue(true),
+    enableFastCronJob: vi.fn().mockResolvedValue(true),
     deleteFastCronJob: vi.fn().mockResolvedValue(true),
   },
 }));
@@ -127,7 +129,7 @@ describe('Pinterest Connection CRUD Suite (V16 Project 3 Ownership)', () => {
     expect(json.error).toContain('Connection not found in this workspace');
   });
 
-  it('soft-deletes connection and deletes associated FastCron jobs', async () => {
+  it('soft-deletes connection and disables associated FastCron jobs', async () => {
     (analyticsDb.getWorkspaceConnection as any).mockResolvedValue({
       id: connectionId,
       workspace_id: workspaceId,
@@ -146,7 +148,7 @@ describe('Pinterest Connection CRUD Suite (V16 Project 3 Ownership)', () => {
       method: 'DELETE',
     });
 
-    const locals = { user: { id: 'u1' }, supabase: {}, activeWorkspaceId: workspaceId };
+    const locals = { user: { id: 'u1' }, supabase: {}, activeWorkspaceId: workspaceId, runtime: { env: {} } };
     const res = await deleteConnHandler({
       params: { id: connectionId },
       request: req,
@@ -154,8 +156,8 @@ describe('Pinterest Connection CRUD Suite (V16 Project 3 Ownership)', () => {
     } as any);
 
     expect(res.status).toBe(200);
-    expect(fastcronService.deleteFastCronJob).toHaveBeenCalledWith(workspaceId, 1122);
-    expect(fastcronService.deleteFastCronJob).toHaveBeenCalledWith(workspaceId, 3344);
+    expect(fastcronService.disableFastCronJob).toHaveBeenCalledWith(workspaceId, 1122, expect.anything());
+    expect(fastcronService.disableFastCronJob).toHaveBeenCalledWith(workspaceId, 3344, expect.anything());
     expect(analyticsDb.softDeleteWorkspaceConnection).toHaveBeenCalledWith(
       workspaceId,
       connectionId

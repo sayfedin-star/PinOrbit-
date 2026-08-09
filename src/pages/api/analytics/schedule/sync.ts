@@ -8,6 +8,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const user = locals.user;
   const schedulingClient = locals.supabase;
   const workspaceId = locals.activeWorkspaceId;
+  const runtimeEnv = (locals as any)?.runtime?.env || (locals as any)?.runtimeEnv || {};
 
   if (!user || !schedulingClient) {
     return new Response(
@@ -74,7 +75,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const result = await fastcronService.syncScheduleWithFastCron(
       workspaceId,
       connectionId,
-      channel
+      channel,
+      runtimeEnv
     );
 
     return new Response(JSON.stringify(result), {
