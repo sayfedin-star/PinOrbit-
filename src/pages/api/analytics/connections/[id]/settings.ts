@@ -72,6 +72,17 @@ export const GET: APIRoute = async ({ params, locals }) => {
       top_pins_schedule_status: connection.top_pins_schedule_status || 'pending',
       top_pins_start_offset_days: connection.top_pins_start_offset_days ?? 7,
       top_pins_end_offset_days: connection.top_pins_end_offset_days ?? 2,
+      top_pins_num_of_pins: connection.top_pins_num_of_pins ?? 50,
+      top_pins_sort_modes: connection.top_pins_sort_modes || [
+        'IMPRESSION',
+        'OUTBOUND_CLICK',
+        'SAVE',
+        'ENGAGEMENT',
+        'PIN_CLICK',
+      ],
+      fastcron_notify: connection.fastcron_notify ?? true,
+      fastcron_timeout: connection.fastcron_timeout ?? 30,
+      fastcron_instances: connection.fastcron_instances ?? 1,
     };
 
     return new Response(JSON.stringify({ success: true, data: responseData }), {
@@ -310,6 +321,91 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
       }
     }
 
+    // Validate V23: top_pins_num_of_pins [1, 50]
+    if (body.top_pins_num_of_pins !== undefined) {
+      const numPins = Number(body.top_pins_num_of_pins);
+      if (!Number.isInteger(numPins) || numPins < 1 || numPins > 50) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'top_pins_num_of_pins must be an integer between 1 and 50.' }),
+          { status: 422, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      updates.top_pins_num_of_pins = numPins;
+      if (numPins !== existing.top_pins_num_of_pins) {
+        updates.top_pins_schedule_status = 'pending';
+      }
+    }
+
+    // Validate V23: top_pins_sort_modes (non-empty array of valid sort modes)
+    if (body.top_pins_sort_modes !== undefined) {
+      if (!Array.isArray(body.top_pins_sort_modes) || body.top_pins_sort_modes.length === 0) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'top_pins_sort_modes must be a non-empty array.' }),
+          { status: 422, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      const validModes = new Set(['IMPRESSION', 'OUTBOUND_CLICK', 'SAVE', 'ENGAGEMENT', 'PIN_CLICK']);
+      const normalized = body.top_pins_sort_modes.map((m: any) => String(m).toUpperCase());
+      for (const m of normalized) {
+        if (!validModes.has(m)) {
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: `Invalid sort mode "${m}". Allowed modes: IMPRESSION, OUTBOUND_CLICK, SAVE, ENGAGEMENT, PIN_CLICK.`,
+            }),
+            { status: 422, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+      updates.top_pins_sort_modes = normalized;
+      if (JSON.stringify(normalized) !== JSON.stringify(existing.top_pins_sort_modes)) {
+        updates.top_pins_schedule_status = 'pending';
+      }
+    }
+
+    // Validate V23: fastcron_timeout [5, 60]
+    if (body.fastcron_timeout !== undefined) {
+      const timeout = Number(body.fastcron_timeout);
+      if (!Number.isInteger(timeout) || timeout < 5 || timeout > 60) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'fastcron_timeout must be an integer between 5 and 60.' }),
+          { status: 422, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      updates.fastcron_timeout = timeout;
+    }
+
+    // Validate V23: fastcron_instances [0, 5]
+    if (body.fastcron_instances !== undefined) {
+      const instances = Number(body.fastcron_instances);
+      if (!Number.isInteger(instances) || instances < 0 || instances > 5) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'fastcron_instances must be an integer between 0 and 5.' }),
+          { status: 422, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      updates.fastcron_instances = instances;
+    }
+
+    // Validate V23: fastcron_notify (boolean)
+    if (body.fastcron_notify !== undefined) {
+      if (typeof body.fastcron_notify !== 'boolean') {
+        return new Response(
+          JSON.stringify({ success: false, error: 'fastcron_notify must be a boolean.' }),
+          { status: 422, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      updates.fastcron_notify = body.fastcron_notify;
+    }
+
+    // Workspace-level Timezone
+    if (body.timezone !== undefined) {
+      const tz = String(body.timezone).trim();
+      if (tz) {
+        await analyticsDb.upsertWorkspaceAnalyticsSettings(workspaceId, { timezone: tz });
+      }
+    }
+
     const updated = await analyticsDb.updateWorkspaceConnection(workspaceId, connectionId, updates);
 
     const responseData: AnalyticsConnectionSettingsResponse = {
@@ -328,6 +424,17 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
       top_pins_schedule_status: updated.top_pins_schedule_status,
       top_pins_start_offset_days: updated.top_pins_start_offset_days ?? 7,
       top_pins_end_offset_days: updated.top_pins_end_offset_days ?? 2,
+      top_pins_num_of_pins: updated.top_pins_num_of_pins ?? 50,
+      top_pins_sort_modes: updated.top_pins_sort_modes || [
+        'IMPRESSION',
+        'OUTBOUND_CLICK',
+        'SAVE',
+        'ENGAGEMENT',
+        'PIN_CLICK',
+      ],
+      fastcron_notify: updated.fastcron_notify ?? true,
+      fastcron_timeout: updated.fastcron_timeout ?? 30,
+      fastcron_instances: updated.fastcron_instances ?? 1,
     };
 
     return new Response(JSON.stringify({ success: true, data: responseData }), {
@@ -344,3 +451,4 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
     );
   }
 };
+

@@ -519,70 +519,118 @@ export const pinnerETL = {
       // -------------------------------------------------------------------------
       // Parse Pipeline B: Ranked Top Pins Snapshots (Allowlist filtered)
       // -------------------------------------------------------------------------
-      const windowEnd = requestContext?.end_date || nowIso.split('T')[0];
-      const windowStart = requestContext?.start_date || windowEnd;
+      const today = nowIso.split('T')[0];
+      const todayMs = Date.now();
+      const calcOffsetDate = (daysAgo: number) =>
+        new Date(todayMs - daysAgo * 86400000).toISOString().split('T')[0];
 
-      if (payload.top_pins_analytics && payload.top_pins_analytics.pins_by_sort_mode) {
-        const { pins_by_sort_mode } = payload.top_pins_analytics;
+      const endOffset =
+        typeof payload.top_pins_analytics?.end_offset_days === 'number'
+          ? payload.top_pins_analytics.end_offset_days
+          : typeof requestContext?.end_offset_days === 'number'
+          ? requestContext.end_offset_days
+          : 2;
 
-        for (const [sortByRaw, pinsArray] of Object.entries(pins_by_sort_mode)) {
-          const sortBy = sortByRaw.toUpperCase() as PinnerSortBy;
-          if (!Array.isArray(pinsArray)) continue;
+      const startOffset =
+        typeof payload.top_pins_analytics?.start_offset_days === 'number'
+          ? payload.top_pins_analytics.start_offset_days
+          : typeof requestContext?.start_offset_days === 'number'
+          ? requestContext.start_offset_days
+          : 7;
 
-          pinsArray.forEach((pin, index) => {
-            const metrics = normalizeMetrics(pin.metrics);
-            const unvalidatedTopPin = {
-              workspace_id: workspaceId,
-              connection_id: connectionId,
-              pin_id: pin.pin_id,
-              window_start: windowStart,
-              window_end: windowEnd,
-              title: pin.title || null,
-              image_url: pin.image_url || null,
-              destination_url: pin.destination_url || null,
-              sort_by: sortBy,
-              rank_position: index + 1,
-              impressions: metrics.impressions,
-              engagement: metrics.engagements,
-              outbound_clicks: metrics.outbound_clicks,
-              pin_clicks: metrics.pin_clicks,
-              saves: metrics.saves,
-              video_10s_view: metrics.video_10s_view,
-              video_mrc_view: metrics.video_mrc_view,
-              video_start: metrics.video_start,
-              quartile_95_percent_view: metrics.quartile_95_percent_view,
-              engagement_rate: metrics.engagement_rate,
-              outbound_click_rate: metrics.outbound_click_rate,
-              pin_click_rate: metrics.pin_click_rate,
-              save_rate: metrics.save_rate,
-              video_avg_watch_time: metrics.video_avg_watch_time,
-              video_v50_watch_time: metrics.video_v50_watch_time,
-              data_status: pin.data_status || 'READY',
-              pin_metadata: pin.pin_metadata || null,
-              raw_metrics: pin.metrics || null,
-              raw_pin: pin.raw_pin || null,
-              raw_headers: payload.raw_headers || null,
-              recorded_at: nowIso,
-            };
+      // Exact R13.3 window fallback order:
+      // windowEnd = request_context.end_date OR (today - end_offset) OR today
+      // windowStart = request_context.start_date OR (today - start_offset) OR windowEnd
+      const windowEnd =
+        requestContext?.end_date?.trim() || calcOffsetDate(endOffset) || today;
+      const windowStart =
+        requestContext?.start_date?.trim() || calcOffsetDate(startOffset) || windowEnd;
 
-            const filteredTopPin = filterRecordByAllowlist(
-              unvalidatedTopPin,
-              COLUMN_ALLOWLISTS.top_pins_snapshots
-            ) as TopPinSnapshot;
+      const normalizedPinsBySort: Record<string, any[]> = {};
+      const topPinsEnvelope = payload.top_pins_analytics || (payload.pins ? payload : null);
+      const envelopeDateAvailability =
+        payload.top_pins_analytics?.date_availability || payload.date_availability || null;
 
-            topPinRows.push(filteredTopPin);
-
-            if (pin.destination_url) {
-              destinationUrlsToTrack.push({
-                destination_url: pin.destination_url,
-                period_date: windowEnd.split('T')[0],
-                total_impressions: metrics.impressions,
-                total_clicks: metrics.outbound_clicks + metrics.pin_clicks,
-                total_pins_active: 1,
-              });
+      if (topPinsEnvelope) {
+        if (topPinsEnvelope.pins_by_sort_mode && typeof topPinsEnvelope.pins_by_sort_mode === 'object') {
+          // Shape A: Legacy structure { pins_by_sort_mode: { SORT: [pins] } }
+          for (const [sKey, pList] of Object.entries(topPinsEnvelope.pins_by_sort_mode)) {
+            if (Array.isArray(pList)) {
+              normalizedPinsBySort[sKey.toUpperCase()] = pList;
             }
-          });
+          }
+        } else if (Array.isArray(topPinsEnvelope.pins)) {
+          // Shape B: Make.com raw Pinterest response with sort_by & pins[]
+          const rawSort = String(topPinsEnvelope.sort_by || requestContext?.sort_by || 'IMPRESSION').toUpperCase();
+          normalizedPinsBySort[rawSort] = topPinsEnvelope.pins;
+        } else if (Array.isArray(topPinsEnvelope)) {
+          // Shape C: Array of pins directly
+          const rawSort = String(requestContext?.sort_by || 'IMPRESSION').toUpperCase();
+          normalizedPinsBySort[rawSort] = topPinsEnvelope;
         }
+      }
+
+      for (const [sortByRaw, pinsArray] of Object.entries(normalizedPinsBySort)) {
+        const sortBy = sortByRaw.toUpperCase() as PinnerSortBy;
+        if (!Array.isArray(pinsArray)) continue;
+
+        pinsArray.forEach((pin, index) => {
+          const metrics = normalizeMetrics(pin.metrics || pin);
+          const dateAvailability = pin.date_availability || envelopeDateAvailability || null;
+
+          const unvalidatedTopPin = {
+            workspace_id: workspaceId,
+            connection_id: connectionId,
+            pin_id: pin.pin_id || pin.id,
+            window_start: windowStart,
+            window_end: windowEnd,
+            title: pin.title || pin.pin_title || null,
+            image_url: pin.image_url || pin.media?.images?.['600x']?.url || pin.media?.images?.originals?.url || null,
+            destination_url: pin.destination_url || pin.link || null,
+            sort_by: sortBy,
+            rank_position: index + 1,
+            impressions: metrics.impressions,
+            engagement: metrics.engagements,
+            outbound_clicks: metrics.outbound_clicks,
+            pin_clicks: metrics.pin_clicks,
+            saves: metrics.saves,
+            video_10s_view: metrics.video_10s_view,
+            video_mrc_view: metrics.video_mrc_view,
+            video_start: metrics.video_start,
+            quartile_95_percent_view: metrics.quartile_95_percent_view,
+            engagement_rate: metrics.engagement_rate,
+            outbound_click_rate: metrics.outbound_click_rate,
+            pin_click_rate: metrics.pin_click_rate,
+            save_rate: metrics.save_rate,
+            video_avg_watch_time: metrics.video_avg_watch_time,
+            video_v50_watch_time: metrics.video_v50_watch_time,
+            data_status: pin.data_status || 'READY',
+            date_availability: dateAvailability,
+            pin_metadata: pin.pin_metadata || null,
+            raw_metrics: pin.metrics || null,
+            raw_pin: pin.raw_pin || pin,
+            raw_headers: payload.raw_headers || null,
+            recorded_at: nowIso,
+          };
+
+          const filteredTopPin = filterRecordByAllowlist(
+            unvalidatedTopPin,
+            COLUMN_ALLOWLISTS.top_pins_snapshots
+          ) as TopPinSnapshot;
+
+          topPinRows.push(filteredTopPin);
+
+          const destUrl = pin.destination_url || pin.link;
+          if (destUrl) {
+            destinationUrlsToTrack.push({
+              destination_url: destUrl,
+              period_date: windowEnd.split('T')[0],
+              total_impressions: metrics.impressions,
+              total_clicks: metrics.outbound_clicks + metrics.pin_clicks,
+              total_pins_active: 1,
+            });
+          }
+        });
       }
 
       // -------------------------------------------------------------------------

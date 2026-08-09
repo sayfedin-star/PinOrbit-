@@ -193,4 +193,145 @@ describe('Pinner Analytics Settings & Security Suite (V20.1 Per-Pipeline Date Of
     const callArgs = (analyticsDb.updateWorkspaceConnection as any).mock.calls[0][2];
     expect(callArgs.top_pins_schedule_status).toBeUndefined();
   });
+
+  it('V23: asserts HTTP 422 for invalid top_pins_num_of_pins, sort_modes, fastcron_timeout, instances, and notify', async () => {
+    (analyticsDb.getWorkspaceConnection as any).mockResolvedValue({
+      id: connectionId,
+      workspace_id: workspaceId,
+      display_name: 'hymumdotcom',
+      top_pins_num_of_pins: 50,
+      top_pins_sort_modes: ['IMPRESSION'],
+      fastcron_timeout: 30,
+      fastcron_instances: 1,
+      fastcron_notify: true,
+    });
+
+    const locals = { user: { id: 'u1' }, supabase: {}, activeWorkspaceId: workspaceId };
+
+    // 1. Invalid num_of_pins (< 1)
+    const res1 = await postConnSettingsHandler({
+      params: { id: connectionId },
+      request: new Request('http://localhost', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ top_pins_num_of_pins: 0 }),
+      }),
+      locals,
+    } as any);
+    expect(res1.status).toBe(422);
+
+    // 2. Invalid num_of_pins (> 50)
+    const res2 = await postConnSettingsHandler({
+      params: { id: connectionId },
+      request: new Request('http://localhost', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ top_pins_num_of_pins: 51 }),
+      }),
+      locals,
+    } as any);
+    expect(res2.status).toBe(422);
+
+    // 3. Empty sort_modes
+    const res3 = await postConnSettingsHandler({
+      params: { id: connectionId },
+      request: new Request('http://localhost', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ top_pins_sort_modes: [] }),
+      }),
+      locals,
+    } as any);
+    expect(res3.status).toBe(422);
+
+    // 4. Invalid sort_mode string
+    const res4 = await postConnSettingsHandler({
+      params: { id: connectionId },
+      request: new Request('http://localhost', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ top_pins_sort_modes: ['INVALID_SORT_KEY'] }),
+      }),
+      locals,
+    } as any);
+    expect(res4.status).toBe(422);
+
+    // 5. Invalid fastcron_timeout (< 5)
+    const res5 = await postConnSettingsHandler({
+      params: { id: connectionId },
+      request: new Request('http://localhost', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fastcron_timeout: 4 }),
+      }),
+      locals,
+    } as any);
+    expect(res5.status).toBe(422);
+
+    // 6. Invalid fastcron_instances (> 5)
+    const res6 = await postConnSettingsHandler({
+      params: { id: connectionId },
+      request: new Request('http://localhost', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fastcron_instances: 6 }),
+      }),
+      locals,
+    } as any);
+    expect(res6.status).toBe(422);
+
+    // 7. Invalid fastcron_notify (non-boolean)
+    const res7 = await postConnSettingsHandler({
+      params: { id: connectionId },
+      request: new Request('http://localhost', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fastcron_notify: 'true' }),
+      }),
+      locals,
+    } as any);
+    expect(res7.status).toBe(422);
+  });
+
+  it('V23: top_pins offset or parameter change resets top_pins_schedule_status to pending', async () => {
+    (analyticsDb.getWorkspaceConnection as any).mockResolvedValue({
+      id: connectionId,
+      workspace_id: workspaceId,
+      display_name: 'hymumdotcom',
+      top_pins_schedule_status: 'synced',
+      top_pins_start_offset_days: 7,
+      top_pins_end_offset_days: 2,
+    });
+
+    (analyticsDb.updateWorkspaceConnection as any).mockResolvedValue({
+      id: connectionId,
+      top_pins_schedule_status: 'pending',
+    });
+
+    const locals = { user: { id: 'u1' }, supabase: {}, activeWorkspaceId: workspaceId };
+    const res = await postConnSettingsHandler({
+      params: { id: connectionId },
+      request: new Request('http://localhost', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          top_pins_start_offset_days: 14,
+          top_pins_end_offset_days: 3,
+        }),
+      }),
+      locals,
+    } as any);
+
+    expect(res.status).toBe(200);
+    expect(analyticsDb.updateWorkspaceConnection).toHaveBeenCalledWith(
+      workspaceId,
+      connectionId,
+      expect.objectContaining({
+        top_pins_start_offset_days: 14,
+        top_pins_end_offset_days: 3,
+        top_pins_schedule_status: 'pending',
+      })
+    );
+  });
 });
+

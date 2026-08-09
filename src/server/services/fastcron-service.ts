@@ -278,6 +278,8 @@ export const fastcronService = {
           connection_id: connectionId,
           top_pins_start_offset_days: startOffset,
           top_pins_end_offset_days: endOffset,
+          num_of_pins: connection.top_pins_num_of_pins || 50,
+          sort_modes: connection.top_pins_sort_modes || SORT_MODES,
         });
 
     const jobName = `PinOrbit ${isAnalytics ? 'analytics' : 'top-pins'} — ${workspaceId.substring(0, 8)} — ${connection.display_name}`;
@@ -293,8 +295,9 @@ export const fastcronService = {
       http_headers: 'Content-Type: application/json',
       postData: postData,
       post_data: postData,
-      instances: 1,
-      notify: true,
+      instances: connection.fastcron_instances !== undefined ? connection.fastcron_instances : 1,
+      notify: connection.fastcron_notify !== undefined ? connection.fastcron_notify : true,
+      timeout: connection.fastcron_timeout || 30,
     };
 
     if (verifiedJobId) {
@@ -352,8 +355,9 @@ export const fastcronService = {
               analytics_start_offset_days: connection.analytics_start_offset_days ?? 7,
               analytics_end_offset_days: connection.analytics_end_offset_days ?? 1,
             }),
-            instances: 1,
-            notify: true,
+            instances: connection.fastcron_instances !== undefined ? connection.fastcron_instances : 1,
+            notify: connection.fastcron_notify !== undefined ? connection.fastcron_notify : true,
+            timeout: connection.fastcron_timeout || 30,
           },
           {
             name: `PinOrbit top-pins — ${workspaceId.substring(0, 8)} — ${connection.display_name}`,
@@ -370,6 +374,8 @@ export const fastcronService = {
               connection_id: connectionId,
               top_pins_start_offset_days: connection.top_pins_start_offset_days ?? 7,
               top_pins_end_offset_days: connection.top_pins_end_offset_days ?? 2,
+              num_of_pins: connection.top_pins_num_of_pins || 50,
+              sort_modes: connection.top_pins_sort_modes || SORT_MODES,
             }),
             post_data: JSON.stringify({
               job_type: 'daily_sync',
@@ -377,9 +383,12 @@ export const fastcronService = {
               connection_id: connectionId,
               top_pins_start_offset_days: connection.top_pins_start_offset_days ?? 7,
               top_pins_end_offset_days: connection.top_pins_end_offset_days ?? 2,
+              num_of_pins: connection.top_pins_num_of_pins || 50,
+              sort_modes: connection.top_pins_sort_modes || SORT_MODES,
             }),
-            instances: 1,
-            notify: true,
+            instances: connection.fastcron_instances !== undefined ? connection.fastcron_instances : 1,
+            notify: connection.fastcron_notify !== undefined ? connection.fastcron_notify : true,
+            timeout: connection.fastcron_timeout || 30,
           },
         ];
 
@@ -739,7 +748,8 @@ export const fastcronService = {
           end_date: endDate,
           top_pins_start_offset_days: startOffset,
           top_pins_end_offset_days: endOffset,
-          sort_modes: SORT_MODES,
+          num_of_pins: connection.top_pins_num_of_pins || 50,
+          sort_modes: connection.top_pins_sort_modes || SORT_MODES,
         };
 
     // If Job ID and Token exist -> Dispatches cron_run

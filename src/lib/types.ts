@@ -539,6 +539,13 @@ export interface AnalyticsConnection {
   top_pins_schedule_status: 'synced' | 'pending' | 'error';
   top_pins_start_offset_days?: number;
   top_pins_end_offset_days?: number;
+  top_pins_num_of_pins?: number;
+  top_pins_sort_modes?: string[];
+
+  // FastCron Execution Options (V23)
+  fastcron_notify?: boolean;
+  fastcron_timeout?: number;
+  fastcron_instances?: number;
 
   created_at: string;
   updated_at: string;
@@ -580,6 +587,11 @@ export interface AnalyticsConnectionSettingsResponse {
   top_pins_schedule_status: 'synced' | 'pending' | 'error';
   top_pins_start_offset_days?: number;
   top_pins_end_offset_days?: number;
+  top_pins_num_of_pins?: number;
+  top_pins_sort_modes?: string[];
+  fastcron_notify?: boolean;
+  fastcron_timeout?: number;
+  fastcron_instances?: number;
 }
 
 export type PinnerConnection = AnalyticsConnection;

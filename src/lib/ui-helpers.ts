@@ -117,3 +117,99 @@ export function renderEmptyStateHTML(title: string, description: string, icon: '
     </div>
   `;
 }
+
+/**
+ * Hardened client-side fetch helper that ensures:
+ * 1. Checks res.ok AND Content-Type includes application/json before parsing.
+ * 2. Redirects to /login on 401/403.
+ * 3. Shows "Endpoint unavailable - redeploy required" on 404.
+ * 4. Shows "HTTP {status}" on non-JSON / error responses. Never exposes raw stack traces.
+ */
+export async function safeFetchJson<T = any>(
+  input: RequestInfo | URL,
+  init?: RequestInit
+): Promise<T> {
+  const res = await fetch(input, init);
+
+  if (res.status === 401 || res.status === 403) {
+    if (typeof window !== 'undefined') {
+      window.location.href = '/login';
+    }
+    throw new Error(`HTTP ${res.status}: Unauthorized or forbidden. Redirecting to login.`);
+  }
+
+  if (res.status === 404) {
+    throw new Error('HTTP 404: Endpoint unavailable - redeploy required');
+  }
+
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    throw new Error(`HTTP ${res.status}: Server returned non-JSON response (${contentType || 'empty'})`);
+  }
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    const errorMsg = data?.error || data?.message || res.statusText || 'Request failed';
+    throw new Error(`HTTP ${res.status}: ${errorMsg}`);
+  }
+
+  return data as T;
+}
+
+export interface ConnectionHealthSummary {
+  consecutive_failures: number;
+  last_success_at: string | null;
+  total_runs: number;
+  health_status: 'healthy' | 'warning' | 'critical' | 'revoked';
+}
+
+export function calculateConnectionHealth(
+  runs: Array<{ status: string; started_at: string }>,
+  isRevoked = false
+): ConnectionHealthSummary {
+  if (isRevoked) {
+    return {
+      consecutive_failures: 0,
+      last_success_at: null,
+      total_runs: runs?.length || 0,
+      health_status: 'revoked',
+    };
+  }
+
+  if (!runs || runs.length === 0) {
+    return {
+      consecutive_failures: 0,
+      last_success_at: null,
+      total_runs: 0,
+      health_status: 'healthy',
+    };
+  }
+
+  let consecutiveFailures = 0;
+  for (const run of runs) {
+    if (run.status === 'failed') {
+      consecutiveFailures++;
+    } else {
+      break;
+    }
+  }
+
+  const lastSuccess = runs.find((r) => r.status === 'completed' || r.status === 'success');
+
+  let healthStatus: 'healthy' | 'warning' | 'critical' = 'healthy';
+  if (consecutiveFailures >= 3) {
+    healthStatus = 'critical';
+  } else if (consecutiveFailures >= 1) {
+    healthStatus = 'warning';
+  }
+
+  return {
+    consecutive_failures: consecutiveFailures,
+    last_success_at: lastSuccess?.started_at || null,
+    total_runs: runs.length,
+    health_status: healthStatus,
+  };
+}
+
+

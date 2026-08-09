@@ -234,8 +234,8 @@ const { id: connectionId } = Astro.params;
     toDate = end.toISOString().split('T')[0];
     fromDate = start.toISOString().split('T')[0];
 
-    const fromInput = document.getElementById('from-date-input');
-    const toInput = document.getElementById('to-date-input');
+    const fromInput = document.getElementById('from-date-input') as HTMLInputElement | null;
+    const toInput = document.getElementById('to-date-input') as HTMLInputElement | null;
     if (fromInput) fromInput.value = fromDate;
     if (toInput) toInput.value = toDate;
   }
@@ -243,10 +243,9 @@ const { id: connectionId } = Astro.params;
   // Load Connection Details
   async function loadConnectionDetails() {
     try {
-      const res = await fetch(`/api/analytics/connections?window_days=30`);
-      const json = await res.json();
+      const json = await safeFetchJson(`/api/analytics/connections?window_days=30`);
       if (json.success && Array.isArray(json.data)) {
-        const conn = json.data.find((c) => c.id === connectionId);
+        const conn = json.data.find((c: any) => c.id === connectionId);
         if (conn) {
           const titleEl = document.getElementById('connection-title');
           if (titleEl) titleEl.textContent = `${conn.display_name} — Analytics`;
@@ -296,8 +295,7 @@ const { id: connectionId } = Astro.params;
         </tr>
       `;
 
-      const res = await fetch(`/api/analytics/connections/${connectionId}/daily?from_date=${fromDate}&to_date=${toDate}`);
-      const json = await res.json();
+      const json = await safeFetchJson(`/api/analytics/connections/${connectionId}/daily?from_date=${fromDate}&to_date=${toDate}`);
 
       if (!json.success || !json.data) {
         throw new Error(json.error || 'Failed to load daily metrics');
@@ -318,7 +316,7 @@ const { id: connectionId } = Astro.params;
       }
 
       tbody.innerHTML = rows
-        .map((r) => {
+        .map((r: any) => {
           const isReady = r.data_status === 'READY';
           const statusClass = isReady
             ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold'
@@ -360,7 +358,7 @@ const { id: connectionId } = Astro.params;
         tfoot.innerHTML = `
           <tr class="bg-muted/50 border-t-2 border-border font-bold">
             <td class="py-3.5 px-3 text-foreground font-black">∑ Totals</td>
-            <td class="py-3.5 px-3 text-center text-muted-foreground">${rows.filter((r) => r.data_status === 'READY').length} READY</td>
+            <td class="py-3.5 px-3 text-center text-muted-foreground">${rows.filter((r: any) => r.data_status === 'READY').length} READY</td>
             <td class="py-3.5 px-3 text-right font-black text-foreground">${formatNumber(totals.impressions)}</td>
             <td class="py-3.5 px-3 text-right font-black text-foreground">${formatNumber(totals.engagements)}</td>
             <td class="py-3.5 px-3 text-right text-primary">${formatPercent(totals.engagement_rate)}</td>
@@ -386,19 +384,18 @@ const { id: connectionId } = Astro.params;
           }
 
           try {
-            const delRes = await fetch(`/api/analytics/connections/${connectionId}/daily/${date}`, {
+            const delJson = await safeFetchJson(`/api/analytics/connections/${connectionId}/daily/${date}`, {
               method: 'DELETE',
             });
-            const delJson = await delRes.json();
             if (!delJson.success) throw new Error(delJson.error || 'Failed to delete record.');
 
             await loadDailyMetrics();
-          } catch (err) {
+          } catch (err: any) {
             alert('Delete failed: ' + err.message);
           }
         });
       });
-    } catch (err) {
+    } catch (err: any) {
       tbody.innerHTML = `
         <tr>
           <td colspan="12" class="py-8 text-center text-red-500">
@@ -426,8 +423,7 @@ const { id: connectionId } = Astro.params;
         </tr>
       `;
 
-      const res = await fetch(`/api/analytics/connections/${connectionId}/top-pins?sort_by=${activeSortBy}&from_date=${fromDate}&to_date=${toDate}`);
-      const json = await res.json();
+      const json = await safeFetchJson(`/api/analytics/connections/${connectionId}/top-pins?sort_by=${activeSortBy}&from_date=${fromDate}&to_date=${toDate}`);
 
       if (!json.success || !Array.isArray(json.data)) {
         throw new Error(json.error || 'Failed to load top pins');
@@ -448,7 +444,7 @@ const { id: connectionId } = Astro.params;
       }
 
       tbody.innerHTML = pins
-        .map((p, idx) => {
+        .map((p: any, idx: number) => {
           const rank = p.rank_position || idx + 1;
           const rankBadgeClass =
             rank === 1
@@ -504,7 +500,7 @@ const { id: connectionId } = Astro.params;
           `;
         })
         .join('');
-    } catch (err) {
+    } catch (err: any) {
       tbody.innerHTML = `
         <tr>
           <td colspan="9" class="py-8 text-center text-red-500">

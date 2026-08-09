@@ -379,4 +379,76 @@ describe('Pinner Analytics ETL Processor Suite (R4 Schema Allowlist & R5 Lifecyc
     expect(result.persisted).toBe(false);
     expect(result.error).toContain('is not registered in Project 3 analytics_connections');
   });
+
+  it('R13.5: parses Shape B (Make.com raw Pinterest body with sort_by and pins array) and populates date_availability', async () => {
+    const rawShapeBPayload: any = {
+      success: true,
+      channel: 'top_pins',
+      workspace_id: workspaceId,
+      connection_id: connectionId,
+      top_pins_analytics: {
+        sort_by: 'ENGAGEMENT',
+        pins: [
+          {
+            pin_id: 'pin_shape_b_1',
+            title: 'Top Engagement Pin 1',
+            metrics: {
+              IMPRESSION: 5000,
+              ENGAGEMENT: 250,
+              PIN_CLICK: 150,
+              OUTBOUND_CLICK: 20,
+              SAVE: 80,
+              ENGAGEMENT_RATE: 0.05,
+            },
+            data_status: 'READY',
+          },
+          {
+            pin_id: 'pin_shape_b_2',
+            title: 'Top Engagement Pin 2',
+            metrics: {
+              IMPRESSION: 3000,
+              ENGAGEMENT: 120,
+              PIN_CLICK: 80,
+              OUTBOUND_CLICK: 10,
+              SAVE: 30,
+              ENGAGEMENT_RATE: 0.04,
+            },
+            data_status: 'READY',
+          },
+        ],
+        date_availability: {
+          latest_available_timestamp: '2026-08-09T00:00:00Z',
+          is_realtime: false,
+        },
+      },
+    };
+
+    let capturedRows: any[] = [];
+    (analyticsDb.upsertTopPinsSnapshots as any).mockImplementationOnce(
+      (_ws: string, _conn: string, rows: any[]) => {
+        capturedRows = rows;
+        return Promise.resolve(rows.length);
+      }
+    );
+
+    const result = await pinnerETL.processIngestionPayload(rawShapeBPayload);
+    expect(result.success).toBe(true);
+    expect(result.persisted).toBe(true);
+    expect(capturedRows.length).toBe(2);
+
+    expect(capturedRows[0].pin_id).toBe('pin_shape_b_1');
+    expect(capturedRows[0].rank_position).toBe(1);
+    expect(capturedRows[0].sort_by).toBe('ENGAGEMENT');
+    expect(capturedRows[0].impressions).toBe(5000);
+    expect(capturedRows[0].engagement).toBe(250);
+    expect(capturedRows[0].date_availability).toEqual({
+      latest_available_timestamp: '2026-08-09T00:00:00Z',
+      is_realtime: false,
+    });
+
+    expect(capturedRows[1].pin_id).toBe('pin_shape_b_2');
+    expect(capturedRows[1].rank_position).toBe(2);
+    expect(capturedRows[1].sort_by).toBe('ENGAGEMENT');
+  });
 });
+

@@ -103,10 +103,57 @@ describe('ui-helpers test suite', () => {
       expect(formatNumber(0)).toBe('0');
     });
 
-    it('handles null, undefined, and NaN gracefully', () => {
+    it('formats null, undefined, and NaN as 0', () => {
       expect(formatNumber(null)).toBe('0');
       expect(formatNumber(undefined)).toBe('0');
       expect(formatNumber(NaN)).toBe('0');
+    });
+  });
+
+  describe('safeFetchJson', () => {
+    it('returns parsed JSON when response is ok and application/json', async () => {
+      const mockData = { success: true, data: [1, 2, 3] };
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = async () =>
+        new Response(JSON.stringify(mockData), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+
+      const { safeFetchJson } = await import('../ui-helpers');
+      const result = await safeFetchJson('https://api.example.com/test');
+      expect(result).toEqual(mockData);
+      globalThis.fetch = originalFetch;
+    });
+
+    it('throws 404 redeploy required message on 404 response', async () => {
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = async () =>
+        new Response('Not found HTML', {
+          status: 404,
+          headers: { 'Content-Type': 'text/html' },
+        });
+
+      const { safeFetchJson } = await import('../ui-helpers');
+      await expect(safeFetchJson('https://api.example.com/not-found')).rejects.toThrow(
+        'HTTP 404: Endpoint unavailable - redeploy required'
+      );
+      globalThis.fetch = originalFetch;
+    });
+
+    it('throws non-JSON error when response is not application/json', async () => {
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = async () =>
+        new Response('<html>Bad Gateway</html>', {
+          status: 502,
+          headers: { 'Content-Type': 'text/html' },
+        });
+
+      const { safeFetchJson } = await import('../ui-helpers');
+      await expect(safeFetchJson('https://api.example.com/error')).rejects.toThrow(
+        'HTTP 502: Server returned non-JSON response'
+      );
+      globalThis.fetch = originalFetch;
     });
   });
 });

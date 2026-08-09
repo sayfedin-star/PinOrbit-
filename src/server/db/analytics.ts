@@ -985,6 +985,11 @@ export const analyticsDb = {
         top_pins_sync_time: '04:30',
         top_pins_cron_expression: '30 4 * * *',
         top_pins_schedule_status: 'pending',
+        top_pins_num_of_pins: 50,
+        top_pins_sort_modes: ['IMPRESSION', 'OUTBOUND_CLICK', 'SAVE', 'ENGAGEMENT', 'PIN_CLICK'],
+        fastcron_notify: true,
+        fastcron_timeout: 30,
+        fastcron_instances: 1,
       })
       .select()
       .single();
