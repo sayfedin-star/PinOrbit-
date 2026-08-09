@@ -6,8 +6,10 @@ export interface ServerEnvConfig {
   SCHEDULING_SUPABASE_PUBLISHABLE_KEY: string;
   SCHEDULING_SUPABASE_SECRET_KEY: string;
   COMPETITORS_SUPABASE_URL: string;
+  COMPETITORS_SUPABASE_PUBLISHABLE_KEY: string;
   COMPETITORS_SUPABASE_SECRET_KEY: string;
   ANALYTICS_SUPABASE_URL: string;
+  ANALYTICS_SUPABASE_PUBLISHABLE_KEY: string;
   ANALYTICS_SUPABASE_SECRET_KEY: string;
   INGEST_SECRET_KEY: string;
   SNITCH_WEBHOOK_URL: string;
@@ -36,10 +38,18 @@ export function getServerEnv(runtimeEnv?: Record<string, any>): ServerEnvConfig 
 
   const COMPETITORS_SUPABASE_URL =
     env.COMPETITORS_SUPABASE_URL || 'https://guycnhvwfzdzbpgsnavg.supabase.co';
+  const COMPETITORS_SUPABASE_PUBLISHABLE_KEY =
+    env.COMPETITORS_SUPABASE_PUBLISHABLE_KEY ||
+    env.PUBLIC_COMPETITORS_SUPABASE_PUBLISHABLE_KEY ||
+    'sb_publishable_LOp8kfbsTQy1zCP5xj-g_g_zRffw1Va';
   const COMPETITORS_SUPABASE_SECRET_KEY = env.COMPETITORS_SUPABASE_SECRET_KEY || '';
 
   const ANALYTICS_SUPABASE_URL =
     env.ANALYTICS_SUPABASE_URL || 'https://jxdkbwnwtjelznmauwpc.supabase.co';
+  const ANALYTICS_SUPABASE_PUBLISHABLE_KEY =
+    env.ANALYTICS_SUPABASE_PUBLISHABLE_KEY ||
+    env.PUBLIC_ANALYTICS_SUPABASE_PUBLISHABLE_KEY ||
+    'sb_publishable_cg8skREWZBWdUyJvuGCn_w_Y-WrWU55';
   const ANALYTICS_SUPABASE_SECRET_KEY = env.ANALYTICS_SUPABASE_SECRET_KEY || '';
 
   const INGEST_SECRET_KEY = env.INGEST_SECRET_KEY || 'pinorbit_ingest_secret_dev';
@@ -51,8 +61,10 @@ export function getServerEnv(runtimeEnv?: Record<string, any>): ServerEnvConfig 
     SCHEDULING_SUPABASE_PUBLISHABLE_KEY,
     SCHEDULING_SUPABASE_SECRET_KEY,
     COMPETITORS_SUPABASE_URL,
+    COMPETITORS_SUPABASE_PUBLISHABLE_KEY,
     COMPETITORS_SUPABASE_SECRET_KEY,
     ANALYTICS_SUPABASE_URL,
+    ANALYTICS_SUPABASE_PUBLISHABLE_KEY,
     ANALYTICS_SUPABASE_SECRET_KEY,
     INGEST_SECRET_KEY,
     SNITCH_WEBHOOK_URL,
@@ -112,9 +124,10 @@ export function createSchedulingSSRClient(
  * Creates a server-only administrative client for Project 1 (Scheduling).
  * Used exclusively for background queues, cron dispatch, and audit logging.
  */
-export function createSchedulingAdminClient(): SupabaseClient {
-  const env = getServerEnv();
-  return createClient(env.SCHEDULING_SUPABASE_URL, env.SCHEDULING_SUPABASE_SECRET_KEY || env.SCHEDULING_SUPABASE_PUBLISHABLE_KEY, {
+export function createSchedulingAdminClient(runtimeEnv?: Record<string, any>): SupabaseClient {
+  const env = getServerEnv(runtimeEnv);
+  const key = env.SCHEDULING_SUPABASE_SECRET_KEY || env.SCHEDULING_SUPABASE_PUBLISHABLE_KEY;
+  return createClient(env.SCHEDULING_SUPABASE_URL, key, {
     auth: {
       persistSession: false,
       autoRefreshToken: false,
@@ -131,9 +144,10 @@ export function createSchedulingAdminClient(): SupabaseClient {
  * Creates a server-only client for Project 2 (Competitors).
  * NEVER accessible or exposed to the browser.
  */
-export function createCompetitorsClient(): SupabaseClient {
-  const env = getServerEnv();
-  return createClient(env.COMPETITORS_SUPABASE_URL, env.COMPETITORS_SUPABASE_SECRET_KEY || 'competitors-server-key', {
+export function createCompetitorsClient(runtimeEnv?: Record<string, any>): SupabaseClient {
+  const env = getServerEnv(runtimeEnv);
+  const key = env.COMPETITORS_SUPABASE_SECRET_KEY || env.COMPETITORS_SUPABASE_PUBLISHABLE_KEY;
+  return createClient(env.COMPETITORS_SUPABASE_URL, key, {
     auth: {
       persistSession: false,
       autoRefreshToken: false,
@@ -150,9 +164,10 @@ export function createCompetitorsClient(): SupabaseClient {
  * Creates a server-only client for Project 3 (Analytics).
  * NEVER accessible or exposed to the browser.
  */
-export function createAnalyticsClient(): SupabaseClient {
-  const env = getServerEnv();
-  return createClient(env.ANALYTICS_SUPABASE_URL, env.ANALYTICS_SUPABASE_SECRET_KEY || 'analytics-server-key', {
+export function createAnalyticsClient(runtimeEnv?: Record<string, any>): SupabaseClient {
+  const env = getServerEnv(runtimeEnv);
+  const key = env.ANALYTICS_SUPABASE_SECRET_KEY || env.ANALYTICS_SUPABASE_PUBLISHABLE_KEY;
+  return createClient(env.ANALYTICS_SUPABASE_URL, key, {
     auth: {
       persistSession: false,
       autoRefreshToken: false,
@@ -199,9 +214,9 @@ export const dbClients = {
   /**
    * Returns the server-only administrative client for Project 1 (Scheduling).
    */
-  getSchedulingAdmin(): SupabaseClient {
-    if (!schedulingAdminClientInstance) {
-      schedulingAdminClientInstance = createSchedulingAdminClient();
+  getSchedulingAdmin(runtimeEnv?: Record<string, any>): SupabaseClient {
+    if (!schedulingAdminClientInstance || runtimeEnv) {
+      schedulingAdminClientInstance = createSchedulingAdminClient(runtimeEnv);
     }
     return schedulingAdminClientInstance;
   },
@@ -210,9 +225,9 @@ export const dbClients = {
    * Returns the server-only client for Project 2 (Competitors).
    * MUST only be called after verifying workspace membership via Project 1.
    */
-  getCompetitors(): SupabaseClient {
-    if (!competitorsClientInstance) {
-      competitorsClientInstance = createCompetitorsClient();
+  getCompetitors(runtimeEnv?: Record<string, any>): SupabaseClient {
+    if (!competitorsClientInstance || runtimeEnv) {
+      competitorsClientInstance = createCompetitorsClient(runtimeEnv);
     }
     return competitorsClientInstance;
   },
@@ -221,9 +236,9 @@ export const dbClients = {
    * Returns the server-only client for Project 3 (Analytics).
    * MUST only be called after verifying workspace membership via Project 1.
    */
-  getAnalytics(): SupabaseClient {
-    if (!analyticsClientInstance) {
-      analyticsClientInstance = createAnalyticsClient();
+  getAnalytics(runtimeEnv?: Record<string, any>): SupabaseClient {
+    if (!analyticsClientInstance || runtimeEnv) {
+      analyticsClientInstance = createAnalyticsClient(runtimeEnv);
     }
     return analyticsClientInstance;
   },
@@ -231,7 +246,7 @@ export const dbClients = {
   /**
    * Helper to inspect environment configuration on the server.
    */
-  getConfig(): ServerEnvConfig {
-    return getServerEnv();
+  getConfig(runtimeEnv?: Record<string, any>): ServerEnvConfig {
+    return getServerEnv(runtimeEnv);
   },
 };
