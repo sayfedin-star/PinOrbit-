@@ -246,8 +246,10 @@ export const fastcronService = {
 
     if (storedId) {
       const getRes = await this.fastcronCall('cron_get', { id: storedId }, token);
-      if (getRes.success && (getRes.data?.id || getRes.data?.data?.id || getRes.data?.status === 'OK')) {
-        verifiedJobId = storedId;
+      if (getRes.success && (getRes.data?.id || getRes.data?.data?.id || getRes.data?.status === 'OK' || getRes.data?.status === 'success')) {
+        const rawId = getRes.data?.id ?? getRes.data?.data?.id ?? storedId;
+        const parsedStoredId = rawId != null && !isNaN(Number(rawId)) ? Number(rawId) : storedId;
+        verifiedJobId = parsedStoredId;
       } else {
         console.warn(`[FastCron] Stored job ${storedId} for ${channel} not found in FastCron (404/deleted). Treating as missing.`);
         storedId = null;
@@ -312,6 +314,13 @@ export const fastcronService = {
           error: editResult.error || 'Failed to update FastCron schedule.',
         };
       }
+
+      // Persist verified id and status (single UPDATE per channel)
+      await analyticsDb.updateWorkspaceConnection(workspaceId, connectionId, {
+        [isAnalytics ? 'analytics_fastcron_job_id' : 'top_pins_fastcron_job_id']: verifiedJobId,
+        [isAnalytics ? 'analytics_schedule_status' : 'top_pins_schedule_status']: 'synced',
+        [isAnalytics ? 'analytics_cron_expression' : 'top_pins_cron_expression']: cronValidation.cron,
+      });
     } else {
       // Step 3 Missing: Create job (cron_batch_add ONLY when BOTH channels missing and both URLs configured)
       const otherChannelStoredId = isAnalytics ? connection.top_pins_fastcron_job_id : connection.analytics_fastcron_job_id;
@@ -393,19 +402,50 @@ export const fastcronService = {
           };
         }
 
-        // Step 4: IMMEDIATELY persist returned ids
-        const ids = batchRes.data?.ids || batchRes.data?.data?.ids || [];
-        const idA = ids[0] ? parseInt(String(ids[0]), 10) : null;
-        const idB = ids[1] ? parseInt(String(ids[1]), 10) : null;
+        const batchList = Array.isArray(batchRes.data?.data)
+          ? batchRes.data.data
+          : Array.isArray(batchRes.data)
+          ? batchRes.data
+          : [];
+        const rawId0 = batchList[0]?.id ?? (Array.isArray(batchRes.data?.ids) ? batchRes.data.ids[0] : batchRes.data?.id);
+        const rawId1 = batchList[1]?.id ?? (Array.isArray(batchRes.data?.ids) ? batchRes.data.ids[1] : null);
+
+        const idA = rawId0 != null && !isNaN(Number(rawId0)) ? Number(rawId0) : null;
+        const idB = rawId1 != null && !isNaN(Number(rawId1)) ? Number(rawId1) : null;
+
+        // R8.2 / R9.2: Check numeric extraction for current channel
+        if (!idA) {
+          if (idB) {
+            await analyticsDb.updateWorkspaceConnection(workspaceId, connectionId, {
+              top_pins_fastcron_job_id: idB,
+              top_pins_schedule_status: 'synced',
+              top_pins_cron_expression: cronTopPins.cron || '30 4 * * *',
+              analytics_schedule_status: 'error',
+            });
+          } else {
+            await analyticsDb.updateWorkspaceConnection(workspaceId, connectionId, {
+              analytics_schedule_status: 'error',
+            });
+          }
+          return {
+            success: false,
+            connection_id: connectionId,
+            channel,
+            schedule_status: 'error',
+            error: 'FastCron batch creation failed to return a valid numeric job id for analytics.',
+          };
+        }
+
         verifiedJobId = idA;
 
+        // R8.3: Persist channel job id IMMEDIATELY after extraction
         await analyticsDb.updateWorkspaceConnection(workspaceId, connectionId, {
           analytics_fastcron_job_id: idA,
-          top_pins_fastcron_job_id: idB,
           analytics_schedule_status: 'synced',
           analytics_cron_expression: cronValidation.cron,
           ...(idB
             ? {
+                top_pins_fastcron_job_id: idB,
                 top_pins_schedule_status: 'synced',
                 top_pins_cron_expression: cronTopPins.cron || '30 4 * * *',
               }
@@ -428,13 +468,30 @@ export const fastcronService = {
           };
         }
 
+        // R8.2: extract id as (data.id ?? data.data.id). If extraction fails -> schedule_status 'error', return success:false. NEVER report 'synced' without a numeric id.
         const returnedId =
-          addRes.data?.id ||
-          addRes.data?.data?.id ||
+          addRes.data?.id ??
+          addRes.data?.data?.id ??
           (Array.isArray(addRes.data?.ids) ? addRes.data.ids[0] : null);
-        verifiedJobId = returnedId ? parseInt(String(returnedId), 10) : null;
+        const parsedId = returnedId != null && !isNaN(Number(returnedId)) ? Number(returnedId) : null;
 
-        // Step 4: IMMEDIATELY persist returned id
+        if (!parsedId) {
+          const statusField = isAnalytics ? 'analytics_schedule_status' : 'top_pins_schedule_status';
+          await analyticsDb.updateWorkspaceConnection(workspaceId, connectionId, {
+            [statusField]: 'error',
+          });
+          return {
+            success: false,
+            connection_id: connectionId,
+            channel,
+            schedule_status: 'error',
+            error: 'FastCron creation failed to return a valid numeric job id.',
+          };
+        }
+
+        verifiedJobId = parsedId;
+
+        // R8.3: Persist the channel job id to analytics_connections IMMEDIATELY after extraction (single UPDATE per channel)
         await analyticsDb.updateWorkspaceConnection(workspaceId, connectionId, {
           [isAnalytics ? 'analytics_fastcron_job_id' : 'top_pins_fastcron_job_id']: verifiedJobId,
           [isAnalytics ? 'analytics_schedule_status' : 'top_pins_schedule_status']: 'synced',
@@ -443,37 +500,53 @@ export const fastcronService = {
       }
     }
 
-    // R6.2 Orphan Cleanup: cron_list keyword "PinOrbit", delete any job id != verifiedJobId matching webhook URL
-    try {
-      const listRes = await this.fastcronCall('cron_list', { keyword: 'PinOrbit' }, token);
-      const jobsList = listRes.data?.jobs || listRes.data?.data || (Array.isArray(listRes.data) ? listRes.data : []);
-      if (Array.isArray(jobsList)) {
-        for (const job of jobsList) {
-          if (job.url && job.url.trim() === webhookUrl!.trim()) {
-            const jId = parseInt(String(job.id), 10);
-            if (verifiedJobId && jId !== verifiedJobId) {
-              console.log(`[FastCron] Removing orphan duplicate job ${jId} for URL ${webhookUrl}`);
+    // R8.4 Orphan Cleanup guards (all mandatory):
+    // - Run ONLY when verifiedJobId != null
+    // - Delete ONLY jobs where job.url === CURRENT channel webhook URL AND jId !== verifiedJobId
+    // - NEVER delete jobs whose url equals the OTHER channel's webhook URL
+    if (verifiedJobId != null) {
+      try {
+        const listRes = await this.fastcronCall('cron_list', { keyword: 'PinOrbit' }, token);
+        const jobsList =
+          listRes.data?.data ||
+          listRes.data?.jobs ||
+          (Array.isArray(listRes.data) ? listRes.data : []);
+        if (Array.isArray(jobsList)) {
+          const currentWebhookUrl = webhookUrl?.trim();
+          const otherWebhookUrl = (
+            isAnalytics ? connection.top_pins_webhook_url : connection.analytics_webhook_url
+          )?.trim();
+
+          for (const job of jobsList) {
+            const jobUrl = job.url?.trim();
+            const jId = job.id != null ? parseInt(String(job.id), 10) : null;
+            if (!jId) continue;
+
+            // Guard 1: NEVER delete jobs whose url equals the OTHER channel's webhook URL
+            if (otherWebhookUrl && jobUrl === otherWebhookUrl) {
+              continue;
+            }
+
+            // Guard 2: Delete ONLY jobs where job.url === CURRENT channel webhook URL AND jId !== verifiedJobId
+            if (currentWebhookUrl && jobUrl === currentWebhookUrl && jId !== verifiedJobId) {
+              console.log(
+                `[FastCron] Removing orphan duplicate job ${jId} for current channel URL ${currentWebhookUrl}`
+              );
               await this.fastcronCall('cron_delete', { id: jId }, token);
             }
           }
         }
+      } catch (cleanErr) {
+        console.warn('[FastCron] Orphan cleanup non-fatal warning:', cleanErr);
       }
-    } catch (cleanErr) {
-      console.warn('[FastCron] Orphan cleanup non-fatal warning:', cleanErr);
     }
 
-    // Final DB update ensuring status is synced
-    const updates: any = {};
-    if (isAnalytics) {
-      if (verifiedJobId) updates.analytics_fastcron_job_id = verifiedJobId;
-      updates.analytics_schedule_status = 'synced';
-      updates.analytics_cron_expression = cronValidation.cron;
-    } else {
-      if (verifiedJobId) updates.top_pins_fastcron_job_id = verifiedJobId;
-      updates.top_pins_schedule_status = 'synced';
-      updates.top_pins_cron_expression = cronValidation.cron;
-    }
-    await analyticsDb.updateWorkspaceConnection(workspaceId, connectionId, updates);
+    // Final DB update ensuring current channel status is synced
+    await analyticsDb.updateWorkspaceConnection(workspaceId, connectionId, {
+      [isAnalytics ? 'analytics_fastcron_job_id' : 'top_pins_fastcron_job_id']: verifiedJobId,
+      [isAnalytics ? 'analytics_schedule_status' : 'top_pins_schedule_status']: 'synced',
+      [isAnalytics ? 'analytics_cron_expression' : 'top_pins_cron_expression']: cronValidation.cron,
+    });
 
     return {
       success: true,
@@ -481,7 +554,7 @@ export const fastcronService = {
       channel,
       schedule_status: 'synced',
       fastcron_job_id: verifiedJobId,
-      message: `FastCron schedule successfully synced for ${channel}.`,
+      message: `FastCron schedule successfully synced for ${channel} (Job ID: ${verifiedJobId}).`,
     };
   },
 

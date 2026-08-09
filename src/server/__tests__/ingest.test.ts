@@ -310,4 +310,95 @@ describe('Pinterest Ingestion Validation Sequence & Security Suite (V19 Strict M
     } as any);
     expect(wsRes.status).toBe(200);
   });
+
+  it('R7.4: Envelope WITHOUT workspace_id injects workspace_id server-side and completes run with 200', async () => {
+    mockAnalyticsClient.from.mockReturnValue({
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      is: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: {
+          id: mockConnId,
+          workspace_id: mockWsId,
+          analytics_enabled: true,
+          deleted_at: null,
+        },
+        error: null,
+      }),
+    });
+
+    mockKvStore.set('ingest_secret:global', 'authorized_global_secret');
+
+    const req = new Request('http://localhost:4321/api/internal/pinterest/ingest', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-ingest-secret': 'authorized_global_secret',
+      },
+      body: JSON.stringify({
+        connection_id: mockConnId,
+        channel: 'account_analytics',
+        account_analytics: { summary: {} },
+      }),
+    });
+
+    const res = await ingestHandler({
+      request: req,
+      locals: { runtime: { env: mockRuntimeEnv } },
+    } as any);
+
+    expect(res.status).toBe(200);
+    expect(pinnerETL.processIngestionPayload).toHaveBeenCalledWith(
+      expect.objectContaining({
+        connection_id: mockConnId,
+        workspace_id: mockWsId,
+      }),
+      expect.anything()
+    );
+  });
+
+  it('R7.4: Envelope WITH wrong workspace_id returns HTTP 409 { success: false, error: "tenant_mismatch" }', async () => {
+    mockAnalyticsClient.from.mockReturnValue({
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      is: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: {
+          id: mockConnId,
+          workspace_id: mockWsId,
+          analytics_enabled: true,
+          deleted_at: null,
+        },
+        error: null,
+      }),
+    });
+
+    mockKvStore.set('ingest_secret:global', 'authorized_global_secret');
+
+    const wrongWsId = '99999999-9999-9999-9999-999999999999';
+    const req = new Request('http://localhost:4321/api/internal/pinterest/ingest', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-ingest-secret': 'authorized_global_secret',
+      },
+      body: JSON.stringify({
+        connection_id: mockConnId,
+        workspace_id: wrongWsId,
+        channel: 'account_analytics',
+      }),
+    });
+
+    const res = await ingestHandler({
+      request: req,
+      locals: { runtime: { env: mockRuntimeEnv } },
+    } as any);
+
+    expect(res.status).toBe(409);
+    const json = await res.json();
+    expect(json.success).toBe(false);
+    expect(json.error).toBe('tenant_mismatch');
+    expect(pinnerETL.processIngestionPayload).not.toHaveBeenCalled();
+  });
 });
+

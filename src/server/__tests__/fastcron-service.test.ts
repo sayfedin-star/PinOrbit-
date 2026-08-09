@@ -283,4 +283,207 @@ describe('FastCron Full Service Suite (R6 Reconcile Idempotency & Orphan Cleanup
 
     fetchSpy.mockRestore();
   });
+
+  it('R8.2: Fails with schedule_status error and returns success:false if FastCron returns non-numeric or missing id', async () => {
+    (analyticsDb.getWorkspaceAnalyticsSettings as any).mockResolvedValue({
+      fastcron_token: 'db_token_1234567890',
+    });
+
+    const mockConn: any = {
+      id: connectionId,
+      workspace_id: workspaceId,
+      display_name: 'testconn',
+      analytics_webhook_url: 'https://hook.make.com/pipeline-a',
+      analytics_sync_time: '04:00',
+      analytics_schedule_status: 'pending',
+      analytics_fastcron_job_id: null,
+      top_pins_webhook_url: null,
+    };
+
+    (analyticsDb.getWorkspaceConnection as any).mockResolvedValue(mockConn);
+    (analyticsDb.updateWorkspaceConnection as any).mockImplementation(async (_wsId: string, _connId: string, updates: any) => {
+      Object.assign(mockConn, updates);
+      return { ...mockConn };
+    });
+
+    // FastCron returns status: 'OK' but no extractable numeric id
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((async () => {
+      return {
+        status: 200,
+        ok: true,
+        json: async () => ({ status: 'OK', id: null, data: {} }),
+      } as any;
+    }) as any);
+
+    const result = await fastcronService.syncScheduleWithFastCron(
+      workspaceId,
+      connectionId,
+      'analytics',
+      mockRuntimeEnv
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.schedule_status).toBe('error');
+    expect(mockConn.analytics_schedule_status).toBe('error');
+    expect(mockConn.analytics_fastcron_job_id).toBeNull();
+
+    fetchSpy.mockRestore();
+  });
+
+  it('R8.4: Two-channel URL matrix test proving cross-channel orphan cleanup safety', async () => {
+    (analyticsDb.getWorkspaceAnalyticsSettings as any).mockResolvedValue({
+      fastcron_token: 'db_token_1234567890',
+    });
+
+    const urlA = 'https://hook.make.com/pipeline-a-url';
+    const urlB = 'https://hook.make.com/pipeline-b-url';
+
+    const mockConn: any = {
+      id: connectionId,
+      workspace_id: workspaceId,
+      display_name: 'matrix-conn',
+      analytics_webhook_url: urlA,
+      top_pins_webhook_url: urlB,
+      analytics_sync_time: '04:00',
+      top_pins_sync_time: '04:30',
+      analytics_schedule_status: 'synced',
+      top_pins_schedule_status: 'synced',
+      analytics_fastcron_job_id: 1001,
+      top_pins_fastcron_job_id: 1002,
+    };
+
+    (analyticsDb.getWorkspaceConnection as any).mockImplementation(async () => ({ ...mockConn }));
+    (analyticsDb.updateWorkspaceConnection as any).mockImplementation(async (_wsId: string, _connId: string, updates: any) => {
+      Object.assign(mockConn, updates);
+      return { ...mockConn };
+    });
+
+    // In FastCron:
+    // Job 1001: URL A (verified A)
+    // Job 9991: URL A (orphan A)
+    // Job 1002: URL B (verified B)
+    // Job 9992: URL B (orphan B)
+    let fastcronJobs = [
+      { id: 1001, name: 'Job A Verified', url: urlA, expression: '0 4 * * *' },
+      { id: 9991, name: 'Job A Orphan', url: urlA, expression: '0 4 * * *' },
+      { id: 1002, name: 'Job B Verified', url: urlB, expression: '30 4 * * *' },
+      { id: 9992, name: 'Job B Orphan', url: urlB, expression: '30 4 * * *' },
+    ];
+
+    const deletedIds: number[] = [];
+
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((async (url: string, init?: any) => {
+      const endpoint = url.split('/').pop()?.split('?')[0];
+      const body = init?.body ? JSON.parse(init.body) : {};
+
+      if (endpoint === 'cron_get') {
+        const job = fastcronJobs.find((j) => j.id === body.id);
+        return { status: 200, ok: true, json: async () => ({ status: 'OK', data: job }) } as any;
+      }
+
+      if (endpoint === 'cron_edit') {
+        return { status: 200, ok: true, json: async () => ({ status: 'OK' }) } as any;
+      }
+
+      if (endpoint === 'cron_list') {
+        return { status: 200, ok: true, json: async () => ({ status: 'OK', data: [...fastcronJobs] }) } as any;
+      }
+
+      if (endpoint === 'cron_delete') {
+        deletedIds.push(body.id);
+        fastcronJobs = fastcronJobs.filter((j) => j.id !== body.id);
+        return { status: 200, ok: true, json: async () => ({ status: 'OK' }) } as any;
+      }
+
+      return { status: 200, ok: true, json: async () => ({ status: 'OK' }) } as any;
+    }) as any);
+
+    // Sync Channel A: Should delete only 9991 (URL A orphan). MUST NOT touch 1002 or 9992 (URL B).
+    const syncResA = await fastcronService.syncScheduleWithFastCron(
+      workspaceId,
+      connectionId,
+      'analytics',
+      mockRuntimeEnv
+    );
+
+    expect(syncResA.success).toBe(true);
+    expect(deletedIds).toEqual([9991]);
+    expect(fastcronJobs.find((j) => j.id === 1001)).toBeDefined(); // Channel A verified intact
+    expect(fastcronJobs.find((j) => j.id === 1002)).toBeDefined(); // Channel B verified untouched
+    expect(fastcronJobs.find((j) => j.id === 9992)).toBeDefined(); // Channel B orphan untouched during Channel A sync
+
+    // Now Sync Channel B: Should delete only 9992 (URL B orphan). MUST NOT touch 1001.
+    const syncResB = await fastcronService.syncScheduleWithFastCron(
+      workspaceId,
+      connectionId,
+      'top_pins',
+      mockRuntimeEnv
+    );
+
+    expect(syncResB.success).toBe(true);
+    expect(deletedIds).toEqual([9991, 9992]);
+    expect(fastcronJobs.find((j) => j.id === 1001)).toBeDefined(); // Channel A verified still intact
+    expect(fastcronJobs.find((j) => j.id === 1002)).toBeDefined(); // Channel B verified intact
+    expect(fastcronJobs.length).toBe(2); // Exactly 2 jobs remain
+
+    fetchSpy.mockRestore();
+  });
+
+  it('R9.4: Simulated Channel A FastCron failure leaves Channel B status and jobs completely untouched', async () => {
+    (analyticsDb.getWorkspaceAnalyticsSettings as any).mockResolvedValue({
+      fastcron_token: 'db_token_1234567890',
+    });
+
+    const mockConn: any = {
+      id: connectionId,
+      workspace_id: workspaceId,
+      display_name: 'isolation-conn',
+      analytics_webhook_url: 'https://hook.make.com/pipeline-a',
+      top_pins_webhook_url: 'https://hook.make.com/pipeline-b',
+      analytics_sync_time: '04:00',
+      top_pins_sync_time: '04:30',
+      analytics_schedule_status: 'pending',
+      top_pins_schedule_status: 'synced',
+      analytics_fastcron_job_id: null,
+      top_pins_fastcron_job_id: 8888,
+    };
+
+    (analyticsDb.getWorkspaceConnection as any).mockImplementation(async () => ({ ...mockConn }));
+    (analyticsDb.updateWorkspaceConnection as any).mockImplementation(async (_wsId: string, _connId: string, updates: any) => {
+      Object.assign(mockConn, updates);
+      return { ...mockConn };
+    });
+
+    // Simulate FastCron failure on cron_add for Channel A
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((async (url: string) => {
+      const endpoint = url.split('/').pop()?.split('?')[0];
+      if (endpoint === 'cron_add') {
+        return {
+          status: 500,
+          ok: false,
+          json: async () => ({ status: 'error', message: 'FastCron 500 internal outage on Pipeline A' }),
+        } as any;
+      }
+      return { status: 200, ok: true, json: async () => ({ status: 'OK' }) } as any;
+    }) as any);
+
+    const resultA = await fastcronService.syncScheduleWithFastCron(
+      workspaceId,
+      connectionId,
+      'analytics',
+      mockRuntimeEnv
+    );
+
+    // Channel A reports failure
+    expect(resultA.success).toBe(false);
+    expect(resultA.schedule_status).toBe('error');
+    expect(mockConn.analytics_schedule_status).toBe('error');
+
+    // Channel B remains 100% UNTOUCHED
+    expect(mockConn.top_pins_schedule_status).toBe('synced');
+    expect(mockConn.top_pins_fastcron_job_id).toBe(8888);
+
+    fetchSpy.mockRestore();
+  });
 });
+

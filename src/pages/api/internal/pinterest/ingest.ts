@@ -103,7 +103,22 @@ export const POST: APIRoute = async ({ request, locals }) => {
     );
   }
 
-  // 4. DEFAULT-LOCKED check: if analytics_enabled is false -> 409
+  // 4. Tenant Boundary Check & Server-Side Injection (R7)
+  if (payload.workspace_id && payload.workspace_id !== connection.workspace_id) {
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: 'tenant_mismatch',
+      }),
+      {
+        status: 409,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
+  }
+  payload.workspace_id = connection.workspace_id;
+
+  // 5. DEFAULT-LOCKED check: if analytics_enabled is false -> 409
   if (connection.analytics_enabled === false) {
     return new Response(
       JSON.stringify({

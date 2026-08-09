@@ -1257,7 +1257,7 @@ export const prerender = false;
               body: JSON.stringify({ connection_id: connId, channel }),
             });
             const json = await res.json();
-            alert(json.success ? json.message : `FastCron Sync Failed: ${json.error}`);
+            alert(json.success ? (json.message || `FastCron schedule successfully synced for ${channel} (Job ID: ${json.fastcron_job_id})`) : `FastCron Sync Failed: ${json.error}`);
             await openConnectionSettingsDrawer(connId);
           } catch (e) {
             alert('Failed to contact FastCron schedule endpoint: ' + e.message);
