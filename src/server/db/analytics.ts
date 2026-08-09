@@ -1,4 +1,5 @@
 import { dbClients } from './clients';
+import { edgeCache } from '../services/edge-cache';
 import type {
   AccountAnalyticsDaily,
   AccountAnalyticsSummary,
@@ -431,6 +432,9 @@ export const analyticsDb = {
 
   /**
    * Aggregates overview KPI metrics from Project 3 account_analytics_daily.
+   * R11.1: Sum over account_analytics_daily for the window WHERE data_status = 'READY'.
+   * R11.2: Prefer account_analytics_summaries rates, fallback to pooled totals.
+   * R11.3: daily_workspace_metrics remains workspace-level only.
    */
   async getAccountOverviewMetrics(
     workspaceId: string,
@@ -448,7 +452,25 @@ export const analyticsDb = {
     saveRate: number;
     lastIngestedAt: string | null;
   }> {
-    const dailyRows = await this.getDailyTimeSeries(workspaceId, connectionId, windowDays);
+    if (!workspaceId || !connectionId) {
+      throw new Error('Tenant Boundary Violation: workspaceId and connectionId are required.');
+    }
+
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - windowDays);
+    const startDateStr = startDate.toISOString().split('T')[0];
+
+    const analyticsClient = dbClients.getAnalytics();
+    const { data: dailyRows, error: dailyError } = await analyticsClient
+      .from('account_analytics_daily')
+      .select('*')
+      .eq('workspace_id', workspaceId)
+      .eq('connection_id', connectionId)
+      .eq('data_status', 'READY')
+      .gte('metric_date', startDateStr)
+      .order('metric_date', { ascending: true });
+
+    if (dailyError) throw dailyError;
 
     let impressions = 0;
     let engagements = 0;
@@ -457,21 +479,59 @@ export const analyticsDb = {
     let saves = 0;
     let lastIngestedAt: string | null = null;
 
-    for (const row of dailyRows) {
+    for (const row of dailyRows || []) {
       impressions += Number(row.impressions || 0);
       engagements += Number(row.engagements || 0);
       pinClicks += Number(row.pin_clicks || 0);
       outboundClicks += Number(row.outbound_clicks || 0);
       saves += Number(row.saves || 0);
-      if (!lastIngestedAt || row.updated_at > lastIngestedAt) {
-        lastIngestedAt = row.updated_at;
+      const rowTimestamp = row.recorded_at || row.created_at;
+      if (rowTimestamp && (!lastIngestedAt || rowTimestamp > lastIngestedAt)) {
+        lastIngestedAt = rowTimestamp;
       }
     }
 
-    const engagementRate = impressions > 0 ? engagements / impressions : 0.0;
-    const pinClickRate = impressions > 0 ? pinClicks / impressions : 0.0;
-    const outboundClickRate = impressions > 0 ? outboundClicks / impressions : 0.0;
-    const saveRate = impressions > 0 ? saves / impressions : 0.0;
+    // R11.2: Prefer account_analytics_summaries rates for the same window
+    let summaryEngagementRate: number | null = null;
+    let summaryPinClickRate: number | null = null;
+    let summaryOutboundClickRate: number | null = null;
+    let summarySaveRate: number | null = null;
+
+    try {
+      const { data: summaryRows } = await analyticsClient
+        .from('account_analytics_summaries')
+        .select('*')
+        .eq('workspace_id', workspaceId)
+        .eq('connection_id', connectionId)
+        .order('window_end', { ascending: false })
+        .limit(1);
+
+      if (summaryRows && summaryRows.length > 0) {
+        const s = summaryRows[0];
+        if (s.summary_engagement_rate != null) summaryEngagementRate = Number(s.summary_engagement_rate);
+        if (s.summary_pin_click_rate != null) summaryPinClickRate = Number(s.summary_pin_click_rate);
+        if (s.summary_outbound_click_rate != null) summaryOutboundClickRate = Number(s.summary_outbound_click_rate);
+        if (s.summary_save_rate != null) summarySaveRate = Number(s.summary_save_rate);
+      }
+    } catch (sErr) {
+      console.warn('[AnalyticsDb] Error looking up summary rates:', sErr);
+    }
+
+    const engagementRate = summaryEngagementRate != null
+      ? summaryEngagementRate
+      : (impressions > 0 ? engagements / impressions : 0.0);
+
+    const pinClickRate = summaryPinClickRate != null
+      ? summaryPinClickRate
+      : (impressions > 0 ? pinClicks / impressions : 0.0);
+
+    const outboundClickRate = summaryOutboundClickRate != null
+      ? summaryOutboundClickRate
+      : (impressions > 0 ? outboundClicks / impressions : 0.0);
+
+    const saveRate = summarySaveRate != null
+      ? summarySaveRate
+      : (impressions > 0 ? saves / impressions : 0.0);
 
     return {
       impressions,
@@ -485,6 +545,271 @@ export const analyticsDb = {
       saveRate: Math.min(1.0, saveRate),
       lastIngestedAt,
     };
+  },
+
+  /**
+   * Retrieves all connections for a workspace with single-query batch aggregated stats (no N+1).
+   */
+  async getWorkspaceConnectionsWithStats(
+    workspaceId: string,
+    windowDays = 30
+  ): Promise<Array<AnalyticsConnection & {
+    stats: {
+      impressions: number;
+      engagements: number;
+      pin_clicks: number;
+      outbound_clicks: number;
+      saves: number;
+    };
+  }>> {
+    if (!workspaceId) {
+      throw new Error('Tenant Boundary Violation: workspaceId is required.');
+    }
+
+    const connections = await this.listWorkspaceConnections(workspaceId);
+    if (connections.length === 0) return [];
+
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - windowDays);
+    const startDateStr = startDate.toISOString().split('T')[0];
+
+    const analyticsClient = dbClients.getAnalytics();
+    const { data: dailyRows, error } = await analyticsClient
+      .from('account_analytics_daily')
+      .select('connection_id, impressions, engagements, pin_clicks, outbound_clicks, saves')
+      .eq('workspace_id', workspaceId)
+      .eq('data_status', 'READY')
+      .gte('metric_date', startDateStr);
+
+    if (error) {
+      console.warn('[AnalyticsDb] Failed to query daily rows for connection stats:', error);
+    }
+
+    const statsMap = new Map<string, {
+      impressions: number;
+      engagements: number;
+      pin_clicks: number;
+      outbound_clicks: number;
+      saves: number;
+    }>();
+
+    for (const row of dailyRows || []) {
+      const connId = row.connection_id;
+      const current = statsMap.get(connId) || {
+        impressions: 0,
+        engagements: 0,
+        pin_clicks: 0,
+        outbound_clicks: 0,
+        saves: 0,
+      };
+      current.impressions += Number(row.impressions || 0);
+      current.engagements += Number(row.engagements || 0);
+      current.pin_clicks += Number(row.pin_clicks || 0);
+      current.outbound_clicks += Number(row.outbound_clicks || 0);
+      current.saves += Number(row.saves || 0);
+      statsMap.set(connId, current);
+    }
+
+    return connections.map((conn) => ({
+      ...conn,
+      stats: statsMap.get(conn.id) || {
+        impressions: 0,
+        engagements: 0,
+        pin_clicks: 0,
+        outbound_clicks: 0,
+        saves: 0,
+      },
+    }));
+  },
+
+  /**
+   * Retrieves connection daily metrics and pooled totals for a date range.
+   */
+  async getConnectionDailyMetrics(
+    workspaceId: string,
+    connectionId: string,
+    fromDate?: string,
+    toDate?: string
+  ): Promise<{
+    rows: AccountAnalyticsDaily[];
+    totals: {
+      impressions: number;
+      engagements: number;
+      outbound_clicks: number;
+      pin_clicks: number;
+      saves: number;
+      engagement_rate: number;
+      outbound_click_rate: number;
+      pin_click_rate: number;
+      save_rate: number;
+    };
+  }> {
+    if (!workspaceId || !connectionId) {
+      throw new Error('Tenant Boundary Violation: workspaceId and connectionId are required.');
+    }
+
+    const analyticsClient = dbClients.getAnalytics();
+    let query = analyticsClient
+      .from('account_analytics_daily')
+      .select('*')
+      .eq('workspace_id', workspaceId)
+      .eq('connection_id', connectionId)
+      .order('metric_date', { ascending: false });
+
+    if (fromDate) query = query.gte('metric_date', fromDate);
+    if (toDate) query = query.lte('metric_date', toDate);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const rows = (data as AccountAnalyticsDaily[]) || [];
+
+    let impressions = 0;
+    let engagements = 0;
+    let outbound_clicks = 0;
+    let pin_clicks = 0;
+    let saves = 0;
+
+    for (const row of rows) {
+      if (row.data_status === 'READY') {
+        impressions += Number(row.impressions || 0);
+        engagements += Number(row.engagements || 0);
+        outbound_clicks += Number(row.outbound_clicks || 0);
+        pin_clicks += Number(row.pin_clicks || 0);
+        saves += Number(row.saves || 0);
+      }
+    }
+
+    const engagement_rate = impressions > 0 ? engagements / impressions : 0.0;
+    const outbound_click_rate = impressions > 0 ? outbound_clicks / impressions : 0.0;
+    const pin_click_rate = impressions > 0 ? pin_clicks / impressions : 0.0;
+    const save_rate = impressions > 0 ? saves / impressions : 0.0;
+
+    return {
+      rows,
+      totals: {
+        impressions,
+        engagements,
+        outbound_clicks,
+        pin_clicks,
+        saves,
+        engagement_rate,
+        outbound_click_rate,
+        pin_click_rate,
+        save_rate,
+      },
+    };
+  },
+
+  /**
+   * Deletes a daily metric record and recomputes the daily_workspace_metrics rollup for that date.
+   */
+  async deleteDailyMetricAndRecompute(
+    workspaceId: string,
+    connectionId: string,
+    metricDate: string
+  ): Promise<void> {
+    if (!workspaceId || !connectionId || !metricDate) {
+      throw new Error('Validation Error: workspaceId, connectionId, and metricDate are required.');
+    }
+
+    const analyticsClient = dbClients.getAnalytics();
+
+    // 1. Delete the specific daily row
+    const { error: delError } = await analyticsClient
+      .from('account_analytics_daily')
+      .delete()
+      .eq('workspace_id', workspaceId)
+      .eq('connection_id', connectionId)
+      .eq('metric_date', metricDate);
+
+    if (delError) throw delError;
+
+    // 2. Query remaining READY rows for the workspace on that date to recompute rollup
+    const { data: remainingRows, error: remError } = await analyticsClient
+      .from('account_analytics_daily')
+      .select('*')
+      .eq('workspace_id', workspaceId)
+      .eq('metric_date', metricDate)
+      .eq('data_status', 'READY');
+
+    if (remError) throw remError;
+
+    if (!remainingRows || remainingRows.length === 0) {
+      // No remaining rows for that date -> remove or zero out rollup
+      await analyticsClient
+        .from('daily_workspace_metrics')
+        .delete()
+        .eq('workspace_id', workspaceId)
+        .eq('metric_date', metricDate);
+    } else {
+      let total_impressions = 0;
+      let total_engagements = 0;
+      let total_saves = 0;
+      let total_outbound_clicks = 0;
+      let total_pin_clicks = 0;
+
+      for (const r of remainingRows) {
+        total_impressions += Number(r.impressions || 0);
+        total_engagements += Number(r.engagements || 0);
+        total_saves += Number(r.saves || 0);
+        total_outbound_clicks += Number(r.outbound_clicks || 0);
+        total_pin_clicks += Number(r.pin_clicks || 0);
+      }
+
+      await analyticsClient
+        .from('daily_workspace_metrics')
+        .upsert(
+          {
+            workspace_id: workspaceId,
+            metric_date: metricDate,
+            total_impressions,
+            total_engagements,
+            total_saves,
+            total_outbound_clicks,
+            total_pin_clicks,
+            total_profile_visits: 0,
+            recorded_at: new Date().toISOString(),
+          },
+          { onConflict: 'workspace_id,metric_date' }
+        );
+    }
+
+    // 3. Invalidate connection cache
+    await edgeCache.invalidateConnection(workspaceId, connectionId);
+  },
+
+  /**
+   * Retrieves ranked top pins with date range filtering.
+   */
+  async getRankedTopPinsWithDateRange(
+    workspaceId: string,
+    connectionId: string,
+    sortBy: PinnerSortBy,
+    fromDate?: string,
+    toDate?: string,
+    limit = 50
+  ): Promise<TopPinSnapshot[]> {
+    if (!workspaceId || !connectionId) {
+      throw new Error('Tenant Boundary Violation: workspaceId and connectionId are required.');
+    }
+
+    const analyticsClient = dbClients.getAnalytics();
+    let query = analyticsClient
+      .from('top_pins_snapshots')
+      .select('*')
+      .eq('workspace_id', workspaceId)
+      .eq('connection_id', connectionId)
+      .eq('sort_by', sortBy)
+      .order('rank_position', { ascending: true })
+      .limit(limit);
+
+    if (fromDate) query = query.gte('window_start', fromDate);
+    if (toDate) query = query.lte('window_end', toDate);
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return (data as TopPinSnapshot[]) || [];
   },
 
   /**

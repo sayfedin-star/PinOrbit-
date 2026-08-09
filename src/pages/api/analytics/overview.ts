@@ -21,6 +21,7 @@ export const GET: APIRoute = async ({ request, locals }) => {
   const workspaceId = url.searchParams.get('workspace_id') || locals.activeWorkspaceId;
   const connectionId = url.searchParams.get('connection_id');
   const windowDays = parseInt(url.searchParams.get('window_days') || '30', 10);
+  const bypassCache = url.searchParams.get('cache_bypass') === '1';
 
   if (!workspaceId || !connectionId) {
     return new Response(
@@ -40,7 +41,8 @@ export const GET: APIRoute = async ({ request, locals }) => {
       workspaceId,
       connectionId,
       windowDays,
-      kvNamespace
+      kvNamespace,
+      bypassCache
     );
 
     return new Response(JSON.stringify({ success: true, data }), {

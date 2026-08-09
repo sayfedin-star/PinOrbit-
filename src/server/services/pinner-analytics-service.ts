@@ -36,18 +36,22 @@ export const pinnerAnalyticsService = {
     workspaceId: string,
     connectionId: string,
     windowDays = 30,
-    kvNamespace?: any
+    kvNamespace?: any,
+    bypassCache = false
   ): Promise<ServiceResponse<PinnerOverviewKPIs>> {
     await assertWorkspaceAccess(schedulingClient, workspaceId, userId);
 
     const cacheKey = edgeCache.keys.overview(workspaceId, connectionId, windowDays);
-    const cached = await edgeCache.get<PinnerOverviewKPIs>(cacheKey, kvNamespace);
+    let cached: any = { status: 'MISS', data: null };
 
-    if (cached.status === 'HIT' && cached.data) {
-      return {
-        data: cached.data,
-        cacheStatus: 'HIT',
-      };
+    if (!bypassCache) {
+      cached = await edgeCache.get<PinnerOverviewKPIs>(cacheKey, kvNamespace);
+      if (cached.status === 'HIT' && cached.data) {
+        return {
+          data: cached.data,
+          cacheStatus: 'HIT',
+        };
+      }
     }
 
     // Fallback: Query Project 3
@@ -79,12 +83,22 @@ export const pinnerAnalyticsService = {
       workspaceId,
     };
 
-    // Cache the resolved overview
-    await edgeCache.set(cacheKey, result, kvNamespace);
+    // R10.1: NEVER cache empty results: skip edgeCache.set when all counts null/zero AND activeTopPinsCount === 0
+    const isEmpty =
+      (!result.impressions &&
+        !result.engagements &&
+        !result.pinClicks &&
+        !result.outboundClicks &&
+        !result.saves) &&
+      result.activeTopPinsCount === 0;
+
+    if (!isEmpty) {
+      await edgeCache.set(cacheKey, result, kvNamespace);
+    }
 
     return {
       data: result,
-      cacheStatus: cached.status === 'STALE' ? 'STALE' : 'MISS',
+      cacheStatus: bypassCache ? 'BYPASS' : cached.status === 'STALE' ? 'STALE' : 'MISS',
     };
   },
 
@@ -98,32 +112,58 @@ export const pinnerAnalyticsService = {
     connectionId: string,
     sortBy: PinnerSortBy = 'IMPRESSION',
     limit = 50,
-    kvNamespace?: any
+    kvNamespace?: any,
+    bypassCache = false,
+    fromDate?: string,
+    toDate?: string
   ): Promise<ServiceResponse<TopPinSnapshot[]>> {
     await assertWorkspaceAccess(schedulingClient, workspaceId, userId);
 
-    const cacheKey = edgeCache.keys.topPins(workspaceId, connectionId, sortBy, 30);
-    const cached = await edgeCache.get<TopPinSnapshot[]>(cacheKey, kvNamespace);
-
-    if (cached.status === 'HIT' && cached.data) {
-      return {
-        data: cached.data,
-        cacheStatus: 'HIT',
-      };
-    }
-
-    const snapshots = await analyticsDb.getRankedTopPins(
+    const cacheKey = edgeCache.keys.topPins(
       workspaceId,
       connectionId,
       sortBy,
-      limit
+      30,
+      fromDate,
+      toDate
     );
+    let cached: any = { status: 'MISS', data: null };
 
-    await edgeCache.set(cacheKey, snapshots, kvNamespace);
+    if (!bypassCache) {
+      cached = await edgeCache.get<TopPinSnapshot[]>(cacheKey, kvNamespace);
+      if (cached.status === 'HIT' && cached.data) {
+        return {
+          data: cached.data,
+          cacheStatus: 'HIT',
+        };
+      }
+    }
+
+    const snapshots =
+      fromDate && toDate
+        ? await analyticsDb.getRankedTopPinsWithDateRange(
+            workspaceId,
+            connectionId,
+            sortBy,
+            fromDate,
+            toDate,
+            limit
+          )
+        : await analyticsDb.getRankedTopPins(
+            workspaceId,
+            connectionId,
+            sortBy,
+            limit
+          );
+
+    // R10.1: NEVER cache empty results
+    if (snapshots.length > 0) {
+      await edgeCache.set(cacheKey, snapshots, kvNamespace);
+    }
 
     return {
       data: snapshots,
-      cacheStatus: cached.status === 'STALE' ? 'STALE' : 'MISS',
+      cacheStatus: bypassCache ? 'BYPASS' : cached.status === 'STALE' ? 'STALE' : 'MISS',
     };
   },
 
@@ -136,18 +176,23 @@ export const pinnerAnalyticsService = {
     workspaceId: string,
     connectionId: string,
     windowDays = 30,
-    kvNamespace?: any
+    kvNamespace?: any,
+    bypassCache = false
   ): Promise<ServiceResponse<AccountAnalyticsDaily[]>> {
     await assertWorkspaceAccess(schedulingClient, workspaceId, userId);
 
-    const cacheKey = `${edgeCache.keys.timeseries(workspaceId, connectionId)}:${windowDays}`;
-    const cached = await edgeCache.get<AccountAnalyticsDaily[]>(cacheKey, kvNamespace);
+    // R10.3: Single source of truth for timeseries key
+    const cacheKey = edgeCache.keys.timeseries(workspaceId, connectionId, windowDays);
+    let cached: any = { status: 'MISS', data: null };
 
-    if (cached.status === 'HIT' && cached.data) {
-      return {
-        data: cached.data,
-        cacheStatus: 'HIT',
-      };
+    if (!bypassCache) {
+      cached = await edgeCache.get<AccountAnalyticsDaily[]>(cacheKey, kvNamespace);
+      if (cached.status === 'HIT' && cached.data) {
+        return {
+          data: cached.data,
+          cacheStatus: 'HIT',
+        };
+      }
     }
 
     const dailyRows = await analyticsDb.getDailyTimeSeries(
@@ -156,11 +201,14 @@ export const pinnerAnalyticsService = {
       windowDays
     );
 
-    await edgeCache.set(cacheKey, dailyRows, kvNamespace);
+    // R10.1: NEVER cache empty results
+    if (dailyRows.length > 0) {
+      await edgeCache.set(cacheKey, dailyRows, kvNamespace);
+    }
 
     return {
       data: dailyRows,
-      cacheStatus: cached.status === 'STALE' ? 'STALE' : 'MISS',
+      cacheStatus: bypassCache ? 'BYPASS' : cached.status === 'STALE' ? 'STALE' : 'MISS',
     };
   },
 

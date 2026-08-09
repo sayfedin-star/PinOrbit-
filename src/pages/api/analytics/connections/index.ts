@@ -4,7 +4,7 @@ import type { APIRoute } from 'astro';
 import { assertWorkspaceAccess } from '../../../../server/auth/workspace-guard';
 import { analyticsDb } from '../../../../server/db/analytics';
 
-export const GET: APIRoute = async ({ locals }) => {
+export const GET: APIRoute = async ({ request, locals }) => {
   const user = locals.user;
   const schedulingClient = locals.supabase;
   const workspaceId = locals.activeWorkspaceId;
@@ -31,7 +31,13 @@ export const GET: APIRoute = async ({ locals }) => {
 
   try {
     await assertWorkspaceAccess(schedulingClient, workspaceId, user.id);
-    const connections = await analyticsDb.listWorkspaceConnections(workspaceId);
+    const url = new URL(request.url);
+    const windowDays = parseInt(url.searchParams.get('window_days') || '30', 10);
+
+    const connections = await analyticsDb.getWorkspaceConnectionsWithStats(
+      workspaceId,
+      windowDays
+    );
 
     return new Response(JSON.stringify({ success: true, data: connections }), {
       status: 200,

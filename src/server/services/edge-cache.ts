@@ -36,7 +36,17 @@ export const edgeCache = {
     overview(workspaceId: string, connectionId: string, windowDays = 30): string {
       return `analytics:${workspaceId}:${connectionId}:overview:${windowDays}d`;
     },
-    topPins(workspaceId: string, connectionId: string, sortBy = 'IMPRESSION', windowDays = 30): string {
+    topPins(
+      workspaceId: string,
+      connectionId: string,
+      sortBy = 'IMPRESSION',
+      windowDays = 30,
+      fromDate?: string,
+      toDate?: string
+    ): string {
+      if (fromDate && toDate) {
+        return `analytics:${workspaceId}:${connectionId}:top-pins:${fromDate}_${toDate}:${sortBy}`;
+      }
       return `analytics:${workspaceId}:${connectionId}:top-pins:${windowDays}d:${sortBy}`;
     },
     timeseries(workspaceId: string, connectionId: string, windowDays = 30): string {
