@@ -138,10 +138,14 @@ export const POST: APIRoute = async ({ request, locals }) => {
       }
     );
   } catch (err: any) {
+    const isAuth =
+      err.message?.includes('Forbidden') ||
+      err.message?.includes('Unauthorized') ||
+      err.message?.includes('not a member');
     return new Response(
       JSON.stringify({ success: false, error: err.message || 'Failed to create connection.' }),
       {
-        status: 500,
+        status: isAuth ? 403 : 500,
         headers: { 'Content-Type': 'application/json' },
       }
     );

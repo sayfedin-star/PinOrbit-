@@ -161,4 +161,53 @@ describe('Pinterest Connection CRUD Suite (V16 Project 3 Ownership)', () => {
       connectionId
     );
   });
+
+  it('POST /api/analytics/connections succeeds with canonical cookie + owner membership', async () => {
+    (analyticsDb.createWorkspaceConnection as any).mockResolvedValue({
+      id: connectionId,
+      workspace_id: workspaceId,
+      display_name: 'hymumdotcom',
+      analytics_enabled: true,
+      created_at: new Date().toISOString(),
+    });
+
+    const req = new Request('http://localhost/api/analytics/connections', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        display_name: 'hymumdotcom',
+      }),
+    });
+
+    const locals = { user: { id: 'u1' }, supabase: {}, activeWorkspaceId: workspaceId };
+    const res = await createConnHandler({ request: req, locals } as any);
+
+    expect(res.status).toBe(201);
+    const json = await res.json();
+    expect(json.success).toBe(true);
+    expect(json.connection_id).toBe(connectionId);
+  });
+
+  it('POST returns 403 (not 400) when membership missing or unauthorized', async () => {
+    const { assertWorkspaceAccess } = await import('../auth/workspace-guard');
+    (assertWorkspaceAccess as any).mockRejectedValueOnce(
+      new Error('Forbidden: User attacker is not a member of workspace ws-unauthorized.')
+    );
+
+    const req = new Request('http://localhost/api/analytics/connections', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        display_name: 'hymumdotcom',
+      }),
+    });
+
+    const locals = { user: { id: 'attacker' }, supabase: {}, activeWorkspaceId: 'ws-unauthorized' };
+    const res = await createConnHandler({ request: req, locals } as any);
+
+    expect(res.status).toBe(403);
+    const json = await res.json();
+    expect(json.success).toBe(false);
+    expect(json.error).toContain('Forbidden');
+  });
 });

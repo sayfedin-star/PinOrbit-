@@ -62,19 +62,19 @@ export async function createWorkspace(payload: {
   }
 
   // 2. Insert Membership for Current User if authenticated
-  try {
-    const { data: userData } = await supabase.auth.getUser();
-    if (userData?.user?.id) {
-      await supabase.from('workspace_memberships').insert([
-        {
-          workspace_id: createdWs.id,
-          user_id: userData.user.id,
-          role: 'owner',
-        },
-      ]);
+  const { data: userData } = await supabase.auth.getUser();
+  if (userData?.user?.id) {
+    const { error: memError } = await supabase.from('workspace_memberships').insert([
+      {
+        workspace_id: createdWs.id,
+        user_id: userData.user.id,
+        role: 'owner',
+      },
+    ]);
+    if (memError) {
+      console.error('Failed to create owner membership for workspace:', memError);
+      throw new Error(`Failed to create owner membership: ${memError.message}`);
     }
-  } catch (mErr) {
-    console.warn('Could not insert owner membership:', mErr);
   }
 
   // 3. Set newly created workspace active

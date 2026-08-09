@@ -75,19 +75,25 @@ export async function getWorkspaces(
 export function getActiveWorkspaceId(cookies?: any): string {
   // 1. Astro cookies object passed in frontmatter
   if (cookies && typeof cookies.get === 'function') {
-    const val = cookies.get(ACTIVE_WORKSPACE_COOKIE)?.value;
+    const val =
+      cookies.get(ACTIVE_WORKSPACE_COOKIE)?.value ??
+      cookies.get('pinorbit_workspace_id')?.value;
     if (val) return val;
   }
 
   // 2. Raw Cookie Header string
   if (typeof cookies === 'string') {
-    const match = cookies.match(new RegExp(`(?:^|; )${ACTIVE_WORKSPACE_COOKIE}=([^;]*)`));
+    const match =
+      cookies.match(new RegExp(`(?:^|; )${ACTIVE_WORKSPACE_COOKIE}=([^;]*)`)) ??
+      cookies.match(/(?:^|; )pinorbit_workspace_id=([^;]*)/);
     if (match && match[1]) return decodeURIComponent(match[1]);
   }
 
   // 3. Browser environment fallback
   if (typeof document !== 'undefined' && document.cookie) {
-    const match = document.cookie.match(new RegExp(`(?:^|; )${ACTIVE_WORKSPACE_COOKIE}=([^;]*)`));
+    const match =
+      document.cookie.match(new RegExp(`(?:^|; )${ACTIVE_WORKSPACE_COOKIE}=([^;]*)`)) ??
+      document.cookie.match(/(?:^|; )pinorbit_workspace_id=([^;]*)/);
     if (match && match[1]) return decodeURIComponent(match[1]);
   }
 

@@ -1,6 +1,7 @@
 import { defineMiddleware } from 'astro:middleware';
 import { dbClients } from './server/db/clients';
 import { validateUserSession } from './server/auth/session';
+import { ACTIVE_WORKSPACE_COOKIE } from './lib/workspaces';
 
 export const onRequest = defineMiddleware(async (context, next) => {
   // Merge Cloudflare Worker runtime secrets into process.env if available
@@ -41,7 +42,10 @@ export const onRequest = defineMiddleware(async (context, next) => {
   context.locals.isAuthenticated = session.isAuthenticated;
 
   // Extract optional workspace header or cookie if present
-  const workspaceCookie = context.cookies.get('pinorbit_workspace_id')?.value;
+  const workspaceCookie =
+    context.cookies.get(ACTIVE_WORKSPACE_COOKIE)?.value ??
+    context.cookies.get('pinorbit_workspace_id')?.value;
+
   if (workspaceCookie) {
     context.locals.activeWorkspaceId = workspaceCookie;
   }
