@@ -88,9 +88,9 @@ const accountName = connection.display_name || 'Account';
           <span class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Date Range:</span>
           <!-- Presets -->
           <div class="inline-flex rounded-xl border border-border bg-muted/30 p-1" id="range-presets">
-            <button data-days="7" class="preset-btn rounded-lg px-2.5 py-1 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all">7D</button>
+            <button data-days="7" class="preset-btn active rounded-lg bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground shadow-sm transition-all">7D</button>
             <button data-days="14" class="preset-btn rounded-lg px-2.5 py-1 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all">14D</button>
-            <button data-days="30" class="preset-btn active rounded-lg bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground shadow-sm transition-all">30D</button>
+            <button data-days="30" class="preset-btn rounded-lg px-2.5 py-1 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all">30D</button>
             <button data-days="90" class="preset-btn rounded-lg px-2.5 py-1 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all">90D</button>
           </div>
         </div>
@@ -153,9 +153,7 @@ const accountName = connection.display_name || 'Account';
               <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s1-sort="impressions">Impressions <span class="sort-icon"></span></th>
               <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s1-sort="engagements">Engagements <span class="sort-icon"></span></th>
               <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s1-sort="outbound_clicks">Outbound Clicks <span class="sort-icon"></span></th>
-              <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s1-sort="outbound_click_rate">Outbound Click Rate <span class="sort-icon"></span></th>
               <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s1-sort="pin_clicks">Pin Clicks <span class="sort-icon"></span></th>
-              <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s1-sort="pin_click_rate">Pin Click Rate <span class="sort-icon"></span></th>
               <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s1-sort="saves">Saves <span class="sort-icon"></span></th>
               <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s1-sort="save_rate">Save Rate <span class="sort-icon"></span></th>
               <th class="py-3 px-4 text-center">Delete</th>
@@ -163,7 +161,7 @@ const accountName = connection.display_name || 'Account';
           </thead>
           <tbody id="daily-metrics-tbody" class="divide-y divide-border [&>tr:nth-child(even)]:bg-muted/5">
             <tr>
-              <td colspan="5" class="py-12 text-center text-muted-foreground">
+              <td colspan="9" class="py-12 text-center text-muted-foreground">
                 Loading daily metrics...
               </td>
             </tr>
@@ -199,17 +197,41 @@ const accountName = connection.display_name || 'Account';
             <button data-mode="PIN_CLICK" class="mode-tab rounded-lg px-3 py-1 text-xs font-semibold text-muted-foreground transition-all hover:text-foreground">Pin Clicks</button>
           </div>
           <div class="flex items-center gap-2">
-            <input type="text" id="s2-q" placeholder="Search title or ID..." class="rounded-xl border border-border bg-background px-2.5 py-1 text-xs focus:outline-none focus:border-primary w-48" />
+            <input type="text" id="s2-q" name="pins-search" autocomplete="off" data-lpignore="true" data-1p-ignore="true" placeholder="Search title or ID..." class="rounded-xl border border-border bg-background px-2.5 py-1 text-xs focus:outline-none focus:border-primary w-48" />
             <label class="text-xs font-semibold text-muted-foreground flex items-center gap-2">
               Show: 
               <select id="s2-ps" class="rounded-xl border border-border bg-background px-2 py-1 text-xs focus:outline-none focus:border-primary">
-                <option value="10">10</option>
-                <option value="25" selected>25</option>
+                <option value="10" selected>10</option>
+                <option value="25">25</option>
                 <option value="50">50</option>
                 <option value="100">100</option>
               </select>
             </label>
           </div>
+        </div>
+      </div>
+
+      <!-- F4: Top Pins Own Date Range Control -->
+      <div class="flex flex-wrap items-center justify-between gap-3 bg-muted/10 px-4 py-2.5 border-b border-border text-xs">
+        <div class="flex items-center gap-2">
+          <span class="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Top Pins Range:</span>
+          <div class="inline-flex rounded-xl border border-border bg-muted/30 p-0.5" id="s2-range-presets">
+            <button data-s2-days="7" class="s2-preset-btn active rounded-lg bg-primary px-2.5 py-0.5 text-xs font-semibold text-primary-foreground shadow-sm transition-all">7D</button>
+            <button data-s2-days="14" class="s2-preset-btn rounded-lg px-2.5 py-0.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all">14D</button>
+            <button data-s2-days="30" class="s2-preset-btn rounded-lg px-2.5 py-0.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all">30D</button>
+            <button data-s2-days="90" class="s2-preset-btn rounded-lg px-2.5 py-0.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all">90D</button>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="flex items-center gap-1.5">
+            <label class="text-[11px] font-semibold text-muted-foreground">From:</label>
+            <input type="date" id="s2-from-date-input" class="rounded-lg border border-border bg-card px-2 py-1 text-xs text-foreground focus:border-primary focus:outline-none" />
+          </div>
+          <div class="flex items-center gap-1.5">
+            <label class="text-[11px] font-semibold text-muted-foreground">To:</label>
+            <input type="date" id="s2-to-date-input" class="rounded-lg border border-border bg-card px-2 py-1 text-xs text-foreground focus:border-primary focus:outline-none" />
+          </div>
+          <button id="s2-apply-range-btn" class="rounded-lg border border-border bg-card px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted transition-all shadow-sm">Apply</button>
         </div>
       </div>
 
@@ -230,7 +252,7 @@ const accountName = connection.display_name || 'Account';
           </thead>
           <tbody id="top-pins-tbody" class="divide-y divide-border [&>tr:nth-child(even)]:bg-muted/5">
             <tr>
-              <td colspan="6" class="py-12 text-center text-muted-foreground">
+              <td colspan="8" class="py-12 text-center text-muted-foreground">
                 Loading top pins snapshots...
               </td>
             </tr>

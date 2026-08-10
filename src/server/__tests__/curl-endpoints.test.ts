@@ -79,6 +79,8 @@ vi.mock('../../server/db/analytics', () => ({
     }),
     upsertWorkspaceAnalyticsSettings: vi.fn().mockResolvedValue({}),
     getTimeseriesMetrics: vi.fn().mockResolvedValue([]),
+    getConnectionHealth: vi.fn().mockResolvedValue({ total_runs: 10, consecutive_failures: 0, last_success_at: '2026-08-10T12:00:00Z', revoked: false }),
+    getLatestFailedRun: vi.fn().mockResolvedValue(null),
   },
 }));
 

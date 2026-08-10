@@ -27,19 +27,25 @@ function getStatusBadge(status: any) {
 }
 
 // State
+// State
+const defaultTo = new Date().toISOString().split('T')[0];
+const defaultFrom = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
+
 const state = {
   s1Page: 1,
   s1Size: 25,
   s1Sort: 'metric_date',
   s1Desc: true,
+  from: defaultFrom,
+  to: defaultTo,
   
   s2Page: 1,
-  s2Size: 25,
+  s2Size: 10,
   s2Mode: 'IMPRESSION',
   s2Query: '',
+  s2From: defaultFrom,
+  s2To: defaultTo,
   
-  from: '',
-  to: '',
   tab: 'data'
 };
 
@@ -50,14 +56,16 @@ function syncStateToUrl() {
   if (state.s1Size !== 25) p.set('s1_ps', String(state.s1Size));
   if (state.s1Sort !== 'metric_date') p.set('s1_sort', state.s1Sort);
   if (!state.s1Desc) p.set('s1_dir', 'asc');
-
-  if (state.s2Page > 1) p.set('s2_page', String(state.s2Page));
-  if (state.s2Size !== 25) p.set('s2_ps', String(state.s2Size));
-  if (state.s2Mode !== 'IMPRESSION') p.set('sort_by', state.s2Mode);
-  if (state.s2Query) p.set('s2_q', state.s2Query);
-  
   if (state.from) p.set('from', state.from);
   if (state.to) p.set('to', state.to);
+
+  if (state.s2Page > 1) p.set('s2_page', String(state.s2Page));
+  if (state.s2Size !== 10) p.set('s2_ps', String(state.s2Size));
+  if (state.s2Mode !== 'IMPRESSION') p.set('sort_by', state.s2Mode);
+  if (state.s2Query) p.set('s2_q', state.s2Query);
+  if (state.s2From) p.set('s2_from', state.s2From);
+  if (state.s2To) p.set('s2_to', state.s2To);
+  
   if (state.tab !== 'data') p.set('tab', state.tab);
   
   window.history.replaceState(null, '', '?' + p.toString() + window.location.hash);
@@ -69,23 +77,35 @@ function loadStateFromUrl() {
   state.s1Size = Number(p.get('s1_ps')) || 25;
   state.s1Sort = p.get('s1_sort') || 'metric_date';
   state.s1Desc = p.get('s1_dir') !== 'asc';
+  state.from = p.get('from') || defaultFrom;
+  state.to = p.get('to') || defaultTo;
 
   state.s2Page = Number(p.get('s2_page')) || 1;
-  state.s2Size = Number(p.get('s2_ps')) || 25;
+  state.s2Size = Number(p.get('s2_ps')) || 10;
   state.s2Mode = p.get('sort_by') || 'IMPRESSION';
   state.s2Query = p.get('s2_q') || '';
+  state.s2From = p.get('s2_from') || defaultFrom;
+  state.s2To = p.get('s2_to') || defaultTo;
   
-  state.from = p.get('from') || '';
-  state.to = p.get('to') || '';
   state.tab = p.get('tab') || 'data';
 
   // Update UI inputs
-  (document.getElementById('s1-ps') as HTMLSelectElement).value = String(state.s1Size);
-  (document.getElementById('s2-ps') as HTMLSelectElement).value = String(state.s2Size);
-  (document.getElementById('s2-q') as HTMLInputElement).value = state.s2Query;
+  const s1PsEl = document.getElementById('s1-ps') as HTMLSelectElement;
+  if (s1PsEl) s1PsEl.value = String(state.s1Size);
+  const s2PsEl = document.getElementById('s2-ps') as HTMLSelectElement;
+  if (s2PsEl) s2PsEl.value = String(state.s2Size);
+  const s2QEl = document.getElementById('s2-q') as HTMLInputElement;
+  if (s2QEl) s2QEl.value = state.s2Query;
   
-  if (state.from) (document.getElementById('from-date-input') as HTMLInputElement).value = state.from;
-  if (state.to) (document.getElementById('to-date-input') as HTMLInputElement).value = state.to;
+  const fromEl = document.getElementById('from-date-input') as HTMLInputElement;
+  if (fromEl) fromEl.value = state.from;
+  const toEl = document.getElementById('to-date-input') as HTMLInputElement;
+  if (toEl) toEl.value = state.to;
+
+  const s2FromEl = document.getElementById('s2-from-date-input') as HTMLInputElement;
+  if (s2FromEl) s2FromEl.value = state.s2From;
+  const s2ToEl = document.getElementById('s2-to-date-input') as HTMLInputElement;
+  if (s2ToEl) s2ToEl.value = state.s2To;
 
   document.querySelectorAll('#top-pins-sort-tabs .mode-tab').forEach(b => {
     if (b.getAttribute('data-mode') === state.s2Mode) {
@@ -121,7 +141,7 @@ async function safeFetch(url: string) {
 
 async function renderS1() {
   const tbody = document.getElementById('daily-metrics-tbody')!;
-  tbody.innerHTML = `<tr><td colspan="5" class="py-12 text-center text-muted-foreground">Loading daily metrics...</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="9" class="py-12 text-center text-muted-foreground">Loading daily metrics...</td></tr>`;
   syncStateToUrl();
 
   document.querySelectorAll('[data-s1-sort]').forEach(th => {
@@ -152,7 +172,7 @@ async function renderS1() {
     document.getElementById('s1-range')!.textContent = total > 0 ? `${start + 1}-${Math.min(start + state.s1Size, total)}` : '0-0';
     
     if (rows.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="11" class="py-12 text-center text-muted-foreground">
+      tbody.innerHTML = `<tr><td colspan="9" class="py-12 text-center text-muted-foreground">
         <p class="mb-2">No daily metrics found.</p>
         <button onclick="document.getElementById('tab-pipe')?.click()" class="text-primary hover:underline font-semibold">Go to Pipeline & Automation to Sync</button>
       </td></tr>`;
@@ -165,10 +185,8 @@ async function renderS1() {
             <td class="py-2.5 px-4 text-center">${getStatusBadge(d.data_status)}</td>
             <td class="py-2.5 px-4 text-right">${formatNum(asNumber(d.impressions))}</td>
             <td class="py-2.5 px-4 text-right">${formatNum(asNumber(d.engagements))} (${formatPct(asNumber(d.engagement_rate))})</td>
-            <td class="py-2.5 px-4 text-right">${formatNum(asNumber(d.outbound_clicks))}</td>
-            <td class="py-2.5 px-4 text-right">${formatPct(asNumber(d.outbound_click_rate))}</td>
-            <td class="py-2.5 px-4 text-right">${formatNum(asNumber(d.pin_clicks))}</td>
-            <td class="py-2.5 px-4 text-right">${formatPct(asNumber(d.pin_click_rate))}</td>
+            <td class="py-2.5 px-4 text-right">${formatNum(asNumber(d.outbound_clicks))} (${formatPct(asNumber(d.outbound_click_rate))})</td>
+            <td class="py-2.5 px-4 text-right">${formatNum(asNumber(d.pin_clicks))} (${formatPct(asNumber(d.pin_click_rate))})</td>
             <td class="py-2.5 px-4 text-right">${formatNum(asNumber(d.saves))}</td>
             <td class="py-2.5 px-4 text-right">${formatPct(asNumber(d.save_rate))}</td>
             <td class="py-2.5 px-4 text-center">
@@ -178,7 +196,7 @@ async function renderS1() {
             </td>
           </tr>`;
         } catch (err: any) {
-          return `<tr><td colspan="11" class="py-2 px-4 bg-red-500/10 text-red-500 text-xs font-bold text-center">Row Error: ${escapeHtml(err.message)}</td></tr>`;
+          return `<tr><td colspan="9" class="py-2 px-4 bg-red-500/10 text-red-500 text-xs font-bold text-center">Row Error: ${escapeHtml(err.message)}</td></tr>`;
         }
       }).join('');
     }
@@ -194,10 +212,8 @@ async function renderS1() {
         <td class="py-3 px-4 text-center">—</td>
         <td class="py-3 px-4 text-right">${formatNum(totals.impressions)}</td>
         <td class="py-3 px-4 text-right">${formatNum(totals.engagements)} (${formatPct(pooledEr)})</td>
-        <td class="py-3 px-4 text-right">${formatNum(totals.outbound_clicks)}</td>
-        <td class="py-3 px-4 text-right">${formatPct(pooledOcr)}</td>
-        <td class="py-3 px-4 text-right">${formatNum(totals.pin_clicks)}</td>
-        <td class="py-3 px-4 text-right">${formatPct(pooledPcr)}</td>
+        <td class="py-3 px-4 text-right">${formatNum(totals.outbound_clicks)} (${formatPct(pooledOcr)})</td>
+        <td class="py-3 px-4 text-right">${formatNum(totals.pin_clicks)} (${formatPct(pooledPcr)})</td>
         <td class="py-3 px-4 text-right">${formatNum(totals.saves)}</td>
         <td class="py-3 px-4 text-right">${formatPct(pooledSr)}</td>
         <td class="py-3 px-4 text-center">—</td>
@@ -211,13 +227,13 @@ async function renderS1() {
     `;
 
   } catch (e: any) {
-    tbody.innerHTML = `<tr><td colspan="5" class="py-12 text-center text-red-500">${escapeHtml(e.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="py-12 text-center text-red-500">${escapeHtml(e.message)}</td></tr>`;
   }
 }
 
 async function renderS2() {
   const tbody = document.getElementById('top-pins-tbody')!;
-  tbody.innerHTML = `<tr><td colspan="6" class="py-12 text-center text-muted-foreground">Loading top pins...</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="8" class="py-12 text-center text-muted-foreground">Loading top pins...</td></tr>`;
   syncStateToUrl();
 
   const url = new URL(`/api/analytics/connections/${connectionId}/top-pins`, window.location.origin);
@@ -225,8 +241,8 @@ async function renderS2() {
   url.searchParams.set('page', String(state.s2Page));
   url.searchParams.set('page_size', String(state.s2Size));
   if (state.s2Query) url.searchParams.set('q', state.s2Query);
-  if (state.from) url.searchParams.set('from_date', state.from);
-  if (state.to) url.searchParams.set('to_date', state.to);
+  if (state.s2From) url.searchParams.set('from_date', state.s2From);
+  if (state.s2To) url.searchParams.set('to_date', state.s2To);
 
   try {
     const { data } = await safeFetch(url.toString());
@@ -282,8 +298,8 @@ async function renderS2() {
             <td class="py-3 px-4 text-center">${getStatusBadge(p.data_status)}</td>
             <td class="py-3 px-4 text-right font-medium">${formatNum(asNumber(p.impressions))}</td>
             <td class="py-3 px-4 text-right font-medium">${formatNum(asNumber(p.engagement))} (${formatPct(asNumber(p.engagement_rate))})</td>
-            <td class="py-3 px-4 text-right font-medium">${formatNum(asNumber(p.outbound_clicks))}</td>
-            <td class="py-3 px-4 text-right font-medium">${formatNum(asNumber(p.pin_clicks))}</td>
+            <td class="py-3 px-4 text-right font-medium">${formatNum(asNumber(p.outbound_clicks))} (${formatPct(asNumber(p.outbound_click_rate))})</td>
+            <td class="py-3 px-4 text-right font-medium">${formatNum(asNumber(p.pin_clicks))} (${formatPct(asNumber(p.pin_click_rate))})</td>
             <td class="py-3 px-4 text-right font-medium">${formatNum(asNumber(p.saves))}</td>
           </tr>`;
         } catch (err: any) {
@@ -299,7 +315,7 @@ async function renderS2() {
     `;
 
   } catch (e: any) {
-    tbody.innerHTML = `<tr><td colspan="6" class="py-12 text-center text-red-500">${escapeHtml(e.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="py-12 text-center text-red-500">${escapeHtml(e.message)}</td></tr>`;
   }
 }
 
@@ -360,17 +376,17 @@ document.querySelectorAll('#top-pins-sort-tabs .mode-tab').forEach(b => {
   });
 });
 
+// S1 Date range
 document.getElementById('apply-range-btn')?.addEventListener('click', () => {
   state.from = (document.getElementById('from-date-input') as HTMLInputElement).value;
   state.to = (document.getElementById('to-date-input') as HTMLInputElement).value;
-  document.querySelectorAll('.preset-btn').forEach(b => {
+  document.querySelectorAll('#range-presets .preset-btn').forEach(b => {
     b.className = 'preset-btn rounded-lg px-2.5 py-1 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all';
   });
   renderS1();
-  renderS2();
 });
 
-document.querySelectorAll('.preset-btn').forEach(b => {
+document.querySelectorAll('#range-presets .preset-btn').forEach(b => {
   b.addEventListener('click', () => {
     const days = Number(b.getAttribute('data-days'));
     const to = new Date();
@@ -381,12 +397,41 @@ document.querySelectorAll('.preset-btn').forEach(b => {
     (document.getElementById('from-date-input') as HTMLInputElement).value = state.from;
     (document.getElementById('to-date-input') as HTMLInputElement).value = state.to;
     
-    document.querySelectorAll('.preset-btn').forEach(x => {
+    document.querySelectorAll('#range-presets .preset-btn').forEach(x => {
       x.className = 'preset-btn rounded-lg px-2.5 py-1 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all';
     });
     b.className = 'preset-btn active rounded-lg bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground shadow-sm transition-all';
     
     renderS1();
+  });
+});
+
+// S2 Date range (Top Pins Card)
+document.getElementById('s2-apply-range-btn')?.addEventListener('click', () => {
+  state.s2From = (document.getElementById('s2-from-date-input') as HTMLInputElement).value;
+  state.s2To = (document.getElementById('s2-to-date-input') as HTMLInputElement).value;
+  document.querySelectorAll('#s2-range-presets .s2-preset-btn').forEach(b => {
+    b.className = 's2-preset-btn rounded-lg px-2.5 py-0.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all';
+  });
+  renderS2();
+});
+
+document.querySelectorAll('#s2-range-presets .s2-preset-btn').forEach(b => {
+  b.addEventListener('click', () => {
+    const days = Number(b.getAttribute('data-s2-days'));
+    const to = new Date();
+    const from = new Date(to.getTime() - days * 86400000);
+    state.s2To = to.toISOString().split('T')[0];
+    state.s2From = from.toISOString().split('T')[0];
+    
+    (document.getElementById('s2-from-date-input') as HTMLInputElement).value = state.s2From;
+    (document.getElementById('s2-to-date-input') as HTMLInputElement).value = state.s2To;
+    
+    document.querySelectorAll('#s2-range-presets .s2-preset-btn').forEach(x => {
+      x.className = 's2-preset-btn rounded-lg px-2.5 py-0.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all';
+    });
+    b.className = 's2-preset-btn active rounded-lg bg-primary px-2.5 py-0.5 text-xs font-semibold text-primary-foreground shadow-sm transition-all';
+    
     renderS2();
   });
 });

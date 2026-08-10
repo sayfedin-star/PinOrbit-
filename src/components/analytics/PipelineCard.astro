@@ -76,7 +76,7 @@ const { channel, title, endpointBadge, isTopPins = false } = Astro.props;
         <span class="font-semibold text-muted-foreground">FastCron API Token (Write-Only Override)</span>
         <span data-token-badge class="rounded-full bg-muted/50 px-2 py-0.5 text-[10px] font-bold text-muted-foreground">Workspace Default</span>
       </div>
-      <input data-field="fastcron_token" type="password" placeholder="Leave empty for default" class="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs focus:border-primary focus:outline-none" />
+      <input data-field="fastcron_token" type="password" autocomplete="new-password" data-lpignore="true" data-1p-ignore="true" placeholder="Leave empty for default" class="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs focus:border-primary focus:outline-none" />
     </div>
   </div>
 

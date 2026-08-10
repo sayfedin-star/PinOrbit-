@@ -889,6 +889,7 @@ export const analyticsDb = {
 
     const { data: latestWindow, error: windowError } = await windowQuery
       .order('window_end', { ascending: false })
+      .order('window_start', { ascending: false })
       .limit(1);
 
     if (windowError) throw windowError;
@@ -908,10 +909,23 @@ export const analyticsDb = {
       .eq('window_start', w0)
       .eq('window_end', w1)
       .order('rank_position', { ascending: true })
+      .order('recorded_at', { ascending: false })
       .limit(limit);
 
     if (error) throw error;
-    return (data as TopPinSnapshot[]) || [];
+    
+    // Deduplicate by rank_position (keeping newest recorded snapshot)
+    const seenRanks = new Set<number>();
+    const uniqueRows: TopPinSnapshot[] = [];
+    for (const row of (data as TopPinSnapshot[]) || []) {
+      if (!seenRanks.has(row.rank_position)) {
+        seenRanks.add(row.rank_position);
+        uniqueRows.push(row);
+      }
+      if (uniqueRows.length >= limit) break;
+    }
+
+    return uniqueRows;
   },
 
   /**
