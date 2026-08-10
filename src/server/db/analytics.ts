@@ -181,6 +181,34 @@ export const analyticsDb = {
   },
 
   /**
+   * Returns the latest failed run for (connection_id, channel) within a workspace.
+   */
+  async getLatestFailedRun(
+    workspaceId: string,
+    connectionId: string,
+    channel: 'account_analytics' | 'top_pins'
+  ): Promise<AnalyticsIngestionRun | null> {
+    if (!workspaceId || !connectionId) return null;
+    const analyticsClient = dbClients.getAnalytics();
+    const { data, error } = await analyticsClient
+      .from('analytics_ingestion_runs')
+      .select('*')
+      .eq('workspace_id', workspaceId)
+      .eq('connection_id', connectionId)
+      .eq('channel', channel)
+      .eq('status', 'failed')
+      .order('started_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error || !data) {
+      return null;
+    }
+
+    return data as AnalyticsIngestionRun;
+  },
+
+  /**
    * Checks whether the last N consecutive runs for (connection_id, channel) are failed.
    */
   async checkConsecutiveFailures(

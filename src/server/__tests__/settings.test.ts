@@ -24,6 +24,7 @@ vi.mock('../db/clients', () => ({
   getServerEnv: vi.fn().mockImplementation((runtimeEnv?: any) => ({
     INGEST_SECRET_KEY: 'test_ingest_key',
     FASTCRON_API_TOKEN: runtimeEnv && 'FASTCRON_API_TOKEN' in runtimeEnv ? runtimeEnv.FASTCRON_API_TOKEN : 'default_fastcron_token_12345',
+    TOKEN_KEK: 'pinorbit_dev_token_kek_00000000',
   })),
 }));
 
@@ -474,6 +475,158 @@ describe('Pinner Analytics Settings & Security Suite (V20.1 Per-Pipeline Date Of
       expect.objectContaining({
         top_pins_sort_modes: ['IMPRESSION', 'SAVE'],
         top_pins_schedule_status: 'pending',
+      })
+    );
+  });
+
+  it('GET returns health object with total_runs, consecutive_failures, last_success_at', async () => {
+    (analyticsDb.getWorkspaceConnection as any).mockResolvedValue({
+      id: connectionId,
+      workspace_id: workspaceId,
+      display_name: 'health-test-conn',
+    });
+    (analyticsDb.getConnectionHealth as any).mockResolvedValue({
+      total_runs: 42,
+      consecutive_failures: 1,
+      last_success_at: '2026-08-10T12:00:00Z',
+      revoked: false,
+    });
+
+    const locals = { user: { id: 'u1' }, supabase: {}, activeWorkspaceId: workspaceId };
+    const res = await getConnSettingsHandler({
+      params: { id: connectionId },
+      locals,
+    } as any);
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.success).toBe(true);
+    expect(json.data.health).toEqual({
+      total_runs: 42,
+      consecutive_failures: 1,
+      last_success_at: '2026-08-10T12:00:00Z',
+      revoked: false,
+    });
+  });
+
+  it('GET returns token fingerprints (••••XXXX format)', async () => {
+    (analyticsDb.getWorkspaceConnection as any).mockResolvedValue({
+      id: connectionId,
+      workspace_id: workspaceId,
+      display_name: 'token-fingerprint-conn',
+      analytics_fastcron_token: '1234567890abcdef',
+      top_pins_fastcron_token: 'abcdef1234567890',
+    });
+
+    const locals = { user: { id: 'u1' }, supabase: {}, activeWorkspaceId: workspaceId };
+    const res = await getConnSettingsHandler({
+      params: { id: connectionId },
+      locals,
+    } as any);
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.success).toBe(true);
+    expect(json.data.has_analytics_fastcron_token).toBe(true);
+    expect(json.data.analytics_token_fingerprint).toBe('••••cdef');
+    expect(json.data.has_top_pins_fastcron_token).toBe(true);
+    expect(json.data.top_pins_token_fingerprint).toBe('••••7890');
+  });
+
+  it('POST encrypts token with TOKEN_KEK', async () => {
+    (analyticsDb.getWorkspaceConnection as any).mockResolvedValue({
+      id: connectionId,
+      workspace_id: workspaceId,
+      display_name: 'encrypt-test-conn',
+    });
+    (analyticsDb.updateWorkspaceConnection as any).mockResolvedValue({
+      id: connectionId,
+      workspace_id: workspaceId,
+      display_name: 'encrypt-test-conn',
+      analytics_fastcron_token: 'v1:encrypted:data',
+    });
+
+    const locals = { user: { id: 'u1' }, supabase: {}, activeWorkspaceId: workspaceId };
+    const res = await postConnSettingsHandler({
+      params: { id: connectionId },
+      request: new Request('http://localhost', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          analytics_fastcron_token: 'valid_custom_token_123456',
+        }),
+      }),
+      locals,
+    } as any);
+
+    expect(res.status).toBe(200);
+    expect(analyticsDb.updateWorkspaceConnection).toHaveBeenCalledWith(
+      workspaceId,
+      connectionId,
+      expect.objectContaining({
+        analytics_fastcron_token: expect.stringMatching(/^v1:/),
+      })
+    );
+  });
+
+  it('POST rejects token < 16 chars with 422', async () => {
+    (analyticsDb.getWorkspaceConnection as any).mockResolvedValue({
+      id: connectionId,
+      workspace_id: workspaceId,
+      display_name: 'short-token-conn',
+    });
+
+    const locals = { user: { id: 'u1' }, supabase: {}, activeWorkspaceId: workspaceId };
+    const res = await postConnSettingsHandler({
+      params: { id: connectionId },
+      request: new Request('http://localhost', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          analytics_fastcron_token: 'short_token_123', // 15 chars (< 16)
+        }),
+      }),
+      locals,
+    } as any);
+
+    expect(res.status).toBe(422);
+    const json = await res.json();
+    expect(json.success).toBe(false);
+    expect(json.error).toContain('at least 16 characters');
+  });
+
+  it('POST clears token when empty string', async () => {
+    (analyticsDb.getWorkspaceConnection as any).mockResolvedValue({
+      id: connectionId,
+      workspace_id: workspaceId,
+      display_name: 'clear-token-conn',
+    });
+    (analyticsDb.updateWorkspaceConnection as any).mockResolvedValue({
+      id: connectionId,
+      workspace_id: workspaceId,
+      display_name: 'clear-token-conn',
+      analytics_fastcron_token: null,
+    });
+
+    const locals = { user: { id: 'u1' }, supabase: {}, activeWorkspaceId: workspaceId };
+    const res = await postConnSettingsHandler({
+      params: { id: connectionId },
+      request: new Request('http://localhost', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          analytics_fastcron_token: '',
+        }),
+      }),
+      locals,
+    } as any);
+
+    expect(res.status).toBe(200);
+    expect(analyticsDb.updateWorkspaceConnection).toHaveBeenCalledWith(
+      workspaceId,
+      connectionId,
+      expect.objectContaining({
+        analytics_fastcron_token: null,
       })
     );
   });

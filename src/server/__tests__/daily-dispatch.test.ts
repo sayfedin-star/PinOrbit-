@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { POST } from '../../pages/api/internal/pinterest/daily-dispatch';
 import { dbClients } from '../db/clients';
+import { getEffectiveSecret } from '../services/webhook-secrets';
 
 vi.mock('../db/clients', async () => {
   const actual = await vi.importActual<any>('../db/clients');
@@ -12,9 +13,13 @@ vi.mock('../db/clients', async () => {
   };
 });
 
-describe('Daily Dispatch Endpoint Test Suite (F1, X2, X4, X5, X6)', () => {
+vi.mock('../services/webhook-secrets', () => ({
+  getEffectiveSecret: vi.fn(),
+}));
+
+describe('Daily Dispatch Endpoint Test Suite (F1, X4, X5, X6)', () => {
   const mockConnectionId = 'conn-uuid-12345';
-  const mockSecret = 'test_cron_dispatch_secret_998877';
+  const mockSecret = 'test_ingest_secret_998877';
 
   const mockConnection = {
     id: mockConnectionId,
@@ -46,46 +51,64 @@ describe('Daily Dispatch Endpoint Test Suite (F1, X2, X4, X5, X6)', () => {
     };
 
     (dbClients.getAnalytics as any).mockReturnValue(mockSupabase);
+    (getEffectiveSecret as any).mockResolvedValue({ value: mockSecret, source: 'global' });
   });
 
-  it('X2: returns 503 JSON when CRON_DISPATCH_SECRET is not configured in production', async () => {
-    const prevEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = 'production';
+  it('authenticates with x-ingest-secret matching getEffectiveSecret', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((async () => {
+      return { status: 200, ok: true, json: async () => ({ success: true }) } as any;
+    }) as any);
 
-    const req = new Request('https://pinorbit-v2.o-i.workers.dev/api/internal/pinterest/daily-dispatch', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ connection_id: mockConnectionId, channel: 'account_analytics' }),
-    });
-
-    const res = await POST({
-      request: req,
-      locals: { runtimeEnv: { CRON_DISPATCH_SECRET: '' } },
-    } as any);
-
-    expect(res.status).toBe(503);
-    const json = await res.json();
-    expect(json.success).toBe(false);
-    expect(json.error).toBe('CRON_DISPATCH_SECRET not configured');
-
-    process.env.NODE_ENV = prevEnv;
-  });
-
-  it('F1: returns 401 JSON on missing or invalid x-dispatch-secret header', async () => {
     const req = new Request('https://pinorbit-v2.o-i.workers.dev/api/internal/pinterest/daily-dispatch', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-dispatch-secret': 'wrong_secret',
+        'x-ingest-secret': mockSecret,
       },
       body: JSON.stringify({ connection_id: mockConnectionId, channel: 'account_analytics' }),
     });
 
-    const res = await POST({
-      request: req,
-      locals: { runtimeEnv: { CRON_DISPATCH_SECRET: mockSecret } },
-    } as any);
+    const res = await POST({ request: req, locals: {} } as any);
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.success).toBe(true);
 
+    fetchSpy.mockRestore();
+  });
+
+  it('accepts x-dispatch-secret as alias for backward compat', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((async () => {
+      return { status: 200, ok: true, json: async () => ({ success: true }) } as any;
+    }) as any);
+
+    const req = new Request('https://pinorbit-v2.o-i.workers.dev/api/internal/pinterest/daily-dispatch', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-dispatch-secret': mockSecret,
+      },
+      body: JSON.stringify({ connection_id: mockConnectionId, channel: 'account_analytics' }),
+    });
+
+    const res = await POST({ request: req, locals: {} } as any);
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.success).toBe(true);
+
+    fetchSpy.mockRestore();
+  });
+
+  it('401 when secret mismatch', async () => {
+    const req = new Request('https://pinorbit-v2.o-i.workers.dev/api/internal/pinterest/daily-dispatch', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-ingest-secret': 'wrong_secret_123',
+      },
+      body: JSON.stringify({ connection_id: mockConnectionId, channel: 'account_analytics' }),
+    });
+
+    const res = await POST({ request: req, locals: {} } as any);
     expect(res.status).toBe(401);
     const json = await res.json();
     expect(json.success).toBe(false);
@@ -97,15 +120,12 @@ describe('Daily Dispatch Endpoint Test Suite (F1, X2, X4, X5, X6)', () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-dispatch-secret': mockSecret,
+        'x-ingest-secret': mockSecret,
       },
       body: JSON.stringify({ connection_id: mockConnectionId }), // missing channel
     });
 
-    const res = await POST({
-      request: req,
-      locals: { runtimeEnv: { CRON_DISPATCH_SECRET: mockSecret } },
-    } as any);
+    const res = await POST({ request: req, locals: {} } as any);
 
     expect(res.status).toBe(422);
     const json = await res.json();
@@ -120,15 +140,12 @@ describe('Daily Dispatch Endpoint Test Suite (F1, X2, X4, X5, X6)', () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-dispatch-secret': mockSecret,
+        'x-ingest-secret': mockSecret,
       },
       body: JSON.stringify({ connection_id: 'non-existent-id', channel: 'account_analytics' }),
     });
 
-    const res = await POST({
-      request: req,
-      locals: { runtimeEnv: { CRON_DISPATCH_SECRET: mockSecret } },
-    } as any);
+    const res = await POST({ request: req, locals: {} } as any);
 
     expect(res.status).toBe(404);
     const json = await res.json();
@@ -146,15 +163,12 @@ describe('Daily Dispatch Endpoint Test Suite (F1, X2, X4, X5, X6)', () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-dispatch-secret': mockSecret,
+        'x-ingest-secret': mockSecret,
       },
       body: JSON.stringify({ connection_id: mockConnectionId, channel: 'account_analytics' }),
     });
 
-    const res = await POST({
-      request: req,
-      locals: { runtimeEnv: { CRON_DISPATCH_SECRET: mockSecret } },
-    } as any);
+    const res = await POST({ request: req, locals: {} } as any);
 
     expect(res.status).toBe(409);
     const json = await res.json();
@@ -180,15 +194,12 @@ describe('Daily Dispatch Endpoint Test Suite (F1, X2, X4, X5, X6)', () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-dispatch-secret': mockSecret,
+        'x-ingest-secret': mockSecret,
       },
       body: JSON.stringify({ connection_id: mockConnectionId, channel: 'analytics' }),
     });
 
-    const res = await POST({
-      request: req,
-      locals: { runtimeEnv: { CRON_DISPATCH_SECRET: mockSecret } },
-    } as any);
+    const res = await POST({ request: req, locals: {} } as any);
 
     expect(res.status).toBe(200);
     const json = await res.json();
@@ -218,7 +229,7 @@ describe('Daily Dispatch Endpoint Test Suite (F1, X2, X4, X5, X6)', () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-dispatch-secret': mockSecret,
+        'x-ingest-secret': mockSecret,
       },
       body: JSON.stringify({
         connection_id: mockConnectionId,
@@ -228,10 +239,7 @@ describe('Daily Dispatch Endpoint Test Suite (F1, X2, X4, X5, X6)', () => {
       }),
     });
 
-    const res = await POST({
-      request: req,
-      locals: { runtimeEnv: { CRON_DISPATCH_SECRET: mockSecret } },
-    } as any);
+    const res = await POST({ request: req, locals: {} } as any);
 
     expect(res.status).toBe(200);
     expect(capturedPayload.start_date).toBe('2026-08-01');
@@ -248,7 +256,7 @@ describe('Daily Dispatch Endpoint Test Suite (F1, X2, X4, X5, X6)', () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-dispatch-secret': mockSecret,
+        'x-ingest-secret': mockSecret,
       },
       body: JSON.stringify({
         connection_id: mockConnectionId,
@@ -258,10 +266,7 @@ describe('Daily Dispatch Endpoint Test Suite (F1, X2, X4, X5, X6)', () => {
       }),
     });
 
-    const res = await POST({
-      request: req,
-      locals: { runtimeEnv: { CRON_DISPATCH_SECRET: mockSecret } },
-    } as any);
+    const res = await POST({ request: req, locals: {} } as any);
 
     expect(res.status).toBe(422);
     const json = await res.json();

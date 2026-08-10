@@ -58,8 +58,35 @@ export const GET: APIRoute = async ({ params, locals }) => {
       );
     }
 
-    const latestFailedAccount = await analyticsDb.getLatestFailedRun(workspaceId, connection.id, 'account_analytics');
-    const latestFailedTopPins = await analyticsDb.getLatestFailedRun(workspaceId, connection.id, 'top_pins');
+    let latestFailedAccount: any = null;
+    try {
+      latestFailedAccount = await analyticsDb.getLatestFailedRun(workspaceId, connection.id, 'account_analytics');
+    } catch {
+      latestFailedAccount = null;
+    }
+
+    let latestFailedTopPins: any = null;
+    try {
+      latestFailedTopPins = await analyticsDb.getLatestFailedRun(workspaceId, connection.id, 'top_pins');
+    } catch {
+      latestFailedTopPins = null;
+    }
+
+    let health: any = null;
+    try {
+      health = await analyticsDb.getConnectionHealth(connection.id);
+    } catch {
+      health = null;
+    }
+
+    const hasAnalyticsToken = Boolean(connection.analytics_fastcron_token && connection.analytics_fastcron_token.trim().length >= 16);
+    const hasTopPinsToken = Boolean(connection.top_pins_fastcron_token && connection.top_pins_fastcron_token.trim().length >= 16);
+    const analyticsFingerprint = hasAnalyticsToken
+      ? '••••' + connection.analytics_fastcron_token.trim().slice(-4)
+      : null;
+    const topPinsFingerprint = hasTopPinsToken
+      ? '••••' + connection.top_pins_fastcron_token.trim().slice(-4)
+      : null;
 
     const responseData: AnalyticsConnectionSettingsResponse = {
       id: connection.id,
@@ -87,23 +114,26 @@ export const GET: APIRoute = async ({ params, locals }) => {
         'PIN_CLICK',
       ],
       has_fastcron_token: Boolean(connection.fastcron_token && connection.fastcron_token.trim().length >= 16),
-      has_analytics_fastcron_token: Boolean(connection.analytics_fastcron_token && connection.analytics_fastcron_token.trim().length >= 16),
-      has_top_pins_fastcron_token: Boolean(connection.top_pins_fastcron_token && connection.top_pins_fastcron_token.trim().length >= 16),
+      has_analytics_fastcron_token: hasAnalyticsToken,
+      has_top_pins_fastcron_token: hasTopPinsToken,
       token_fingerprint: connection.fastcron_token && connection.fastcron_token.trim().length >= 16 
         ? '••••' + connection.fastcron_token.trim().slice(-4) 
         : null,
-      analytics_fastcron_token_fingerprint: connection.analytics_fastcron_token && connection.analytics_fastcron_token.trim().length >= 16
-        ? '••••' + connection.analytics_fastcron_token.trim().slice(-4)
-        : null,
-      top_pins_fastcron_token_fingerprint: connection.top_pins_fastcron_token && connection.top_pins_fastcron_token.trim().length >= 16
-        ? '••••' + connection.top_pins_fastcron_token.trim().slice(-4)
-        : null,
+      analytics_token_fingerprint: analyticsFingerprint,
+      analytics_fastcron_token_fingerprint: analyticsFingerprint,
+      top_pins_token_fingerprint: topPinsFingerprint,
+      top_pins_fastcron_token_fingerprint: topPinsFingerprint,
       fastcron_notify: connection.fastcron_notify ?? true,
       fastcron_timeout: connection.fastcron_timeout ?? 30,
       fastcron_instances: connection.fastcron_instances ?? 1,
-      health: await analyticsDb.getConnectionHealth(connection.id),
-      last_error_a: latestFailedAccount?.error_details?.message || null,
-      last_error_b: latestFailedTopPins?.error_details?.message || null,
+      health: health ? {
+        total_runs: health.total_runs ?? 0,
+        consecutive_failures: health.consecutive_failures ?? 0,
+        last_success_at: health.last_success_at || null,
+        revoked: health.revoked ?? false,
+      } : null,
+      last_error_a: latestFailedAccount?.error_details?.message || latestFailedAccount?.error_details?.error || null,
+      last_error_b: latestFailedTopPins?.error_details?.message || latestFailedTopPins?.error_details?.error || null,
     };
 
     return new Response(JSON.stringify({ success: true, data: responseData }), {
@@ -127,6 +157,7 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
   const schedulingClient = locals.supabase;
   const workspaceId = locals.activeWorkspaceId;
   const connectionId = params.id;
+  const runtimeEnv = (locals as any)?.runtime?.env || (locals as any)?.runtimeEnv || {};
 
   if (!user || !schedulingClient) {
     return new Response(
@@ -432,7 +463,7 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
           );
         }
         if (!tok.startsWith('v1:')) {
-          const env = getServerEnv();
+          const env = getServerEnv(runtimeEnv);
           updates.analytics_fastcron_token = await encryptToken(tok, env.TOKEN_KEK);
         } else {
           updates.analytics_fastcron_token = tok;
@@ -453,7 +484,7 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
           );
         }
         if (!tok.startsWith('v1:')) {
-          const env = getServerEnv();
+          const env = getServerEnv(runtimeEnv);
           updates.top_pins_fastcron_token = await encryptToken(tok, env.TOKEN_KEK);
         } else {
           updates.top_pins_fastcron_token = tok;
@@ -470,6 +501,22 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
     }
 
     const updated = await analyticsDb.updateWorkspaceConnection(workspaceId, connectionId, updates);
+
+    let health: any = null;
+    try {
+      health = await analyticsDb.getConnectionHealth(updated.id);
+    } catch {
+      health = null;
+    }
+
+    const hasAnalyticsToken = Boolean(updated.analytics_fastcron_token && updated.analytics_fastcron_token.trim().length >= 16);
+    const hasTopPinsToken = Boolean(updated.top_pins_fastcron_token && updated.top_pins_fastcron_token.trim().length >= 16);
+    const analyticsFingerprint = hasAnalyticsToken
+      ? '••••' + updated.analytics_fastcron_token.trim().slice(-4)
+      : null;
+    const topPinsFingerprint = hasTopPinsToken
+      ? '••••' + updated.top_pins_fastcron_token.trim().slice(-4)
+      : null;
 
     const responseData: AnalyticsConnectionSettingsResponse = {
       id: updated.id,
@@ -496,21 +543,24 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
         'PIN_CLICK',
       ],
       has_fastcron_token: Boolean(updated.fastcron_token && updated.fastcron_token.trim().length >= 16),
-      has_analytics_fastcron_token: Boolean(updated.analytics_fastcron_token && updated.analytics_fastcron_token.trim().length >= 16),
-      has_top_pins_fastcron_token: Boolean(updated.top_pins_fastcron_token && updated.top_pins_fastcron_token.trim().length >= 16),
+      has_analytics_fastcron_token: hasAnalyticsToken,
+      has_top_pins_fastcron_token: hasTopPinsToken,
       token_fingerprint: updated.fastcron_token && updated.fastcron_token.trim().length >= 16 
         ? '••••' + updated.fastcron_token.trim().slice(-4) 
         : null,
-      analytics_fastcron_token_fingerprint: updated.analytics_fastcron_token && updated.analytics_fastcron_token.trim().length >= 16
-        ? '••••' + updated.analytics_fastcron_token.trim().slice(-4)
-        : null,
-      top_pins_fastcron_token_fingerprint: updated.top_pins_fastcron_token && updated.top_pins_fastcron_token.trim().length >= 16
-        ? '••••' + updated.top_pins_fastcron_token.trim().slice(-4)
-        : null,
+      analytics_token_fingerprint: analyticsFingerprint,
+      analytics_fastcron_token_fingerprint: analyticsFingerprint,
+      top_pins_token_fingerprint: topPinsFingerprint,
+      top_pins_fastcron_token_fingerprint: topPinsFingerprint,
       fastcron_notify: updated.fastcron_notify ?? true,
       fastcron_timeout: updated.fastcron_timeout ?? 30,
       fastcron_instances: updated.fastcron_instances ?? 1,
-      health: await analyticsDb.getConnectionHealth(updated.id),
+      health: health ? {
+        total_runs: health.total_runs ?? 0,
+        consecutive_failures: health.consecutive_failures ?? 0,
+        last_success_at: health.last_success_at || null,
+        revoked: health.revoked ?? false,
+      } : null,
     };
 
     return new Response(JSON.stringify({ success: true, data: responseData }), {
@@ -527,4 +577,3 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
     );
   }
 };
-

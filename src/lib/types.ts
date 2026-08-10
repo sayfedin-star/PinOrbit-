@@ -598,11 +598,20 @@ export interface AnalyticsConnectionSettingsResponse {
   fastcron_notify?: boolean;
   fastcron_timeout?: number;
   fastcron_instances?: number;
+  token_fingerprint?: string | null;
+  analytics_token_fingerprint?: string | null;
+  top_pins_token_fingerprint?: string | null;
   analytics_fastcron_token_fingerprint?: string | null;
   top_pins_fastcron_token_fingerprint?: string | null;
   last_analytics_sync_at?: string | null;
   last_error_a?: string | null;
   last_error_b?: string | null;
+  health?: {
+    total_runs: number;
+    consecutive_failures: number;
+    last_success_at: string | null;
+    revoked?: boolean;
+  } | null;
 }
 
 export type PinnerConnection = AnalyticsConnection;

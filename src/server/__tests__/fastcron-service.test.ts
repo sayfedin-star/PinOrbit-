@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { fastcronService, FASTCRON_BASE } from '../services/fastcron-service';
 import { analyticsDb } from '../db/analytics';
+import { getEffectiveSecret } from '../services/webhook-secrets';
 
 vi.mock('../db/analytics', () => ({
   analyticsDb: {
@@ -9,6 +10,10 @@ vi.mock('../db/analytics', () => ({
     updateWorkspaceConnection: vi.fn(),
     listWorkspaceConnections: vi.fn(),
   },
+}));
+
+vi.mock('../services/webhook-secrets', () => ({
+  getEffectiveSecret: vi.fn().mockResolvedValue({ value: 'test_effective_sec_999', source: 'global' }),
 }));
 
 describe('FastCron Full Service Suite (R6 Reconcile Idempotency & Orphan Cleanup)', () => {
@@ -440,7 +445,8 @@ describe('FastCron Full Service Suite (R6 Reconcile Idempotency & Orphan Cleanup
     fetchSpy.mockRestore();
   });
 
-  it('F2 & X2: Asserts jobParams url points to daily-dispatch with x-dispatch-secret and postData', async () => {
+  it('httpHeaders contains x-ingest-secret: <effectiveSecret>', async () => {
+    (getEffectiveSecret as any).mockResolvedValueOnce({ value: 'test_effective_sec_123', source: 'global' });
     (analyticsDb.getWorkspaceAnalyticsSettings as any).mockResolvedValue({
       fastcron_token: 'db_token_1234567890',
     });
@@ -476,21 +482,19 @@ describe('FastCron Full Service Suite (R6 Reconcile Idempotency & Orphan Cleanup
       workspaceId,
       connectionId,
       'analytics',
-      { FASTCRON_API_TOKEN: 'valid_env_token_12345', CRON_DISPATCH_SECRET: 'test_dispatch_sec_123' }
+      { FASTCRON_API_TOKEN: 'valid_env_token_12345' }
     );
 
     expect(res.success).toBe(true);
     expect(capturedJobParams.url).toBe('https://pinorbit-v2.o-i.workers.dev/api/internal/pinterest/daily-dispatch');
     expect(capturedJobParams.postData).toBe(JSON.stringify({ connection_id: connectionId, channel: 'account_analytics' }));
-    expect(capturedJobParams.httpHeaders).toContain('x-dispatch-secret: test_dispatch_sec_123');
+    expect(capturedJobParams.httpHeaders).toContain('x-ingest-secret: test_effective_sec_123');
 
     fetchSpy.mockRestore();
   });
 
-  it('X2: Missing CRON_DISPATCH_SECRET in environment causes sync to fail with schedule_status error', async () => {
-    const prevEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = 'production';
-
+  it('schedule_status=\'error\' when getEffectiveSecret returns null', async () => {
+    (getEffectiveSecret as any).mockResolvedValueOnce({ value: '', source: 'none' });
     (analyticsDb.getWorkspaceAnalyticsSettings as any).mockResolvedValue({
       fastcron_token: 'db_token_1234567890',
     });
@@ -516,15 +520,13 @@ describe('FastCron Full Service Suite (R6 Reconcile Idempotency & Orphan Cleanup
       workspaceId,
       connectionId,
       'analytics',
-      { FASTCRON_API_TOKEN: 'valid_env_token_12345', CRON_DISPATCH_SECRET: '' }
+      { FASTCRON_API_TOKEN: 'valid_env_token_12345' }
     );
 
     expect(res.success).toBe(false);
     expect(res.schedule_status).toBe('error');
-    expect(res.error).toContain('CRON_DISPATCH_SECRET is not configured');
+    expect(res.error).toContain('Ingest secret not configured');
     expect(mockConn.analytics_schedule_status).toBe('error');
-
-    process.env.NODE_ENV = prevEnv;
   });
 
   it('R9.4: Simulated Channel A FastCron failure leaves Channel B status and jobs completely untouched', async () => {

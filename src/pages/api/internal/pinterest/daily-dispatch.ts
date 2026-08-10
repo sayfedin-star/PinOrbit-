@@ -1,52 +1,21 @@
 export const prerender = false;
 
 import type { APIRoute } from 'astro';
-import { dbClients, getServerEnv } from '../../../../server/db/clients';
+import { dbClients } from '../../../../server/db/clients';
+import { getEffectiveSecret } from '../../../../server/services/webhook-secrets';
 import { SORT_MODES } from '../../../../server/services/fastcron-service';
 
 /**
- * Server-Only Internal Daily Dispatch Endpoint (F1, X2, X4, X5, X6).
+ * Server-Only Internal Daily Dispatch Endpoint (F1, X4, X5, X6).
  *
- * Invoked daily by FastCron jobs (or manual triggers) with x-dispatch-secret.
+ * Invoked daily by FastCron jobs (or manual triggers) with x-ingest-secret (or x-dispatch-secret).
  * Computes concrete start_date/end_date server-side and forwards the complete
  * normalized payload directly to the configured Make.com channel webhook.
  */
 export const POST: APIRoute = async ({ request, locals }) => {
   const runtimeEnv = (locals as any)?.runtime?.env || (locals as any)?.runtimeEnv || {};
 
-  // 1. Resolve server environment configuration and expected secret (X2)
-  const envConfig = getServerEnv(runtimeEnv);
-  const expectedSecret = envConfig.CRON_DISPATCH_SECRET;
-
-  if (!expectedSecret || expectedSecret.trim().length === 0) {
-    return new Response(
-      JSON.stringify({
-        success: false,
-        error: 'CRON_DISPATCH_SECRET not configured',
-      }),
-      {
-        status: 503,
-        headers: { 'Content-Type': 'application/json' },
-      }
-    );
-  }
-
-  // 2. Authenticate x-dispatch-secret header
-  const providedSecret = request.headers.get('x-dispatch-secret');
-  if (!providedSecret || providedSecret !== expectedSecret) {
-    return new Response(
-      JSON.stringify({
-        success: false,
-        error: 'Unauthorized: missing or invalid x-dispatch-secret header.',
-      }),
-      {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' },
-      }
-    );
-  }
-
-  // 3. Parse JSON body
+  // 1. Parse JSON body
   let body: Record<string, any>;
   try {
     const text = await request.text();
@@ -76,7 +45,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     );
   }
 
-  // 4. Validate body fields & Normalize channel to canonical (X5)
+  // 2. Validate body fields & Normalize channel to canonical (X5)
   if (!body || !body.connection_id) {
     return new Response(
       JSON.stringify({
@@ -122,7 +91,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     );
   }
 
-  // 5. Look up connection in Project 3 (deleted_at IS NULL)
+  // 3. Look up connection in Project 3 (deleted_at IS NULL)
   let connection: any = null;
   try {
     const analyticsClient = dbClients.getAnalytics(runtimeEnv);
@@ -159,7 +128,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     );
   }
 
-  // 6. Check if connection is disabled
+  // 4. Check if connection is disabled
   if (connection.analytics_enabled === false) {
     return new Response(
       JSON.stringify({
@@ -173,7 +142,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     );
   }
 
-  // 7. Check webhook URL configured (X6)
+  // 5. Check webhook URL configured (X6)
   const isAnalytics = canonicalChannel === 'account_analytics';
   const targetWebhookUrl = isAnalytics
     ? connection.analytics_webhook_url
@@ -187,6 +156,28 @@ export const POST: APIRoute = async ({ request, locals }) => {
       }),
       {
         status: 409,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
+  }
+
+  // 6. Resolve expected secret via getEffectiveSecret (same import ingest.ts uses)
+  const effectiveSecretResult = await getEffectiveSecret(
+    connection.workspace_id,
+    runtimeEnv
+  );
+  const expectedSecret = effectiveSecretResult?.value;
+
+  // 7. Authenticate: accept header x-dispatch-secret OR x-ingest-secret equal to expectedSecret
+  const providedSecret = request.headers.get('x-ingest-secret') || request.headers.get('x-dispatch-secret');
+  if (!providedSecret || !expectedSecret || providedSecret !== expectedSecret) {
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: 'Unauthorized: missing or invalid authentication header.',
+      }),
+      {
+        status: 401,
         headers: { 'Content-Type': 'application/json' },
       }
     );

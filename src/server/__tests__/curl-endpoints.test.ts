@@ -240,7 +240,7 @@ describe('R12/R15 Full 17-Endpoint Route Verification Suite', () => {
     results.push({ endpoint: '/api/analytics/trigger-sync', method: 'POST', status: r21.status, contentType: r21.headers.get('content-type') || '' });
 
     // 22. POST /api/internal/pinterest/daily-dispatch
-    const r22 = await postDailyDispatch({ request: new Request('http://localhost/api/internal/pinterest/daily-dispatch', { method: 'POST', headers: { 'x-dispatch-secret': 'test_sec' }, body: JSON.stringify({ connection_id: connId, channel: 'account_analytics' }) }), locals: { runtimeEnv: { CRON_DISPATCH_SECRET: 'test_sec' } } } as any);
+    const r22 = await postDailyDispatch({ request: new Request('http://localhost/api/internal/pinterest/daily-dispatch', { method: 'POST', headers: { 'x-ingest-secret': 'test_sec' }, body: JSON.stringify({ connection_id: connId, channel: 'account_analytics' }) }), locals: { runtimeEnv: { INGEST_SECRET_KEY: 'test_sec' } } } as any);
     results.push({ endpoint: '/api/internal/pinterest/daily-dispatch', method: 'POST', status: r22.status, contentType: r22.headers.get('content-type') || '' });
 
     // 23. POST /api/internal/pinterest/ingest

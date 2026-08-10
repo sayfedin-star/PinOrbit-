@@ -9,7 +9,7 @@ function showInlineError(target: HTMLElement, message: string) {
     target.appendChild(errEl);
   }
   errEl.textContent = message;
-  setTimeout(() => errEl?.remove(), 5000);
+  setTimeout(() => errEl?.remove(), 6000);
 }
 
 function showToast(message: string, isSuccess = true) {
@@ -45,7 +45,7 @@ if (pipeConnId) {
           } else {
             msg = await res.text();
           }
-        } catch(e) {}
+        } catch {}
         throw new Error(`HTTP ${res.status}: ${msg}`);
       }
       const { data } = await res.json();
@@ -63,12 +63,14 @@ if (pipeConnId) {
         (pA.querySelector('[data-field="sync_time"]') as HTMLInputElement).value = data.analytics_sync_time || '';
         (pA.querySelector('[data-field="start_offset"]') as HTMLInputElement).value = data.analytics_start_offset_days ?? 7;
         (pA.querySelector('[data-field="end_offset"]') as HTMLInputElement).value = data.analytics_end_offset_days ?? 1;
-        pA.querySelector('[data-chip]')!.textContent = data.analytics_schedule_status || 'pending';
+        const chipA = pA.querySelector('[data-chip]');
+        if (chipA) chipA.textContent = data.analytics_schedule_status || 'pending';
         
         const badgeA = pA.querySelector('[data-token-badge]');
         if (badgeA) {
-          badgeA.textContent = data.analytics_fastcron_token_fingerprint 
-            ? `Custom: ${data.analytics_fastcron_token_fingerprint}` 
+          const fingerprintA = data.analytics_token_fingerprint || data.analytics_fastcron_token_fingerprint;
+          badgeA.textContent = (data.has_analytics_fastcron_token && fingerprintA)
+            ? `Custom: ${fingerprintA}` 
             : 'Workspace Default';
         }
 
@@ -91,12 +93,14 @@ if (pipeConnId) {
         (pB.querySelector('[data-field="start_offset"]') as HTMLInputElement).value = data.top_pins_start_offset_days ?? 7;
         (pB.querySelector('[data-field="end_offset"]') as HTMLInputElement).value = data.top_pins_end_offset_days ?? 2;
         (pB.querySelector('[data-field="num_of_pins"]') as HTMLInputElement).value = data.top_pins_num_of_pins ?? 50;
-        pB.querySelector('[data-chip]')!.textContent = data.top_pins_schedule_status || 'pending';
+        const chipB = pB.querySelector('[data-chip]');
+        if (chipB) chipB.textContent = data.top_pins_schedule_status || 'pending';
 
         const badgeB = pB.querySelector('[data-token-badge]');
         if (badgeB) {
-          badgeB.textContent = data.top_pins_fastcron_token_fingerprint 
-            ? `Custom: ${data.top_pins_fastcron_token_fingerprint}` 
+          const fingerprintB = data.top_pins_token_fingerprint || data.top_pins_fastcron_token_fingerprint;
+          badgeB.textContent = (data.has_top_pins_fastcron_token && fingerprintB)
+            ? `Custom: ${fingerprintB}` 
             : 'Workspace Default';
         }
 
@@ -127,9 +131,12 @@ if (pipeConnId) {
       
       const fc = document.getElementById('fastcron-options-card');
       if (fc) {
-        (fc.querySelector('[data-field="fastcron_notify"]') as HTMLInputElement).checked = data.fastcron_notify ?? true;
-        (fc.querySelector('[data-field="fastcron_timeout"]') as HTMLInputElement).value = data.fastcron_timeout ?? 30;
-        (fc.querySelector('[data-field="fastcron_instances"]') as HTMLInputElement).value = data.fastcron_instances ?? 1;
+        const notifyEl = fc.querySelector('[data-field="fastcron_notify"]') as HTMLInputElement;
+        if (notifyEl) notifyEl.checked = data.fastcron_notify ?? true;
+        const timeoutEl = fc.querySelector('[data-field="fastcron_timeout"]') as HTMLInputElement;
+        if (timeoutEl) timeoutEl.value = String(data.fastcron_timeout ?? 30);
+        const instancesEl = fc.querySelector('[data-field="fastcron_instances"]') as HTMLInputElement;
+        if (instancesEl) instancesEl.value = String(data.fastcron_instances ?? 1);
       }
       
       // Update health banner
@@ -241,6 +248,7 @@ if (pipeConnId) {
       
       try {
         btn.textContent = 'Saving...';
+        btn.setAttribute('disabled', 'true');
         const targetErr = target.querySelector('.inline-error');
         if (targetErr) targetErr.remove();
 
@@ -251,7 +259,11 @@ if (pipeConnId) {
         });
         if (res.ok) {
           btn.textContent = 'Saved!';
-          setTimeout(() => btn.textContent = 'Save Settings', 2000);
+          showToast('Settings saved successfully');
+          setTimeout(() => {
+            btn.textContent = 'Save Settings';
+            btn.removeAttribute('disabled');
+          }, 2000);
           loadPipelineSettings();
         } else {
           const contentType = res.headers.get('content-type');
@@ -264,10 +276,12 @@ if (pipeConnId) {
           }
           showInlineError(target, `HTTP ${res.status}: ${msg}`);
           btn.textContent = 'Save Settings';
+          btn.removeAttribute('disabled');
         }
       } catch (err: any) {
         showInlineError(target, err.message || 'Network error');
         btn.textContent = 'Save Settings';
+        btn.removeAttribute('disabled');
       }
     });
   });
@@ -286,7 +300,7 @@ if (pipeConnId) {
     });
   });
 
-  // F1: Bind Action Buttons (Test Ping, Run Now, Sync Schedule, View Logs)
+  // Action Buttons: Test Ping, Run Now, Sync Schedule, View Logs
   document.querySelectorAll('button[data-action="ping"]').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       const target = (e.target as HTMLElement).closest('article');

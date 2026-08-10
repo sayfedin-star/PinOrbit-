@@ -1,6 +1,7 @@
 import { analyticsDb } from '../db/analytics';
 import { getServerEnv } from '../db/clients';
 import { decryptToken } from '../lib/token-crypto';
+import { getEffectiveSecret } from './webhook-secrets';
 import type {
   ScheduleSyncResponse,
   TriggerSyncResponse,
@@ -273,10 +274,10 @@ export const fastcronService = {
       };
     }
 
-    // X2: Verify CRON_DISPATCH_SECRET is configured before scheduling
-    const envConfig = getServerEnv(runtimeEnv);
-    const cronDispatchSecret = envConfig.CRON_DISPATCH_SECRET;
-    if (!cronDispatchSecret || cronDispatchSecret.trim().length === 0) {
+    // Resolve effective secret before scheduling
+    const effectiveSecretResult = await getEffectiveSecret(workspaceId, runtimeEnv);
+    const effectiveSecret = effectiveSecretResult?.value;
+    if (!effectiveSecret || effectiveSecret.trim().length === 0) {
       const statusField = isAnalytics ? 'analytics_schedule_status' : 'top_pins_schedule_status';
       await analyticsDb.updateWorkspaceConnection(workspaceId, connectionId, {
         [statusField]: 'error',
@@ -286,7 +287,7 @@ export const fastcronService = {
         connection_id: connectionId,
         channel,
         schedule_status: 'error',
-        error: 'CRON_DISPATCH_SECRET is not configured in environment.',
+        error: 'Ingest secret not configured',
       };
     }
 
@@ -313,7 +314,7 @@ export const fastcronService = {
     });
 
     const jobName = `PinOrbit ${isAnalytics ? 'analytics' : 'top-pins'} — ${workspaceId.substring(0, 8)} — ${connection.display_name}`;
-    const httpHeaders = `Content-Type: application/json\r\nx-dispatch-secret: ${cronDispatchSecret}`;
+    const httpHeaders = `Content-Type: application/json\r\nx-ingest-secret: ${effectiveSecret}`;
 
     const jobParams: Record<string, any> = {
       name: jobName,
@@ -692,6 +693,40 @@ export const fastcronService = {
         : SORT_MODES;
     const effectiveNumPins = connection.top_pins_num_of_pins || 50;
 
+    // Per-pipeline date offsets and manual override resolution (V20.1 & R31.1)
+    const startOffset = isAnalytics
+      ? (connection.analytics_start_offset_days ?? 7)
+      : (connection.top_pins_start_offset_days ?? 7);
+    const endOffset = isAnalytics
+      ? (connection.analytics_end_offset_days ?? 1)
+      : (connection.top_pins_end_offset_days ?? 2);
+
+    const fromOverride = overrides?.from_date || overrides?.start_date;
+    const toOverride = overrides?.to_date || overrides?.end_date;
+
+    let startDate: string;
+    let endDate: string;
+
+    if (fromOverride && toOverride) {
+      if (fromOverride >= toOverride) {
+        return {
+          success: false,
+          connection_id: connectionId,
+          channel,
+          mode,
+          error: 'Manual run override Start Date must be strictly before End Date.',
+        };
+      }
+      startDate = fromOverride;
+      endDate = toOverride;
+    } else {
+      const now = new Date();
+      const startDateObj = new Date(now.getTime() - startOffset * 24 * 60 * 60 * 1000);
+      const endDateObj = new Date(now.getTime() - endOffset * 24 * 60 * 60 * 1000);
+      startDate = startDateObj.toISOString().split('T')[0];
+      endDate = endDateObj.toISOString().split('T')[0];
+    }
+
     // If Test Ping mode
     if (mode === 'ping') {
       try {
@@ -700,11 +735,15 @@ export const fastcronService = {
               job_type: 'ping',
               channel: 'account_analytics',
               connection_id: connectionId,
+              start_date: startDate,
+              end_date: endDate,
             }
           : {
               job_type: 'ping',
               channel: 'top_pins',
               connection_id: connectionId,
+              start_date: startDate,
+              end_date: endDate,
               num_of_pins: effectiveNumPins,
               sort_modes: effectiveSortModes,
             };
@@ -733,40 +772,6 @@ export const fastcronService = {
           error: `Ping failed: ${err.message}`,
         };
       }
-    }
-
-    // Per-pipeline date offsets and manual override resolution (V20.1)
-    const startOffset = isAnalytics
-      ? (connection.analytics_start_offset_days ?? 7)
-      : (connection.top_pins_start_offset_days ?? 7);
-    const endOffset = isAnalytics
-      ? (connection.analytics_end_offset_days ?? 1)
-      : (connection.top_pins_end_offset_days ?? 2);
-
-    const fromOverride = overrides?.from_date || overrides?.start_date;
-    const toOverride = overrides?.to_date || overrides?.end_date;
-
-    let startDate: string;
-    let endDate: string;
-
-    if (fromOverride && toOverride) {
-      if (fromOverride >= toOverride) {
-        return {
-          success: false,
-          connection_id: connectionId,
-          channel,
-          mode: 'sync',
-          error: 'Manual run override Start Date must be strictly before End Date.',
-        };
-      }
-      startDate = fromOverride;
-      endDate = toOverride;
-    } else {
-      const now = new Date();
-      const startDateObj = new Date(now.getTime() - startOffset * 24 * 60 * 60 * 1000);
-      const endDateObj = new Date(now.getTime() - endOffset * 24 * 60 * 60 * 1000);
-      startDate = startDateObj.toISOString().split('T')[0];
-      endDate = endDateObj.toISOString().split('T')[0];
     }
 
     const jobId = isAnalytics
