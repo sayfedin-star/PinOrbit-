@@ -121,7 +121,7 @@ async function safeFetch(url: string) {
 
 async function renderS1() {
   const tbody = document.getElementById('daily-metrics-tbody')!;
-  tbody.innerHTML = `<tr><td colspan="6" class="py-12 text-center text-muted-foreground">Loading daily metrics...</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="5" class="py-12 text-center text-muted-foreground">Loading daily metrics...</td></tr>`;
   syncStateToUrl();
 
   document.querySelectorAll('[data-s1-sort]').forEach(th => {
@@ -152,7 +152,7 @@ async function renderS1() {
     document.getElementById('s1-range')!.textContent = total > 0 ? `${start + 1}-${Math.min(start + state.s1Size, total)}` : '0-0';
     
     if (rows.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="12" class="py-12 text-center text-muted-foreground">
+      tbody.innerHTML = `<tr><td colspan="11" class="py-12 text-center text-muted-foreground">
         <p class="mb-2">No daily metrics found.</p>
         <button onclick="document.getElementById('tab-pipe')?.click()" class="text-primary hover:underline font-semibold">Go to Pipeline & Automation to Sync</button>
       </td></tr>`;
@@ -164,8 +164,7 @@ async function renderS1() {
             <td class="py-2.5 px-4 font-mono font-medium">${escapeHtml(asText(d.metric_date))}</td>
             <td class="py-2.5 px-4 text-center">${getStatusBadge(d.data_status)}</td>
             <td class="py-2.5 px-4 text-right">${formatNum(asNumber(d.impressions))}</td>
-            <td class="py-2.5 px-4 text-right">${formatNum(asNumber(d.engagements))}</td>
-            <td class="py-2.5 px-4 text-right">${formatPct(asNumber(d.engagement_rate))}</td>
+            <td class="py-2.5 px-4 text-right">${formatNum(asNumber(d.engagements))} (${formatPct(asNumber(d.engagement_rate))})</td>
             <td class="py-2.5 px-4 text-right">${formatNum(asNumber(d.outbound_clicks))}</td>
             <td class="py-2.5 px-4 text-right">${formatPct(asNumber(d.outbound_click_rate))}</td>
             <td class="py-2.5 px-4 text-right">${formatNum(asNumber(d.pin_clicks))}</td>
@@ -179,7 +178,7 @@ async function renderS1() {
             </td>
           </tr>`;
         } catch (err: any) {
-          return `<tr><td colspan="12" class="py-2 px-4 bg-red-500/10 text-red-500 text-xs font-bold text-center">Row Error: ${escapeHtml(err.message)}</td></tr>`;
+          return `<tr><td colspan="11" class="py-2 px-4 bg-red-500/10 text-red-500 text-xs font-bold text-center">Row Error: ${escapeHtml(err.message)}</td></tr>`;
         }
       }).join('');
     }
@@ -194,8 +193,7 @@ async function renderS1() {
         <td class="py-3 px-4">Totals (Filtered)</td>
         <td class="py-3 px-4 text-center">—</td>
         <td class="py-3 px-4 text-right">${formatNum(totals.impressions)}</td>
-        <td class="py-3 px-4 text-right">${formatNum(totals.engagements)}</td>
-        <td class="py-3 px-4 text-right">${formatPct(pooledEr)}</td>
+        <td class="py-3 px-4 text-right">${formatNum(totals.engagements)} (${formatPct(pooledEr)})</td>
         <td class="py-3 px-4 text-right">${formatNum(totals.outbound_clicks)}</td>
         <td class="py-3 px-4 text-right">${formatPct(pooledOcr)}</td>
         <td class="py-3 px-4 text-right">${formatNum(totals.pin_clicks)}</td>
@@ -213,13 +211,13 @@ async function renderS1() {
     `;
 
   } catch (e: any) {
-    tbody.innerHTML = `<tr><td colspan="6" class="py-12 text-center text-red-500">${escapeHtml(e.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" class="py-12 text-center text-red-500">${escapeHtml(e.message)}</td></tr>`;
   }
 }
 
 async function renderS2() {
   const tbody = document.getElementById('top-pins-tbody')!;
-  tbody.innerHTML = `<tr><td colspan="7" class="py-12 text-center text-muted-foreground">Loading top pins...</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="6" class="py-12 text-center text-muted-foreground">Loading top pins...</td></tr>`;
   syncStateToUrl();
 
   const url = new URL(`/api/analytics/connections/${connectionId}/top-pins`, window.location.origin);
@@ -255,7 +253,7 @@ async function renderS2() {
     document.getElementById('s2-range')!.textContent = total > 0 ? `${start + 1}-${Math.min(start + state.s2Size, total)}` : '0-0';
     
     if (rows.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="9" class="py-12 text-center text-muted-foreground">
+      tbody.innerHTML = `<tr><td colspan="8" class="py-12 text-center text-muted-foreground">
         <p class="mb-2">No top pins snapshots found.</p>
         <button onclick="document.getElementById('tab-pipe')?.click()" class="text-primary hover:underline font-semibold">Go to Pipeline & Automation to Sync</button>
       </td></tr>`;
@@ -283,14 +281,13 @@ async function renderS2() {
             </td>
             <td class="py-3 px-4 text-center">${getStatusBadge(p.data_status)}</td>
             <td class="py-3 px-4 text-right font-medium">${formatNum(asNumber(p.impressions))}</td>
-            <td class="py-3 px-4 text-right font-medium">${formatNum(asNumber(p.engagement))}</td>
-            <td class="py-3 px-4 text-right font-medium">${formatPct(asNumber(p.engagement_rate))}</td>
+            <td class="py-3 px-4 text-right font-medium">${formatNum(asNumber(p.engagement))} (${formatPct(asNumber(p.engagement_rate))})</td>
             <td class="py-3 px-4 text-right font-medium">${formatNum(asNumber(p.outbound_clicks))}</td>
             <td class="py-3 px-4 text-right font-medium">${formatNum(asNumber(p.pin_clicks))}</td>
             <td class="py-3 px-4 text-right font-medium">${formatNum(asNumber(p.saves))}</td>
           </tr>`;
         } catch (err: any) {
-          return `<tr><td colspan="9" class="py-2 px-4 bg-red-500/10 text-red-500 text-xs font-bold text-center">Row Error: ${escapeHtml(err.message)}</td></tr>`;
+          return `<tr><td colspan="8" class="py-2 px-4 bg-red-500/10 text-red-500 text-xs font-bold text-center">Row Error: ${escapeHtml(err.message)}</td></tr>`;
         }
       }).join('');
     }
@@ -302,7 +299,7 @@ async function renderS2() {
     `;
 
   } catch (e: any) {
-    tbody.innerHTML = `<tr><td colspan="7" class="py-12 text-center text-red-500">${escapeHtml(e.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="py-12 text-center text-red-500">${escapeHtml(e.message)}</td></tr>`;
   }
 }
 

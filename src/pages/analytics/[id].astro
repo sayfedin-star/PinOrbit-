@@ -152,7 +152,6 @@ const accountName = connection.display_name || 'Account';
               <th class="py-3 px-4 text-center cursor-pointer hover:text-primary transition-colors select-none" data-s1-sort="data_status">Status <span class="sort-icon"></span></th>
               <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s1-sort="impressions">Impressions <span class="sort-icon"></span></th>
               <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s1-sort="engagements">Engagements <span class="sort-icon"></span></th>
-              <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s1-sort="engagement_rate">Engagement Rate <span class="sort-icon"></span></th>
               <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s1-sort="outbound_clicks">Outbound Clicks <span class="sort-icon"></span></th>
               <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s1-sort="outbound_click_rate">Outbound Click Rate <span class="sort-icon"></span></th>
               <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s1-sort="pin_clicks">Pin Clicks <span class="sort-icon"></span></th>
@@ -164,7 +163,7 @@ const accountName = connection.display_name || 'Account';
           </thead>
           <tbody id="daily-metrics-tbody" class="divide-y divide-border [&>tr:nth-child(even)]:bg-muted/5">
             <tr>
-              <td colspan="6" class="py-12 text-center text-muted-foreground">
+              <td colspan="5" class="py-12 text-center text-muted-foreground">
                 Loading daily metrics...
               </td>
             </tr>
@@ -224,7 +223,6 @@ const accountName = connection.display_name || 'Account';
               <th class="py-3 px-4 text-center">Status</th>
               <th class="py-3 px-4 text-right">Impressions</th>
               <th class="py-3 px-4 text-right">Engagements</th>
-              <th class="py-3 px-4 text-right">Engagement Rate</th>
               <th class="py-3 px-4 text-right">Outbound Clicks</th>
               <th class="py-3 px-4 text-right">Pin Clicks</th>
               <th class="py-3 px-4 text-right">Saves</th>
@@ -232,7 +230,7 @@ const accountName = connection.display_name || 'Account';
           </thead>
           <tbody id="top-pins-tbody" class="divide-y divide-border [&>tr:nth-child(even)]:bg-muted/5">
             <tr>
-              <td colspan="7" class="py-12 text-center text-muted-foreground">
+              <td colspan="6" class="py-12 text-center text-muted-foreground">
                 Loading top pins snapshots...
               </td>
             </tr>

@@ -141,32 +141,40 @@ if (pipeConnId) {
       if (!target) return;
       const isTopPins = target.getAttribute('data-pipeline') === 'top_pins';
       
+      const clampInt = (raw: any, fallback: number, min: number, max: number) => {
+        const n = parseInt(raw, 10);
+        if (isNaN(n)) return fallback;
+        if (n < min) return min;
+        if (n > max) return max;
+        return n;
+      };
+
       const payload: any = {};
       
       if (isTopPins) {
         payload.top_pins_webhook_url = (target.querySelector('[data-field="webhook_url"]') as HTMLInputElement).value;
         payload.top_pins_sync_time = (target.querySelector('[data-field="sync_time"]') as HTMLInputElement).value;
-        payload.top_pins_start_offset_days = parseInt((target.querySelector('[data-field="start_offset"]') as HTMLInputElement).value);
-        payload.top_pins_end_offset_days = parseInt((target.querySelector('[data-field="end_offset"]') as HTMLInputElement).value);
-        payload.top_pins_num_of_pins = parseInt((target.querySelector('[data-field="num_of_pins"]') as HTMLInputElement).value);
+        payload.top_pins_start_offset_days = clampInt((target.querySelector('[data-field="start_offset"]') as HTMLInputElement).value, 7, 1, 90);
+        payload.top_pins_end_offset_days = clampInt((target.querySelector('[data-field="end_offset"]') as HTMLInputElement).value, 2, 0, 60);
+        payload.top_pins_num_of_pins = clampInt((target.querySelector('[data-field="num_of_pins"]') as HTMLInputElement).value, 50, 1, 50);
         
         const modes: string[] = [];
         target.querySelectorAll('[data-mode][aria-pressed="true"]').forEach(b => modes.push(b.getAttribute('data-mode')!));
         payload.top_pins_sort_modes = modes;
 
         const tokenVal = (target.querySelector('[data-field="fastcron_token"]') as HTMLInputElement)?.value;
-        if (tokenVal !== undefined && tokenVal !== '') {
-          payload.top_pins_fastcron_token = tokenVal;
+        if (tokenVal !== undefined && tokenVal.trim().length > 0) {
+          payload.top_pins_fastcron_token = tokenVal.trim();
         }
       } else {
         payload.analytics_webhook_url = (target.querySelector('[data-field="webhook_url"]') as HTMLInputElement).value;
         payload.analytics_sync_time = (target.querySelector('[data-field="sync_time"]') as HTMLInputElement).value;
-        payload.analytics_start_offset_days = parseInt((target.querySelector('[data-field="start_offset"]') as HTMLInputElement).value);
-        payload.analytics_end_offset_days = parseInt((target.querySelector('[data-field="end_offset"]') as HTMLInputElement).value);
+        payload.analytics_start_offset_days = clampInt((target.querySelector('[data-field="start_offset"]') as HTMLInputElement).value, 7, 1, 90);
+        payload.analytics_end_offset_days = clampInt((target.querySelector('[data-field="end_offset"]') as HTMLInputElement).value, 1, 0, 60);
 
         const tokenVal = (target.querySelector('[data-field="fastcron_token"]') as HTMLInputElement)?.value;
-        if (tokenVal !== undefined && tokenVal !== '') {
-          payload.analytics_fastcron_token = tokenVal;
+        if (tokenVal !== undefined && tokenVal.trim().length > 0) {
+          payload.analytics_fastcron_token = tokenVal.trim();
         }
       }
       
@@ -174,8 +182,8 @@ if (pipeConnId) {
       const fc = document.getElementById('fastcron-options-card');
       if (fc) {
         payload.fastcron_notify = (fc.querySelector('[data-field="fastcron_notify"]') as HTMLInputElement).checked;
-        payload.fastcron_timeout = parseInt((fc.querySelector('[data-field="fastcron_timeout"]') as HTMLInputElement).value);
-        payload.fastcron_instances = parseInt((fc.querySelector('[data-field="fastcron_instances"]') as HTMLInputElement).value);
+        payload.fastcron_timeout = clampInt((fc.querySelector('[data-field="fastcron_timeout"]') as HTMLInputElement).value, 30, 5, 60);
+        payload.fastcron_instances = clampInt((fc.querySelector('[data-field="fastcron_instances"]') as HTMLInputElement).value, 1, 0, 5);
       }
       
       try {
