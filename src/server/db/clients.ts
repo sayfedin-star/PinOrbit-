@@ -12,6 +12,7 @@ export interface ServerEnvConfig {
   ANALYTICS_SUPABASE_PUBLISHABLE_KEY: string;
   ANALYTICS_SUPABASE_SECRET_KEY: string;
   INGEST_SECRET_KEY: string;
+  CRON_DISPATCH_SECRET: string;
   SNITCH_WEBHOOK_URL: string;
   FASTCRON_API_TOKEN: string;
 }
@@ -53,6 +54,30 @@ export function getServerEnv(runtimeEnv?: Record<string, any>): ServerEnvConfig 
   const ANALYTICS_SUPABASE_SECRET_KEY = env.ANALYTICS_SUPABASE_SECRET_KEY || '';
 
   const INGEST_SECRET_KEY = env.INGEST_SECRET_KEY || 'pinorbit_ingest_secret_dev';
+
+  // X2: Dev-only fallback for CRON_DISPATCH_SECRET
+  const isProd =
+    (typeof process !== 'undefined' && process.env.NODE_ENV === 'production') ||
+    (typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env.PROD);
+  const isDev = !isProd && Boolean(
+    (typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env.DEV) ||
+    (typeof process !== 'undefined' && process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== undefined)
+  );
+
+  let rawDispatchSecret: string | undefined;
+  if (runtimeEnv && 'CRON_DISPATCH_SECRET' in runtimeEnv) {
+    rawDispatchSecret = runtimeEnv.CRON_DISPATCH_SECRET;
+  } else if (typeof process !== 'undefined' && process.env.CRON_DISPATCH_SECRET !== undefined) {
+    rawDispatchSecret = process.env.CRON_DISPATCH_SECRET;
+  }
+
+  const CRON_DISPATCH_SECRET =
+    rawDispatchSecret !== undefined && rawDispatchSecret.trim().length > 0
+      ? rawDispatchSecret.trim()
+      : isDev
+      ? 'pinorbit_dispatch_secret_dev'
+      : '';
+
   const SNITCH_WEBHOOK_URL = env.SNITCH_WEBHOOK_URL || '';
   const FASTCRON_API_TOKEN = env.FASTCRON_API_TOKEN || '';
 
@@ -67,6 +92,7 @@ export function getServerEnv(runtimeEnv?: Record<string, any>): ServerEnvConfig 
     ANALYTICS_SUPABASE_PUBLISHABLE_KEY,
     ANALYTICS_SUPABASE_SECRET_KEY,
     INGEST_SECRET_KEY,
+    CRON_DISPATCH_SECRET,
     SNITCH_WEBHOOK_URL,
     FASTCRON_API_TOKEN,
   };

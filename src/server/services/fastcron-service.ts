@@ -6,6 +6,7 @@ import type {
 } from '../../lib/types';
 
 export const FASTCRON_BASE = 'https://www.fastcron.com/api/v1';
+export const DISPATCH_ENDPOINT_URL = 'https://pinorbit-v2.o-i.workers.dev/api/internal/pinterest/daily-dispatch';
 
 const ALLOWED_WEBHOOK_HOSTS = [
   'hook.make.com',
@@ -259,6 +260,23 @@ export const fastcronService = {
       };
     }
 
+    // X2: Verify CRON_DISPATCH_SECRET is configured before scheduling
+    const envConfig = getServerEnv(runtimeEnv);
+    const cronDispatchSecret = envConfig.CRON_DISPATCH_SECRET;
+    if (!cronDispatchSecret || cronDispatchSecret.trim().length === 0) {
+      const statusField = isAnalytics ? 'analytics_schedule_status' : 'top_pins_schedule_status';
+      await analyticsDb.updateWorkspaceConnection(workspaceId, connectionId, {
+        [statusField]: 'error',
+      });
+      return {
+        success: false,
+        connection_id: connectionId,
+        channel,
+        schedule_status: 'error',
+        error: 'CRON_DISPATCH_SECRET is not configured in environment.',
+      };
+    }
+
     // R6.1 Reconcile Algorithm Step 1 & 2: Check storedId with cron_get
     let storedId = isAnalytics ? connection.analytics_fastcron_job_id : connection.top_pins_fastcron_job_id;
     let verifiedJobId: number | null = null;
@@ -275,55 +293,32 @@ export const fastcronService = {
       }
     }
 
-    // Prepare FastCron job parameters with per-pipeline offsets (V20.1)
-    const startOffset = isAnalytics
-      ? (connection.analytics_start_offset_days ?? 7)
-      : (connection.top_pins_start_offset_days ?? 7);
-    const endOffset = isAnalytics
-      ? (connection.analytics_end_offset_days ?? 1)
-      : (connection.top_pins_end_offset_days ?? 2);
-
-    const effectiveSortModes =
-      connection.top_pins_sort_modes && connection.top_pins_sort_modes.length > 0
-        ? connection.top_pins_sort_modes
-        : SORT_MODES;
-    const effectiveNumPins = connection.top_pins_num_of_pins || 50;
-
-    const postData = isAnalytics
-      ? JSON.stringify({
-          job_type: 'daily_sync',
-          channel: 'account_analytics',
-          connection_id: connectionId,
-          analytics_start_offset_days: startOffset,
-          analytics_end_offset_days: endOffset,
-        })
-      : JSON.stringify({
-          job_type: 'daily_sync',
-          channel: 'top_pins',
-          connection_id: connectionId,
-          top_pins_start_offset_days: startOffset,
-          top_pins_end_offset_days: endOffset,
-          num_of_pins: effectiveNumPins,
-          sort_modes: effectiveSortModes,
-        });
+    // Prepare FastCron job parameters pointing to daily-dispatch endpoint (F2, X2)
+    const postData = JSON.stringify({
+      connection_id: connectionId,
+      channel: isAnalytics ? 'account_analytics' : 'top_pins',
+    });
 
     const jobName = `PinOrbit ${isAnalytics ? 'analytics' : 'top-pins'} — ${workspaceId.substring(0, 8)} — ${connection.display_name}`;
+    const httpHeaders = `Content-Type: application/json\r\nx-dispatch-secret: ${cronDispatchSecret}`;
 
     const jobParams: Record<string, any> = {
       name: jobName,
       expression: cronValidation.cron,
       timezone: settings?.timezone || 'UTC',
-      url: webhookUrl!,
+      url: DISPATCH_ENDPOINT_URL,
       httpMethod: 'POST',
       http_method: 'POST',
-      httpHeaders: 'Content-Type: application/json',
-      http_headers: 'Content-Type: application/json',
+      httpHeaders: httpHeaders,
+      http_headers: httpHeaders,
       postData: postData,
       post_data: postData,
       instances: connection.fastcron_instances !== undefined ? connection.fastcron_instances : 1,
       notify: connection.fastcron_notify !== undefined ? connection.fastcron_notify : true,
       timeout: connection.fastcron_timeout || 30,
     };
+
+    let batchCreatedOtherId: number | null = null;
 
     if (verifiedJobId) {
       // Step 2 Found: Execute cron_edit
@@ -356,30 +351,27 @@ export const fastcronService = {
 
       if (bothMissing && channel === 'analytics' && connection.top_pins_webhook_url) {
         const cronTopPins = this.parseTimeToCron(connection.top_pins_sync_time || '04:30');
+        const batchPostDataA = JSON.stringify({
+          connection_id: connectionId,
+          channel: 'account_analytics',
+        });
+        const batchPostDataB = JSON.stringify({
+          connection_id: connectionId,
+          channel: 'top_pins',
+        });
+
         const batchItems = [
           {
             name: `PinOrbit analytics — ${workspaceId.substring(0, 8)} — ${connection.display_name}`,
             expression: cronValidation.cron,
             timezone: settings?.timezone || 'UTC',
-            url: webhookUrl!,
+            url: DISPATCH_ENDPOINT_URL,
             httpMethod: 'POST',
             http_method: 'POST',
-            httpHeaders: 'Content-Type: application/json',
-            http_headers: 'Content-Type: application/json',
-            postData: JSON.stringify({
-              job_type: 'daily_sync',
-              channel: 'account_analytics',
-              connection_id: connectionId,
-              analytics_start_offset_days: connection.analytics_start_offset_days ?? 7,
-              analytics_end_offset_days: connection.analytics_end_offset_days ?? 1,
-            }),
-            post_data: JSON.stringify({
-              job_type: 'daily_sync',
-              channel: 'account_analytics',
-              connection_id: connectionId,
-              analytics_start_offset_days: connection.analytics_start_offset_days ?? 7,
-              analytics_end_offset_days: connection.analytics_end_offset_days ?? 1,
-            }),
+            httpHeaders: httpHeaders,
+            http_headers: httpHeaders,
+            postData: batchPostDataA,
+            post_data: batchPostDataA,
             instances: connection.fastcron_instances !== undefined ? connection.fastcron_instances : 1,
             notify: connection.fastcron_notify !== undefined ? connection.fastcron_notify : true,
             timeout: connection.fastcron_timeout || 30,
@@ -388,29 +380,13 @@ export const fastcronService = {
             name: `PinOrbit top-pins — ${workspaceId.substring(0, 8)} — ${connection.display_name}`,
             expression: cronTopPins.cron || '30 4 * * *',
             timezone: settings?.timezone || 'UTC',
-            url: connection.top_pins_webhook_url,
+            url: DISPATCH_ENDPOINT_URL,
             httpMethod: 'POST',
             http_method: 'POST',
-            httpHeaders: 'Content-Type: application/json',
-            http_headers: 'Content-Type: application/json',
-            postData: JSON.stringify({
-              job_type: 'daily_sync',
-              channel: 'top_pins',
-              connection_id: connectionId,
-              top_pins_start_offset_days: connection.top_pins_start_offset_days ?? 7,
-              top_pins_end_offset_days: connection.top_pins_end_offset_days ?? 2,
-              num_of_pins: effectiveNumPins,
-              sort_modes: effectiveSortModes,
-            }),
-            post_data: JSON.stringify({
-              job_type: 'daily_sync',
-              channel: 'top_pins',
-              connection_id: connectionId,
-              top_pins_start_offset_days: connection.top_pins_start_offset_days ?? 7,
-              top_pins_end_offset_days: connection.top_pins_end_offset_days ?? 2,
-              num_of_pins: effectiveNumPins,
-              sort_modes: effectiveSortModes,
-            }),
+            httpHeaders: httpHeaders,
+            http_headers: httpHeaders,
+            postData: batchPostDataB,
+            post_data: batchPostDataB,
             instances: connection.fastcron_instances !== undefined ? connection.fastcron_instances : 1,
             notify: connection.fastcron_notify !== undefined ? connection.fastcron_notify : true,
             timeout: connection.fastcron_timeout || 30,
@@ -471,6 +447,7 @@ export const fastcronService = {
         }
 
         verifiedJobId = idA;
+        batchCreatedOtherId = idB;
 
         // R8.3: Persist channel job id IMMEDIATELY after extraction
         await analyticsDb.updateWorkspaceConnection(workspaceId, connectionId, {
@@ -534,10 +511,12 @@ export const fastcronService = {
       }
     }
 
-    // R8.4 Orphan Cleanup guards (all mandatory):
-    // - Run ONLY when verifiedJobId != null
-    // - Delete ONLY jobs where job.url === CURRENT channel webhook URL AND jId !== verifiedJobId
-    // - NEVER delete jobs whose url equals the OTHER channel's webhook URL
+    // X3: Orphan Cleanup with Strict Cross-Channel Safety
+    // Delete a job ONLY if ALL hold:
+    // 1. url === DISPATCH_ENDPOINT_URL (or legacy channel webhook URL)
+    // 2. postData contains this connection_id
+    // 3. id !== stored analytics_fastcron_job_id
+    // 4. id !== stored top_pins_fastcron_job_id
     if (verifiedJobId != null) {
       try {
         const listRes = await this.fastcronCall('cron_list', { keyword: 'PinOrbit' }, token);
@@ -546,25 +525,29 @@ export const fastcronService = {
           listRes.data?.jobs ||
           (Array.isArray(listRes.data) ? listRes.data : []);
         if (Array.isArray(jobsList)) {
-          const currentWebhookUrl = webhookUrl?.trim();
-          const otherWebhookUrl = (
-            isAnalytics ? connection.top_pins_webhook_url : connection.analytics_webhook_url
-          )?.trim();
+          const storedAnalyticsId = isAnalytics ? verifiedJobId : (batchCreatedOtherId || connection.analytics_fastcron_job_id);
+          const storedTopPinsId = !isAnalytics ? verifiedJobId : (batchCreatedOtherId || connection.top_pins_fastcron_job_id);
 
           for (const job of jobsList) {
             const jobUrl = job.url?.trim();
             const jId = job.id != null ? parseInt(String(job.id), 10) : null;
             if (!jId) continue;
 
-            // Guard 1: NEVER delete jobs whose url equals the OTHER channel's webhook URL
-            if (otherWebhookUrl && jobUrl === otherWebhookUrl) {
-              continue;
-            }
+            const jobPostData =
+              typeof job.postData === 'string'
+                ? job.postData
+                : typeof job.post_data === 'string'
+                ? job.post_data
+                : JSON.stringify(job.postData || job.post_data || '');
 
-            // Guard 2: Delete ONLY jobs where job.url === CURRENT channel webhook URL AND jId !== verifiedJobId
-            if (currentWebhookUrl && jobUrl === currentWebhookUrl && jId !== verifiedJobId) {
+            const isDispatchUrl = jobUrl === DISPATCH_ENDPOINT_URL || jobUrl === webhookUrl?.trim();
+            const matchesConnection = jobPostData.includes(connectionId) || (job.name && job.name.includes(connection.display_name));
+            const isStoredJob = (storedAnalyticsId != null && jId === storedAnalyticsId) ||
+                                (storedTopPinsId != null && jId === storedTopPinsId);
+
+            if (isDispatchUrl && matchesConnection && !isStoredJob) {
               console.log(
-                `[FastCron] Removing orphan duplicate job ${jId} for current channel URL ${currentWebhookUrl}`
+                `[FastCron] Removing orphan duplicate job ${jId} for connection ${connectionId}`
               );
               await this.fastcronCall('cron_delete', { id: jId }, token);
             }

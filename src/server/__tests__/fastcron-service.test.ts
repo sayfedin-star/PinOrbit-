@@ -192,8 +192,14 @@ describe('FastCron Full Service Suite (R6 Reconcile Idempotency & Orphan Cleanup
     expect(mockConn.top_pins_fastcron_job_id).toBe(1002);
     expect(fastcronJobs.length).toBe(2);
 
-    // Simulate an orphan duplicate injected in FastCron by an external or legacy event
-    fastcronJobs.push({ id: 9999, name: 'Orphan Pipeline A duplicate', url: 'https://hook.make.com/pipeline-a', expression: '0 4 * * *' });
+    // Simulate an orphan duplicate injected in FastCron for this connection
+    fastcronJobs.push({
+      id: 9999,
+      name: 'PinOrbit analytics — 00000000 — hymumdotcom duplicate',
+      url: 'https://pinorbit-v2.o-i.workers.dev/api/internal/pinterest/daily-dispatch',
+      postData: JSON.stringify({ connection_id: connectionId, channel: 'account_analytics' }),
+      expression: '0 4 * * *',
+    });
     expect(fastcronJobs.length).toBe(3);
 
     // ==========================================
@@ -363,11 +369,16 @@ describe('FastCron Full Service Suite (R6 Reconcile Idempotency & Orphan Cleanup
     // Job 9991: URL A (orphan A)
     // Job 1002: URL B (verified B)
     // Job 9992: URL B (orphan B)
+    // In FastCron:
+    // Job 1001: URL A (verified A)
+    // Job 9991: URL A (orphan A)
+    // Job 1002: URL B (verified B)
+    // Job 9992: URL B (orphan B)
     let fastcronJobs = [
-      { id: 1001, name: 'Job A Verified', url: urlA, expression: '0 4 * * *' },
-      { id: 9991, name: 'Job A Orphan', url: urlA, expression: '0 4 * * *' },
-      { id: 1002, name: 'Job B Verified', url: urlB, expression: '30 4 * * *' },
-      { id: 9992, name: 'Job B Orphan', url: urlB, expression: '30 4 * * *' },
+      { id: 1001, name: 'matrix-conn Job A Verified', url: urlA, postData: JSON.stringify({ connection_id: connectionId }), expression: '0 4 * * *' },
+      { id: 9991, name: 'matrix-conn Job A Orphan', url: urlA, postData: JSON.stringify({ connection_id: connectionId }), expression: '0 4 * * *' },
+      { id: 1002, name: 'matrix-conn Job B Verified', url: urlB, postData: JSON.stringify({ connection_id: connectionId }), expression: '30 4 * * *' },
+      { id: 9992, name: 'matrix-conn Job B Orphan', url: urlB, postData: JSON.stringify({ connection_id: connectionId }), expression: '30 4 * * *' },
     ];
 
     const deletedIds: number[] = [];
@@ -427,6 +438,93 @@ describe('FastCron Full Service Suite (R6 Reconcile Idempotency & Orphan Cleanup
     expect(fastcronJobs.length).toBe(2); // Exactly 2 jobs remain
 
     fetchSpy.mockRestore();
+  });
+
+  it('F2 & X2: Asserts jobParams url points to daily-dispatch with x-dispatch-secret and postData', async () => {
+    (analyticsDb.getWorkspaceAnalyticsSettings as any).mockResolvedValue({
+      fastcron_token: 'db_token_1234567890',
+    });
+
+    const mockConn: any = {
+      id: connectionId,
+      workspace_id: workspaceId,
+      display_name: 'dispatch-conn',
+      analytics_webhook_url: 'https://hook.make.com/pipeline-a',
+      top_pins_webhook_url: null,
+      analytics_sync_time: '04:00',
+      analytics_schedule_status: 'pending',
+      analytics_fastcron_job_id: null,
+    };
+
+    (analyticsDb.getWorkspaceConnection as any).mockImplementation(async () => ({ ...mockConn }));
+    (analyticsDb.updateWorkspaceConnection as any).mockImplementation(async (_wsId: string, _connId: string, updates: any) => {
+      Object.assign(mockConn, updates);
+      return { ...mockConn };
+    });
+
+    let capturedJobParams: any = null;
+
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((async (url: string, init?: any) => {
+      const endpoint = url.split('/').pop()?.split('?')[0];
+      if (endpoint === 'cron_add' || endpoint === 'cron_edit') {
+        capturedJobParams = JSON.parse(init.body);
+      }
+      return { status: 200, ok: true, json: async () => ({ status: 'OK', id: 7788 }) } as any;
+    }) as any);
+
+    const res = await fastcronService.syncScheduleWithFastCron(
+      workspaceId,
+      connectionId,
+      'analytics',
+      { FASTCRON_API_TOKEN: 'valid_env_token_12345', CRON_DISPATCH_SECRET: 'test_dispatch_sec_123' }
+    );
+
+    expect(res.success).toBe(true);
+    expect(capturedJobParams.url).toBe('https://pinorbit-v2.o-i.workers.dev/api/internal/pinterest/daily-dispatch');
+    expect(capturedJobParams.postData).toBe(JSON.stringify({ connection_id: connectionId, channel: 'account_analytics' }));
+    expect(capturedJobParams.httpHeaders).toContain('x-dispatch-secret: test_dispatch_sec_123');
+
+    fetchSpy.mockRestore();
+  });
+
+  it('X2: Missing CRON_DISPATCH_SECRET in environment causes sync to fail with schedule_status error', async () => {
+    const prevEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+
+    (analyticsDb.getWorkspaceAnalyticsSettings as any).mockResolvedValue({
+      fastcron_token: 'db_token_1234567890',
+    });
+
+    const mockConn: any = {
+      id: connectionId,
+      workspace_id: workspaceId,
+      display_name: 'missing-secret-conn',
+      analytics_webhook_url: 'https://hook.make.com/pipeline-a',
+      top_pins_webhook_url: null,
+      analytics_sync_time: '04:00',
+      analytics_schedule_status: 'pending',
+      analytics_fastcron_job_id: null,
+    };
+
+    (analyticsDb.getWorkspaceConnection as any).mockImplementation(async () => ({ ...mockConn }));
+    (analyticsDb.updateWorkspaceConnection as any).mockImplementation(async (_wsId: string, _connId: string, updates: any) => {
+      Object.assign(mockConn, updates);
+      return { ...mockConn };
+    });
+
+    const res = await fastcronService.syncScheduleWithFastCron(
+      workspaceId,
+      connectionId,
+      'analytics',
+      { FASTCRON_API_TOKEN: 'valid_env_token_12345', CRON_DISPATCH_SECRET: '' }
+    );
+
+    expect(res.success).toBe(false);
+    expect(res.schedule_status).toBe('error');
+    expect(res.error).toContain('CRON_DISPATCH_SECRET is not configured');
+    expect(mockConn.analytics_schedule_status).toBe('error');
+
+    process.env.NODE_ENV = prevEnv;
   });
 
   it('R9.4: Simulated Channel A FastCron failure leaves Channel B status and jobs completely untouched', async () => {
