@@ -16,6 +16,8 @@ import { GET as getSettings, POST as postSettings } from '../../pages/api/analyt
 import { GET as getTimeseries } from '../../pages/api/analytics/timeseries';
 import { GET as getTopPins } from '../../pages/api/analytics/top-pins';
 import { POST as postTriggerSync } from '../../pages/api/analytics/trigger-sync';
+import { POST as postDailyDispatch } from '../../pages/api/internal/pinterest/daily-dispatch';
+import { POST as postIngest } from '../../pages/api/internal/pinterest/ingest';
 
 vi.mock('../../server/auth/workspace-guard', () => ({
   assertWorkspaceAccess: vi.fn().mockResolvedValue({
@@ -63,6 +65,13 @@ vi.mock('../../server/db/analytics', () => ({
     getRankedTopPins: vi.fn().mockResolvedValue([]),
     getTopPinsForConnection: vi.fn().mockResolvedValue([]),
     listIngestionRuns: vi.fn().mockResolvedValue([]),
+    createIngestionRun: vi.fn().mockResolvedValue({ id: 'run-1' }),
+    updateIngestionRun: vi.fn().mockResolvedValue({ id: 'run-1' }),
+    completeIngestionRun: vi.fn().mockResolvedValue({ id: 'run-1' }),
+    failIngestionRun: vi.fn().mockResolvedValue({ id: 'run-1' }),
+    updateConnectionLastSync: vi.fn().mockResolvedValue({}),
+    upsertAccountDailyMetrics: vi.fn().mockResolvedValue({}),
+    recomputeWorkspaceSummaries: vi.fn().mockResolvedValue({}),
     getWorkspaceAnalyticsSettings: vi.fn().mockResolvedValue({
       workspace_id: '9f08ca03-e79c-46fa-9518-6858216daf65',
       timezone: 'UTC',
@@ -228,8 +237,16 @@ describe('R12/R15 Full 17-Endpoint Route Verification Suite', () => {
     const r21 = await postTriggerSync({ request: new Request('http://localhost/api/analytics/trigger-sync', { method: 'POST', body: JSON.stringify({ connection_id: connId, channel: 'top_pins', mode: 'sync' }) }), locals } as any);
     results.push({ endpoint: '/api/analytics/trigger-sync', method: 'POST', status: r21.status, contentType: r21.headers.get('content-type') || '' });
 
+    // 22. POST /api/internal/pinterest/daily-dispatch
+    const r22 = await postDailyDispatch({ request: new Request('http://localhost/api/internal/pinterest/daily-dispatch', { method: 'POST', headers: { 'x-dispatch-secret': 'test_sec' }, body: JSON.stringify({ connection_id: connId, channel: 'account_analytics' }) }), locals: { runtimeEnv: { CRON_DISPATCH_SECRET: 'test_sec' } } } as any);
+    results.push({ endpoint: '/api/internal/pinterest/daily-dispatch', method: 'POST', status: r22.status, contentType: r22.headers.get('content-type') || '' });
+
+    // 23. POST /api/internal/pinterest/ingest
+    const r23 = await postIngest({ request: new Request('http://localhost/api/internal/pinterest/ingest', { method: 'POST', headers: { 'x-ingest-secret': 'test_sec' }, body: JSON.stringify({ connection_id: connId, channel: 'account_analytics', success: true, request_id: 'req1', account_analytics: {} }) }), locals: { runtimeEnv: { INGEST_SECRET_KEY: 'test_sec' } } } as any);
+    results.push({ endpoint: '/api/internal/pinterest/ingest', method: 'POST', status: r23.status, contentType: r23.headers.get('content-type') || '' });
+
     // Verify all returned application/json and NO text/html
-    console.log('\n--- 17-ROUTE VERIFICATION TABLE ---');
+    console.log('\n--- 23-ROUTE VERIFICATION TABLE ---');
     console.table(results);
     expect(results.length).toBeGreaterThanOrEqual(17);
     for (const res of results) {
