@@ -44,6 +44,18 @@ describe('Data Purge Suite (V27)', () => {
   });
 
   describe('GET /api/analytics/connections/[id]/purge-preview', () => {
+    it('returns 401 when unauthenticated', async () => {
+      const res = await getPurgePreviewHandler({
+        params: { id: connectionId },
+        request: new Request('http://localhost/api/analytics/connections/conn-uuid-12345/purge-preview?from=2026-08-01&to=2026-08-05&targets=daily'),
+        locals: {},
+      } as any);
+
+      expect(res.status).toBe(401);
+      const json = await res.json();
+      expect(json.error).toContain('Unauthorized');
+    });
+
     it('returns 403 when user is not owner/admin', async () => {
       (assertWorkspaceAccess as any).mockResolvedValue({
         id: 'mem-2',
@@ -156,6 +168,26 @@ describe('Data Purge Suite (V27)', () => {
   });
 
   describe('POST /api/analytics/connections/[id]/purge', () => {
+    it('returns 401 when unauthenticated', async () => {
+      const res = await postPurgeHandler({
+        params: { id: connectionId },
+        request: new Request('http://localhost/api/analytics/connections/conn-uuid-12345/purge', {
+          method: 'POST',
+          body: JSON.stringify({
+            from_date: '2026-08-01',
+            to_date: '2026-08-05',
+            targets: ['daily'],
+            confirm_name: displayName,
+          }),
+        }),
+        locals: {},
+      } as any);
+
+      expect(res.status).toBe(401);
+      const json = await res.json();
+      expect(json.error).toContain('Unauthorized');
+    });
+
     it('returns 422 if confirmation name does not match display name', async () => {
       const locals = { user: { id: 'u1' }, supabase: {}, activeWorkspaceId: workspaceId };
       const res = await postPurgeHandler({

@@ -19,7 +19,7 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
     return new Response(
       JSON.stringify({ success: false, error: 'Unauthorized: authentication required.' }),
       {
-        status: 200,
+        status: 401,
         headers: { 'Content-Type': 'application/json' },
       }
     );
