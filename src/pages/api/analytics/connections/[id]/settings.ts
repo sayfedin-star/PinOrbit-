@@ -83,9 +83,13 @@ export const GET: APIRoute = async ({ params, locals }) => {
         'PIN_CLICK',
       ],
       has_fastcron_token: Boolean(connection.fastcron_token && connection.fastcron_token.trim().length >= 16),
+      token_fingerprint: connection.fastcron_token && connection.fastcron_token.trim().length >= 16 
+        ? '••••' + connection.fastcron_token.trim().slice(-4) 
+        : null,
       fastcron_notify: connection.fastcron_notify ?? true,
       fastcron_timeout: connection.fastcron_timeout ?? 30,
       fastcron_instances: connection.fastcron_instances ?? 1,
+      health: await analyticsDb.getConnectionHealth(connection.id),
     };
 
     return new Response(JSON.stringify({ success: true, data: responseData }), {
@@ -457,9 +461,13 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
         'PIN_CLICK',
       ],
       has_fastcron_token: Boolean(updated.fastcron_token && updated.fastcron_token.trim().length >= 16),
+      token_fingerprint: updated.fastcron_token && updated.fastcron_token.trim().length >= 16 
+        ? '••••' + updated.fastcron_token.trim().slice(-4) 
+        : null,
       fastcron_notify: updated.fastcron_notify ?? true,
       fastcron_timeout: updated.fastcron_timeout ?? 30,
       fastcron_instances: updated.fastcron_instances ?? 1,
+      health: await analyticsDb.getConnectionHealth(updated.id),
     };
 
     return new Response(JSON.stringify({ success: true, data: responseData }), {

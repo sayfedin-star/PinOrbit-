@@ -1,11 +1,35 @@
 const pipelineConnectionEl = document.querySelector('[data-connection-id]');
 const pipeConnId = pipelineConnectionEl?.getAttribute('data-connection-id');
 
+function showInlineError(target: HTMLElement, message: string) {
+  let errEl = target.querySelector('.inline-error');
+  if (!errEl) {
+    errEl = document.createElement('div');
+    errEl.className = 'inline-error mt-4 rounded-md bg-red-500/10 p-3 text-sm text-red-500 border border-red-500/20';
+    target.appendChild(errEl);
+  }
+  errEl.textContent = message;
+  setTimeout(() => errEl?.remove(), 5000);
+}
+
 if (pipeConnId) {
   // Fetch settings for Tab 2
   async function loadPipelineSettings() {
     try {
-      const res = await fetch(`/api/internal/analytics/connections/${pipeConnId}/settings`);
+      const res = await fetch(`/api/analytics/connections/${pipeConnId}/settings`);
+      const contentType = res.headers.get('content-type');
+      if (!res.ok) {
+        let msg = 'Failed to load';
+        try {
+          if (contentType?.includes('application/json')) {
+            const err = await res.json();
+            msg = err.error || msg;
+          } else {
+            msg = await res.text();
+          }
+        } catch(e) {}
+        throw new Error(`HTTP ${res.status}: ${msg}`);
+      }
       const { data } = await res.json();
       
       const pA = document.querySelector('[data-pipeline="analytics"]');
@@ -47,14 +71,19 @@ if (pipeConnId) {
         (fc.querySelector('[data-field="fastcron_instances"]') as HTMLInputElement).value = data.fastcron_instances ?? 1;
       }
       
-      // Update health banner
-      document.getElementById('health-total-runs')!.textContent = data.total_runs ?? '--';
-      document.getElementById('health-consecutive-failures')!.textContent = data.consecutive_failures ?? '--';
-      document.getElementById('health-last-success')!.textContent = data.last_success_at ? new Date(data.last_success_at).toLocaleString() : '--';
-      document.getElementById('health-status-chip')!.textContent = data.revoked_at ? 'Revoked' : 'Active';
+      // Update health banner if health exists
+      if (data.health) {
+        document.getElementById('health-total-runs')!.textContent = data.health.total_runs ?? '--';
+        document.getElementById('health-consecutive-failures')!.textContent = data.health.consecutive_failures ?? '--';
+        document.getElementById('health-last-success')!.textContent = data.health.last_success_at ? new Date(data.health.last_success_at).toLocaleString() : '--';
+        document.getElementById('health-status-chip')!.textContent = data.health.revoked ? 'Revoked' : 'Active';
+      }
       
-    } catch (e) {
+    } catch (e: any) {
       console.error('Failed to load settings', e);
+      // Optional: show a banner at the top of the container
+      const container = document.getElementById('pipeline-settings-container');
+      if (container) showInlineError(container, e.message);
     }
   }
 
@@ -95,7 +124,10 @@ if (pipeConnId) {
       
       try {
         btn.textContent = 'Saving...';
-        const res = await fetch(`/api/internal/analytics/connections/${pipeConnId}/settings`, {
+        const targetErr = target.querySelector('.inline-error');
+        if (targetErr) targetErr.remove();
+
+        const res = await fetch(`/api/analytics/connections/${pipeConnId}/settings`, {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify(payload)
@@ -105,12 +137,19 @@ if (pipeConnId) {
           setTimeout(() => btn.textContent = 'Save Settings', 2000);
           loadPipelineSettings();
         } else {
-          const err = await res.json();
-          alert('Failed to save: ' + err.error);
+          const contentType = res.headers.get('content-type');
+          let msg = 'Failed to save';
+          if (contentType?.includes('application/json')) {
+            const err = await res.json();
+            msg = err.error || msg;
+          } else {
+            msg = await res.text();
+          }
+          showInlineError(target, `HTTP ${res.status}: ${msg}`);
           btn.textContent = 'Save Settings';
         }
-      } catch (err) {
-        alert('Network error');
+      } catch (err: any) {
+        showInlineError(target, err.message || 'Network error');
         btn.textContent = 'Save Settings';
       }
     });

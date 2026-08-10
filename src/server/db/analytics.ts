@@ -206,6 +206,63 @@ export const analyticsDb = {
     return data.every((r) => r.status === 'failed');
   },
 
+  /**
+   * Computes operational health metrics for a connection.
+   */
+  async getConnectionHealth(
+    connectionId: string
+  ): Promise<{
+    total_runs: number;
+    consecutive_failures: number;
+    last_success_at: string | null;
+    revoked: boolean;
+  }> {
+    if (!connectionId) return { total_runs: 0, consecutive_failures: 0, last_success_at: null, revoked: false };
+
+    const analyticsClient = dbClients.getAnalytics();
+    
+    // Total runs
+    const { count, error: countErr } = await analyticsClient
+      .from('analytics_ingestion_runs')
+      .select('id', { count: 'exact', head: true })
+      .eq('connection_id', connectionId);
+
+    // Recent runs to compute consecutive failures & last success
+    const { data: runs, error: runErr } = await analyticsClient
+      .from('analytics_ingestion_runs')
+      .select('status, started_at')
+      .eq('connection_id', connectionId)
+      .order('started_at', { ascending: false })
+      .limit(50);
+
+    let consecutive_failures = 0;
+    let last_success_at: string | null = null;
+    let revoked = false;
+
+    if (runs && runs.length > 0) {
+      for (const run of runs) {
+        if (run.status === 'completed') {
+          last_success_at = run.started_at;
+          break;
+        } else if (run.status === 'failed') {
+          consecutive_failures++;
+        }
+      }
+      
+      // If the 3 most recent are failed, consider it revoked
+      if (consecutive_failures >= 3) {
+        revoked = true;
+      }
+    }
+
+    return {
+      total_runs: count || 0,
+      consecutive_failures,
+      last_success_at,
+      revoked,
+    };
+  },
+
   // ============================================================================
   // Project 3 Ingestion Upserts (Strict Zero-Sum & Clean Upserts)
   // ============================================================================

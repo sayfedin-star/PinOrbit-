@@ -14,8 +14,7 @@ function escapeHtml(str: string | null | undefined): string {
     .replace(/'/g, "&#039;");
 }
 
-let allDailyData: any[] = [];
-let allTopPins: any[] = [];
+function formatNum(n: number) { return new Intl.NumberFormat('en-US').format(n || 0); }
 
 // State
 const state = {
@@ -32,46 +31,49 @@ const state = {
   s2Query: '',
   
   from: '',
-  to: ''
+  to: '',
+  tab: 'data'
 };
 
 // URL Sync
 function syncStateToUrl() {
   const p = new URLSearchParams();
-  if (state.s1Page > 1) p.set('s1_p', String(state.s1Page));
-  if (state.s1Size !== 25) p.set('s1_s', String(state.s1Size));
+  if (state.s1Page > 1) p.set('s1_page', String(state.s1Page));
+  if (state.s1Size !== 25) p.set('s1_ps', String(state.s1Size));
   if (state.s1Sort !== 'metric_date') p.set('s1_sort', state.s1Sort);
-  if (!state.s1Desc) p.set('s1_asc', '1');
+  if (!state.s1Desc) p.set('s1_dir', 'asc');
 
-  if (state.s2Page > 1) p.set('s2_p', String(state.s2Page));
-  if (state.s2Size !== 25) p.set('s2_s', String(state.s2Size));
+  if (state.s2Page > 1) p.set('s2_page', String(state.s2Page));
+  if (state.s2Size !== 25) p.set('s2_ps', String(state.s2Size));
   if (state.s2Mode !== 'IMPRESSION') p.set('s2_mode', state.s2Mode);
   if (state.s2Sort !== 'rank_position') p.set('s2_sort', state.s2Sort);
-  if (state.s2Desc) p.set('s2_desc', '1');
+  if (state.s2Desc) p.set('s2_dir', 'desc');
   if (state.s2Query) p.set('s2_q', state.s2Query);
   
   if (state.from) p.set('from', state.from);
   if (state.to) p.set('to', state.to);
+  if (state.tab !== 'data') p.set('tab', state.tab);
   
   window.history.replaceState(null, '', '?' + p.toString() + window.location.hash);
 }
 
 function loadStateFromUrl() {
   const p = new URLSearchParams(window.location.search);
-  state.s1Page = Number(p.get('s1_p')) || 1;
-  state.s1Size = Number(p.get('s1_s')) || 25;
+  state.s1Page = Number(p.get('s1_page')) || 1;
+  state.s1Size = Number(p.get('s1_ps')) || 25;
   state.s1Sort = p.get('s1_sort') || 'metric_date';
-  state.s1Desc = p.get('s1_asc') !== '1';
+  state.s1Desc = p.get('s1_dir') !== 'asc';
 
-  state.s2Page = Number(p.get('s2_p')) || 1;
-  state.s2Size = Number(p.get('s2_s')) || 25;
+  state.s2Page = Number(p.get('s2_page')) || 1;
+  state.s2Size = Number(p.get('s2_ps')) || 25;
   state.s2Mode = p.get('s2_mode') || 'IMPRESSION';
   state.s2Sort = p.get('s2_sort') || 'rank_position';
-  state.s2Desc = p.get('s2_desc') === '1';
+  state.s2Desc = p.get('s2_dir') === 'desc';
   state.s2Query = p.get('s2_q') || '';
   
   state.from = p.get('from') || '';
   state.to = p.get('to') || '';
+  state.tab = p.get('tab') || 'data';
 
   // Update UI inputs
   (document.getElementById('s1-ps') as HTMLSelectElement).value = String(state.s1Size);
@@ -88,171 +90,184 @@ function loadStateFromUrl() {
       b.className = 'mode-tab rounded-lg px-3 py-1 text-xs font-semibold text-muted-foreground transition-all hover:text-foreground';
     }
   });
+
+  // Activate tab
+  if (state.tab === 'pipeline') {
+    document.getElementById('tab-pipe')?.click();
+  }
 }
 
-function formatNum(n: number) { return new Intl.NumberFormat('en-US').format(n || 0); }
+async function safeFetch(url: string) {
+  const res = await fetch(url);
+  const contentType = res.headers.get('content-type');
+  if (!res.ok || !contentType?.includes('application/json')) {
+    let message = 'Unknown error';
+    try {
+      if (contentType?.includes('application/json')) {
+        const err = await res.json();
+        message = err.error || message;
+      } else {
+        message = await res.text();
+      }
+    } catch (e) {}
+    throw new Error(`HTTP ${res.status}: ${message}`);
+  }
+  return res.json();
+}
 
-function renderS1() {
+async function renderS1() {
   const tbody = document.getElementById('daily-metrics-tbody')!;
-  let data = [...allDailyData];
-  
-  if (state.from) data = data.filter(d => d.metric_date >= state.from);
-  if (state.to) data = data.filter(d => d.metric_date <= state.to);
-  
-  data.sort((a, b) => {
-    let valA = a[state.s1Sort];
-    let valB = b[state.s1Sort];
-    if (valA < valB) return state.s1Desc ? 1 : -1;
-    if (valA > valB) return state.s1Desc ? -1 : 1;
-    return 0;
-  });
-  
+  tbody.innerHTML = `<tr><td colspan="6" class="py-12 text-center text-muted-foreground">Loading daily metrics...</td></tr>`;
+  syncStateToUrl();
+
   document.querySelectorAll('[data-s1-sort]').forEach(th => {
     const s = th.getAttribute('data-s1-sort');
     th.querySelector('.sort-icon')!.textContent = s === state.s1Sort ? (state.s1Desc ? '↓' : '↑') : '';
   });
 
-  const total = data.length;
-  document.getElementById('s1-total')!.textContent = String(total);
-  const maxPage = Math.ceil(total / state.s1Size) || 1;
-  if (state.s1Page > maxPage) state.s1Page = maxPage;
-  
-  const start = (state.s1Page - 1) * state.s1Size;
-  const pageData = data.slice(start, start + state.s1Size);
-  
-  document.getElementById('s1-range')!.textContent = total > 0 ? `${start + 1}-${Math.min(start + state.s1Size, total)}` : '0-0';
-  
-  if (pageData.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" class="py-12 text-center text-muted-foreground">No data found</td></tr>`;
-  } else {
-    tbody.innerHTML = pageData.map(d => `
-      <tr class="hover:bg-muted/10 transition-colors">
-        <td class="py-2.5 px-4 font-mono font-medium">${d.metric_date}</td>
-        <td class="py-2.5 px-4 text-right">${formatNum(d.impressions)}</td>
-        <td class="py-2.5 px-4 text-right">${formatNum(d.engagements)}</td>
-        <td class="py-2.5 px-4 text-right">${formatNum(d.outbound_clicks)}</td>
-        <td class="py-2.5 px-4 text-right">${formatNum(d.pin_clicks)}</td>
-        <td class="py-2.5 px-4 text-right">${formatNum(d.saves)}</td>
+  const url = new URL(`/api/analytics/connections/${connectionId}/daily`, window.location.origin);
+  url.searchParams.set('page', String(state.s1Page));
+  url.searchParams.set('page_size', String(state.s1Size));
+  url.searchParams.set('sort', state.s1Sort);
+  url.searchParams.set('dir', state.s1Desc ? 'desc' : 'asc');
+  if (state.from) url.searchParams.set('from_date', state.from);
+  if (state.to) url.searchParams.set('to_date', state.to);
+
+  try {
+    const { data } = await safeFetch(url.toString());
+    const { rows, total, totals } = data;
+
+    document.getElementById('s1-total')!.textContent = String(total);
+    const maxPage = Math.ceil(total / state.s1Size) || 1;
+    if (state.s1Page > maxPage && maxPage > 0) {
+      state.s1Page = maxPage;
+      return renderS1();
+    }
+    
+    const start = (state.s1Page - 1) * state.s1Size;
+    document.getElementById('s1-range')!.textContent = total > 0 ? `${start + 1}-${Math.min(start + state.s1Size, total)}` : '0-0';
+    
+    if (rows.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6" class="py-12 text-center text-muted-foreground">No data found</td></tr>`;
+    } else {
+      tbody.innerHTML = rows.map((d: any) => `
+        <tr class="hover:bg-muted/10 transition-colors">
+          <td class="py-2.5 px-4 font-mono font-medium">${d.metric_date}</td>
+          <td class="py-2.5 px-4 text-right">${formatNum(d.impressions)}</td>
+          <td class="py-2.5 px-4 text-right">${formatNum(d.engagements)}</td>
+          <td class="py-2.5 px-4 text-right">${formatNum(d.outbound_clicks)}</td>
+          <td class="py-2.5 px-4 text-right">${formatNum(d.pin_clicks)}</td>
+          <td class="py-2.5 px-4 text-right">${formatNum(d.saves)}</td>
+        </tr>
+      `).join('');
+    }
+    
+    document.getElementById('daily-metrics-tfoot')!.innerHTML = `
+      <tr>
+        <td class="py-3 px-4">Totals (Filtered)</td>
+        <td class="py-3 px-4 text-right">${formatNum(totals.impressions)}</td>
+        <td class="py-3 px-4 text-right">${formatNum(totals.engagements)}</td>
+        <td class="py-3 px-4 text-right">${formatNum(totals.outbound_clicks)}</td>
+        <td class="py-3 px-4 text-right">${formatNum(totals.pin_clicks)}</td>
+        <td class="py-3 px-4 text-right">${formatNum(totals.saves)}</td>
       </tr>
-    `).join('');
+    `;
+    
+    const btnDiv = document.getElementById('s1-page-buttons')!;
+    btnDiv.innerHTML = `
+      <button class="px-2 py-1 rounded bg-muted/40 hover:bg-muted disabled:opacity-50" ${state.s1Page === 1 ? 'disabled' : ''} onclick="goS1(${state.s1Page - 1})">Prev</button>
+      <button class="px-2 py-1 rounded bg-muted/40 hover:bg-muted disabled:opacity-50" ${state.s1Page >= maxPage ? 'disabled' : ''} onclick="goS1(${state.s1Page + 1})">Next</button>
+    `;
+
+  } catch (e: any) {
+    tbody.innerHTML = `<tr><td colspan="6" class="py-12 text-center text-red-500">${escapeHtml(e.message)}</td></tr>`;
   }
-  
-  // Tfoot
-  const sums = data.reduce((acc, d) => {
-    acc.imp += (d.impressions || 0);
-    acc.eng += (d.engagements || 0);
-    acc.out += (d.outbound_clicks || 0);
-    acc.pin += (d.pin_clicks || 0);
-    acc.sav += (d.saves || 0);
-    return acc;
-  }, {imp:0, eng:0, out:0, pin:0, sav:0});
-  
-  document.getElementById('daily-metrics-tfoot')!.innerHTML = `
-    <tr>
-      <td class="py-3 px-4">Totals (Filtered)</td>
-      <td class="py-3 px-4 text-right">${formatNum(sums.imp)}</td>
-      <td class="py-3 px-4 text-right">${formatNum(sums.eng)}</td>
-      <td class="py-3 px-4 text-right">${formatNum(sums.out)}</td>
-      <td class="py-3 px-4 text-right">${formatNum(sums.pin)}</td>
-      <td class="py-3 px-4 text-right">${formatNum(sums.sav)}</td>
-    </tr>
-  `;
-  
-  // Paginator
-  const btnDiv = document.getElementById('s1-page-buttons')!;
-  btnDiv.innerHTML = `
-    <button class="px-2 py-1 rounded bg-muted/40 hover:bg-muted disabled:opacity-50" ${state.s1Page === 1 ? 'disabled' : ''} onclick="goS1(${state.s1Page - 1})">Prev</button>
-    <button class="px-2 py-1 rounded bg-muted/40 hover:bg-muted disabled:opacity-50" ${state.s1Page >= maxPage ? 'disabled' : ''} onclick="goS1(${state.s1Page + 1})">Next</button>
-  `;
-  
-  syncStateToUrl();
 }
 
-function renderS2() {
+async function renderS2() {
   const tbody = document.getElementById('top-pins-tbody')!;
-  let data = allTopPins.filter(p => p.sort_by === state.s2Mode);
-  
-  if (state.from) data = data.filter(d => d.window_end >= state.from);
-  if (state.to) data = data.filter(d => d.window_start <= state.to); // Overlap logic
-  
-  // Latest Window filter
-  const windowGroups = new Map();
-  for (const d of data) {
-    if (!windowGroups.has(d.pin_id) || windowGroups.get(d.pin_id).window_end < d.window_end) {
-      windowGroups.set(d.pin_id, d);
-    }
-  }
-  data = Array.from(windowGroups.values());
-  
-  if (state.s2Query) {
-    const q = state.s2Query.toLowerCase();
-    data = data.filter(d => 
-      String(d.pin_id).toLowerCase().includes(q) || 
-      (d.title && String(d.title).toLowerCase().includes(q))
-    );
-  }
-  
-  data.sort((a, b) => {
-    let valA = a[state.s2Sort];
-    let valB = b[state.s2Sort];
-    if (valA < valB) return state.s2Desc ? 1 : -1;
-    if (valA > valB) return state.s2Desc ? -1 : 1;
-    return 0;
-  });
-  
+  tbody.innerHTML = `<tr><td colspan="7" class="py-12 text-center text-muted-foreground">Loading top pins...</td></tr>`;
+  syncStateToUrl();
+
   document.querySelectorAll('[data-s2-sort]').forEach(th => {
     const s = th.getAttribute('data-s2-sort');
     th.querySelector('.sort-icon')!.textContent = s === state.s2Sort ? (state.s2Desc ? '↓' : '↑') : '';
   });
 
-  const total = data.length;
-  document.getElementById('s2-total')!.textContent = String(total);
-  const maxPage = Math.ceil(total / state.s2Size) || 1;
-  if (state.s2Page > maxPage) state.s2Page = maxPage;
-  
-  const start = (state.s2Page - 1) * state.s2Size;
-  const pageData = data.slice(start, start + state.s2Size);
-  
-  document.getElementById('s2-range')!.textContent = total > 0 ? `${start + 1}-${Math.min(start + state.s2Size, total)}` : '0-0';
-  
-  if (pageData.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7" class="py-12 text-center text-muted-foreground">No pins found</td></tr>`;
-  } else {
-    tbody.innerHTML = pageData.map(p => {
-      const title = escapeHtml(p.title) || 'Untitled Pin';
-      const destUrl = escapeHtml(p.destination_url);
-      const img = escapeHtml(p.image_url) || FALLBACK_IMG;
-      
-      return `
-      <tr class="hover:bg-muted/10 transition-colors">
-        <td class="py-2.5 px-4 text-center font-bold text-muted-foreground">#${p.rank_position}</td>
-        <td class="py-2.5 px-4">
-          <div class="flex items-center gap-3">
-            <div class="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-border/50 shadow-sm bg-muted">
-              <img src="${img}" class="h-full w-full object-cover" loading="lazy" />
+  const url = new URL(`/api/analytics/connections/${connectionId}/top-pins`, window.location.origin);
+  url.searchParams.set('sort_by', state.s2Mode);
+  url.searchParams.set('page', String(state.s2Page));
+  url.searchParams.set('page_size', String(state.s2Size));
+  url.searchParams.set('sort', state.s2Sort);
+  url.searchParams.set('dir', state.s2Desc ? 'desc' : 'asc');
+  if (state.s2Query) url.searchParams.set('q', state.s2Query);
+  if (state.from) url.searchParams.set('from_date', state.from);
+  if (state.to) url.searchParams.set('to_date', state.to);
+
+  try {
+    const { data } = await safeFetch(url.toString());
+    const { rows, total, window } = data;
+
+    if (window) {
+      document.getElementById('s2-window-badge')!.innerHTML = `
+        <span class="rounded-full bg-muted/50 px-2 py-0.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+          Window: ${window.start} — ${window.end}
+        </span>
+      `;
+    } else {
+      document.getElementById('s2-window-badge')!.innerHTML = '';
+    }
+
+    document.getElementById('s2-total')!.textContent = String(total);
+    const maxPage = Math.ceil(total / state.s2Size) || 1;
+    if (state.s2Page > maxPage && maxPage > 0) {
+      state.s2Page = maxPage;
+      return renderS2();
+    }
+    
+    const start = (state.s2Page - 1) * state.s2Size;
+    document.getElementById('s2-range')!.textContent = total > 0 ? `${start + 1}-${Math.min(start + state.s2Size, total)}` : '0-0';
+    
+    if (rows.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="7" class="py-12 text-center text-muted-foreground">No pins found</td></tr>`;
+    } else {
+      tbody.innerHTML = rows.map((p: any) => {
+        const title = escapeHtml(p.title) || 'Untitled Pin';
+        const destUrl = escapeHtml(p.destination_url);
+        const img = escapeHtml(p.image_url) || FALLBACK_IMG;
+        
+        return `
+        <tr class="hover:bg-muted/10 transition-colors">
+          <td class="py-2.5 px-4 text-center font-bold text-muted-foreground">#${p.rank_position}</td>
+          <td class="py-2.5 px-4">
+            <div class="flex items-center gap-3">
+              <div class="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-border/50 shadow-sm bg-muted">
+                <img src="${img}" class="h-full w-full object-cover" loading="lazy" />
+              </div>
+              <div class="flex flex-col truncate min-w-0">
+                <span class="font-semibold truncate text-foreground/90">${title}</span>
+                ${destUrl ? `<a href="${destUrl}" target="_blank" class="text-[10px] text-blue-500 hover:underline truncate">Link</a>` : '<span class="text-[10px] text-muted-foreground">No Link</span>'}
+              </div>
             </div>
-            <div class="flex flex-col truncate min-w-0">
-              <span class="font-semibold truncate text-foreground/90">${title}</span>
-              ${destUrl ? `<a href="${destUrl}" target="_blank" class="text-[10px] text-blue-500 hover:underline truncate">Link</a>` : '<span class="text-[10px] text-muted-foreground">No Link</span>'}
-            </div>
-          </div>
-        </td>
-        <td class="py-2.5 px-4 text-right">${formatNum(p.impressions)}</td>
-        <td class="py-2.5 px-4 text-right">${formatNum(p.engagement)}</td>
-        <td class="py-2.5 px-4 text-right">${formatNum(p.outbound_clicks)}</td>
-        <td class="py-2.5 px-4 text-right">${formatNum(p.pin_clicks)}</td>
-        <td class="py-2.5 px-4 text-right">${formatNum(p.saves)}</td>
-      </tr>
-    `}).join('');
+          </td>
+          <td class="py-2.5 px-4 text-right">${formatNum(p.impressions)}</td>
+          <td class="py-2.5 px-4 text-right">${formatNum(p.engagement)}</td>
+          <td class="py-2.5 px-4 text-right">${formatNum(p.outbound_clicks)}</td>
+          <td class="py-2.5 px-4 text-right">${formatNum(p.pin_clicks)}</td>
+          <td class="py-2.5 px-4 text-right">${formatNum(p.saves)}</td>
+        </tr>
+      `}).join('');
+    }
+    
+    const btnDiv = document.getElementById('s2-page-buttons')!;
+    btnDiv.innerHTML = `
+      <button class="px-2 py-1 rounded bg-muted/40 hover:bg-muted disabled:opacity-50" ${state.s2Page === 1 ? 'disabled' : ''} onclick="goS2(${state.s2Page - 1})">Prev</button>
+      <button class="px-2 py-1 rounded bg-muted/40 hover:bg-muted disabled:opacity-50" ${state.s2Page >= maxPage ? 'disabled' : ''} onclick="goS2(${state.s2Page + 1})">Next</button>
+    `;
+
+  } catch (e: any) {
+    tbody.innerHTML = `<tr><td colspan="7" class="py-12 text-center text-red-500">${escapeHtml(e.message)}</td></tr>`;
   }
-  
-  const btnDiv = document.getElementById('s2-page-buttons')!;
-  btnDiv.innerHTML = `
-    <button class="px-2 py-1 rounded bg-muted/40 hover:bg-muted disabled:opacity-50" ${state.s2Page === 1 ? 'disabled' : ''} onclick="goS2(${state.s2Page - 1})">Prev</button>
-    <button class="px-2 py-1 rounded bg-muted/40 hover:bg-muted disabled:opacity-50" ${state.s2Page >= maxPage ? 'disabled' : ''} onclick="goS2(${state.s2Page + 1})">Next</button>
-  `;
-  
-  syncStateToUrl();
 }
 
 (window as any).goS1 = (p: number) => { state.s1Page = p; renderS1(); };
@@ -261,7 +276,17 @@ function renderS2() {
 // Listeners
 document.getElementById('s1-ps')?.addEventListener('change', (e: any) => { state.s1Size = Number(e.target.value); state.s1Page = 1; renderS1(); });
 document.getElementById('s2-ps')?.addEventListener('change', (e: any) => { state.s2Size = Number(e.target.value); state.s2Page = 1; renderS2(); });
-document.getElementById('s2-q')?.addEventListener('input', (e: any) => { state.s2Query = e.target.value; state.s2Page = 1; renderS2(); });
+
+// Debounced search
+let s2Timer: any;
+document.getElementById('s2-q')?.addEventListener('input', (e: any) => { 
+  clearTimeout(s2Timer);
+  s2Timer = setTimeout(() => {
+    state.s2Query = e.target.value; 
+    state.s2Page = 1; 
+    renderS2(); 
+  }, 300);
+});
 
 document.querySelectorAll('[data-s1-sort]').forEach(th => {
   th.addEventListener('click', () => {
@@ -332,19 +357,17 @@ document.querySelectorAll('.preset-btn').forEach(b => {
   });
 });
 
-async function fetchData() {
-  try {
-    const res = await fetch(`/api/internal/analytics/connect?connectionId=${connectionId}`);
-    const { data } = await res.json();
-    allDailyData = data.daily || [];
-    allTopPins = data.top_pins || [];
-    loadStateFromUrl();
-    renderS1();
-    renderS2();
-  } catch (e) {
-    document.getElementById('daily-metrics-tbody')!.innerHTML = `<tr><td colspan="6" class="text-center text-red-500 py-12">Error loading data</td></tr>`;
-    document.getElementById('top-pins-tbody')!.innerHTML = `<tr><td colspan="7" class="text-center text-red-500 py-12">Error loading data</td></tr>`;
-  }
+document.querySelectorAll('[role="tab"]').forEach(t => {
+  t.addEventListener('click', () => {
+    state.tab = t.getAttribute('data-tab') || 'data';
+    syncStateToUrl();
+  });
+});
+
+async function init() {
+  loadStateFromUrl();
+  renderS1();
+  renderS2();
 }
 
-fetchData();
+init();

@@ -24,4 +24,28 @@ describe('Project 3 Standalone Architectural Separation Guard (Static Analysis)'
       expect(content).not.toContain(".from('import_sessions')");
     }
   });
+
+  it('guarantees zero occurrences of /api/internal/analytics in codebase (F4)', () => {
+    const dirPath = path.resolve(process.cwd(), 'src/pages/api/internal/analytics');
+    if (fs.existsSync(dirPath)) {
+      const getFilesRecursively = (dir: string): string[] => {
+        const files: string[] = [];
+        const items = fs.readdirSync(dir, { withFileTypes: true });
+        for (const item of items) {
+          const res = path.resolve(dir, item.name);
+          if (item.isDirectory()) {
+            files.push(...getFilesRecursively(res));
+          } else {
+            files.push(res);
+          }
+        }
+        return files;
+      };
+      
+      const files = getFilesRecursively(dirPath);
+      expect(files.length).toBe(0);
+    } else {
+      expect(fs.existsSync(dirPath)).toBe(false);
+    }
+  });
 });

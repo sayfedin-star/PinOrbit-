@@ -10,6 +10,12 @@ vi.mock('../db/analytics', () => ({
     upsertWorkspaceAnalyticsSettings: vi.fn(),
     getWorkspaceConnection: vi.fn(),
     updateWorkspaceConnection: vi.fn(),
+    getConnectionHealth: vi.fn().mockResolvedValue({
+      total_runs: 10,
+      consecutive_failures: 0,
+      last_success_at: new Date().toISOString(),
+      revoked: false,
+    }),
   },
 }));
 
@@ -332,6 +338,8 @@ describe('Pinner Analytics Settings & Security Suite (V20.1 Per-Pipeline Date Of
     const getJson = await getRes.json();
     expect(getJson.success).toBe(true);
     expect(getJson.data.has_fastcron_token).toBe(true);
+    // V25 C9: Assert token_fingerprint
+    expect(getJson.data.token_fingerprint).toBe('••••6789');
     expect((getJson.data as any).fastcron_token).toBeUndefined();
     expect(JSON.stringify(getJson)).not.toContain('custom_conn_token_123456789');
 

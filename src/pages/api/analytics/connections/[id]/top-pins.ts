@@ -42,10 +42,18 @@ export const GET: APIRoute = async ({ params, request, locals }) => {
 
   const url = new URL(request.url);
   const sortBy = (url.searchParams.get('sort_by') || 'IMPRESSION').toUpperCase() as PinnerSortBy;
-  const limit = Math.min(50, Math.max(1, parseInt(url.searchParams.get('limit') || '50', 10)));
+  // Increase internal limit to allow pagination from a larger pool, or rely on DB limit?
+  // Let's pass a large limit so we get all pins for the window and paginate in-memory
+  const limit = 500; 
   const bypassCache = url.searchParams.get('cache_bypass') === '1';
   const fromDate = url.searchParams.get('from_date') || undefined;
   const toDate = url.searchParams.get('to_date') || undefined;
+
+  const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10));
+  const pageSize = Math.max(1, parseInt(url.searchParams.get('page_size') || '25', 10));
+  const sortField = url.searchParams.get('sort') || 'rank_position';
+  const isDesc = (url.searchParams.get('dir') || 'asc').toLowerCase() === 'desc';
+  const query = (url.searchParams.get('q') || '').toLowerCase().trim();
 
   try {
     const kvNamespace = (locals as any)?.runtime?.env?.ANALYTICS_KV;
@@ -62,7 +70,39 @@ export const GET: APIRoute = async ({ params, request, locals }) => {
       toDate
     );
 
-    return new Response(JSON.stringify({ success: true, data }), {
+    let rows = data || [];
+
+    if (query) {
+      rows = rows.filter(r => 
+        String(r.pin_id).toLowerCase().includes(query) || 
+        (r.title && String(r.title).toLowerCase().includes(query))
+      );
+    }
+
+    rows.sort((a: any, b: any) => {
+      let valA = a[sortField];
+      let valB = b[sortField];
+      if (valA < valB) return isDesc ? 1 : -1;
+      if (valA > valB) return isDesc ? -1 : 1;
+      return 0;
+    });
+
+    const total = rows.length;
+    const start = (page - 1) * pageSize;
+    const pagedRows = rows.slice(start, start + pageSize);
+
+    // Extract window from the first row if available
+    const windowStart = rows.length > 0 ? rows[0].window_start : null;
+    const windowEnd = rows.length > 0 ? rows[0].window_end : null;
+
+    return new Response(JSON.stringify({ 
+      success: true, 
+      data: {
+        rows: pagedRows,
+        total,
+        window: windowStart && windowEnd ? { start: windowStart, end: windowEnd } : null
+      }
+    }), {
       status: 200,
       headers: {
         'Content-Type': 'application/json',

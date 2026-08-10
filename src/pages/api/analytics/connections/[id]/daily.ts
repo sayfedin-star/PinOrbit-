@@ -13,30 +13,14 @@ export const GET: APIRoute = async ({ params, request, locals }) => {
   if (!user || !schedulingClient) {
     return new Response(
       JSON.stringify({ error: 'Unauthorized: authentication required.' }),
-      {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' },
-      }
+      { status: 401, headers: { 'Content-Type': 'application/json' } }
     );
   }
 
-  if (!workspaceId) {
+  if (!workspaceId || !connectionId) {
     return new Response(
-      JSON.stringify({ success: false, error: 'Active workspace not found in session.' }),
-      {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      }
-    );
-  }
-
-  if (!connectionId) {
-    return new Response(
-      JSON.stringify({ success: false, error: 'connection ID parameter is required.' }),
-      {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      }
+      JSON.stringify({ success: false, error: 'workspace and connection ID required.' }),
+      { status: 400, headers: { 'Content-Type': 'application/json' } }
     );
   }
 
@@ -46,15 +30,45 @@ export const GET: APIRoute = async ({ params, request, locals }) => {
     const url = new URL(request.url);
     const fromDate = url.searchParams.get('from_date') || undefined;
     const toDate = url.searchParams.get('to_date') || undefined;
+    const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10));
+    const pageSize = Math.max(1, parseInt(url.searchParams.get('page_size') || '25', 10));
+    const sortField = url.searchParams.get('sort') || 'metric_date';
+    const isDesc = (url.searchParams.get('dir') || 'desc').toLowerCase() === 'desc';
+    const query = (url.searchParams.get('q') || '').toLowerCase().trim();
 
-    const data = await analyticsDb.getConnectionDailyMetrics(
+    const result = await analyticsDb.getConnectionDailyMetrics(
       workspaceId,
       connectionId,
       fromDate,
       toDate
     );
 
-    return new Response(JSON.stringify({ success: true, data }), {
+    let rows = result.rows;
+
+    if (query) {
+      rows = rows.filter(r => r.metric_date.toLowerCase().includes(query));
+    }
+
+    rows.sort((a: any, b: any) => {
+      let valA = a[sortField];
+      let valB = b[sortField];
+      if (valA < valB) return isDesc ? 1 : -1;
+      if (valA > valB) return isDesc ? -1 : 1;
+      return 0;
+    });
+
+    const total = rows.length;
+    const start = (page - 1) * pageSize;
+    const pagedRows = rows.slice(start, start + pageSize);
+
+    return new Response(JSON.stringify({ 
+      success: true, 
+      data: {
+        rows: pagedRows,
+        total,
+        totals: result.totals
+      }
+    }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
