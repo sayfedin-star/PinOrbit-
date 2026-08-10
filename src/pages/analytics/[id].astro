@@ -211,31 +211,66 @@ const { id: connectionId } = Astro.params;
 </Layout>
 
 <script>
-  import { safeFetchJson } from '../../lib/ui-helpers';
+  // Inlined full safeFetchJson for zero-dependency browser reliability
+  async function safeFetchJson(input, init) {
+    var res = await fetch(input, init);
+    if (res.status === 401 || res.status === 403) {
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login';
+      }
+      throw new Error('HTTP ' + res.status + ': Unauthorized or forbidden. Redirecting to login.');
+    }
+    if (res.status === 404) {
+      throw new Error('HTTP 404: Endpoint unavailable - redeploy required');
+    }
+    var contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      throw new Error('HTTP ' + res.status + ': Server returned non-JSON response (' + (contentType || 'empty') + ')');
+    }
+    var data = await res.json();
+    if (!res.ok) {
+      var errorMsg = (data && (data.error || data.message)) || res.statusText || 'Request failed';
+      throw new Error('HTTP ' + res.status + ': ' + errorMsg);
+    }
+    return data;
+  }
 
   // === F2: Execution watchdog — register BEFORE any other logic ===
+  var watchdogTimer = null;
+
   function showScriptError(message) {
     console.error('[PinOrbit Script Error]', message);
     document.querySelectorAll('td').forEach(function (td) {
       if (td.textContent && td.textContent.indexOf('Loading') !== -1) {
-        td.innerHTML = '<span class="text-red-500 font-bold">Client error: ' + message + ' — open console for details.</span>';
+        td.innerHTML = '<span class="text-red-500 font-bold">Client error: ' + (message || 'Unknown error') + ' — open console for details.</span>';
       }
     });
     var lastSync = document.getElementById('connection-last-sync');
-    if (lastSync && lastSync.textContent === 'Loading...') {
-      lastSync.textContent = '—';
+    if (lastSync && lastSync.textContent && lastSync.textContent.indexOf('Loading') !== -1) {
+      lastSync.textContent = '— (timeout)';
     }
   }
-  window.addEventListener('error', function (e) { showScriptError(e.message); });
+  window.addEventListener('error', function (e) { showScriptError(e.message || String(e)); });
 
   // === F1: Read connectionId from data attribute (no define:vars) ===
-  var connectionId =
-    document.querySelector('[data-connection-id]')
-      ?.getAttribute('data-connection-id') || '';
+  var connectionIdEl = document.querySelector('[data-connection-id]');
+  var connectionId = connectionIdEl ? connectionIdEl.getAttribute('data-connection-id') || '' : '';
 
   var activeSortBy = 'IMPRESSION';
   var fromDate = '';
   var toDate = '';
+
+  var FALLBACK_IMG = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect width="40" height="40" fill="#e5e7eb"/></svg>');
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
 
   function formatNumber(n) {
     if (n === undefined || n === null) return '0';
@@ -269,7 +304,7 @@ const { id: connectionId } = Astro.params;
         var conn = json.data.find(function (c) { return c.id === connectionId; });
         if (conn) {
           var titleEl = document.getElementById('connection-title');
-          if (titleEl) titleEl.textContent = conn.display_name + ' — Analytics';
+          if (titleEl) titleEl.textContent = (conn.display_name || 'Account') + ' — Analytics';
 
           var lastSyncEl = document.getElementById('connection-last-sync');
           if (lastSyncEl) {
@@ -334,8 +369,8 @@ const { id: connectionId } = Astro.params;
             : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 font-semibold';
 
           return '<tr class="hover:bg-muted/30 transition-colors">' +
-            '<td class="py-3 px-3 font-semibold text-foreground">' + r.metric_date + '</td>' +
-            '<td class="py-3 px-3 text-center"><span class="inline-flex rounded-md px-2 py-0.5 text-[10px] ' + statusClass + '">' + (r.data_status || 'READY') + '</span></td>' +
+            '<td class="py-3 px-3 font-semibold text-foreground">' + escapeHtml(r.metric_date) + '</td>' +
+            '<td class="py-3 px-3 text-center"><span class="inline-flex rounded-md px-2 py-0.5 text-[10px] ' + statusClass + '">' + escapeHtml(r.data_status || 'READY') + '</span></td>' +
             '<td class="py-3 px-3 text-right font-medium text-foreground">' + formatNumber(r.impressions) + '</td>' +
             '<td class="py-3 px-3 text-right font-medium text-foreground">' + formatNumber(r.engagements) + '</td>' +
             '<td class="py-3 px-3 text-right text-muted-foreground">' + formatPercent(r.engagement_rate) + '</td>' +
@@ -346,7 +381,7 @@ const { id: connectionId } = Astro.params;
             '<td class="py-3 px-3 text-right font-medium text-foreground">' + formatNumber(r.saves) + '</td>' +
             '<td class="py-3 px-3 text-right text-muted-foreground">' + formatPercent(r.save_rate) + '</td>' +
             '<td class="py-3 px-3 text-center">' +
-              '<button data-date="' + r.metric_date + '" class="delete-daily-btn rounded-lg border border-destructive/20 bg-destructive/10 px-2 py-1 text-[11px] font-semibold text-destructive hover:bg-destructive/20 transition-all" title="Delete Snapshot Record">Delete</button>' +
+              '<button data-date="' + escapeHtml(r.metric_date) + '" class="delete-daily-btn rounded-lg border border-destructive/20 bg-destructive/10 px-2 py-1 text-[11px] font-semibold text-destructive hover:bg-destructive/20 transition-all" title="Delete Snapshot Record">Delete</button>' +
             '</td></tr>';
         })
         .join('');
@@ -384,14 +419,14 @@ const { id: connectionId } = Astro.params;
             if (!delJson.success) throw new Error(delJson.error || 'Failed to delete record.');
             await loadDailyMetrics();
           } catch (err) {
-            alert('Delete failed: ' + err.message);
+            alert('Delete failed: ' + (err.message || 'Error'));
           }
         });
       });
     } catch (err) {
       tbody.innerHTML = '<tr><td colspan="12" class="py-8 text-center text-red-500">' +
         '<p class="font-bold">Failed to load daily metrics</p>' +
-        '<p class="text-xs text-muted-foreground mt-1">' + err.message + '</p></td></tr>';
+        '<p class="text-xs text-muted-foreground mt-1">' + escapeHtml(err.message || 'Error') + '</p></td></tr>';
       if (tfoot) tfoot.innerHTML = '';
     }
   }
@@ -404,7 +439,7 @@ const { id: connectionId } = Astro.params;
       tbody.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-muted-foreground">' +
         '<div class="inline-flex items-center gap-2">' +
         '<svg class="animate-spin h-4 w-4 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>' +
-        '<span>Loading top 50 ranked pins (' + activeSortBy + ')...</span></div></td></tr>';
+        '<span>Loading top 50 ranked pins (' + escapeHtml(activeSortBy) + ')...</span></div></td></tr>';
 
       var json = await safeFetchJson('/api/analytics/connections/' + connectionId + '/top-pins?sort_by=' + activeSortBy + '&from_date=' + fromDate + '&to_date=' + toDate);
       if (!json.success || !Array.isArray(json.data)) {
@@ -420,9 +455,6 @@ const { id: connectionId } = Astro.params;
         return;
       }
 
-      var placeholderSvg = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="%23888" stroke-width="1.5"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>';
-      var fallbackSvg = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 24 24'><rect width='40' height='40' fill='%23eee'/></svg>";
-
       tbody.innerHTML = pins
         .map(function (p, idx) {
           var rank = p.rank_position || idx + 1;
@@ -435,20 +467,22 @@ const { id: connectionId } = Astro.params;
               ? 'bg-amber-700 text-white font-black'
               : 'bg-muted text-muted-foreground font-bold';
 
-          var imageSrc = p.image_url || placeholderSvg;
+          var imageSrc = p.image_url || FALLBACK_IMG;
+          var safeTitle = escapeHtml(p.title || 'Untitled Pin');
+          var safePinId = escapeHtml(p.pin_id || '—');
 
           var linkHtml = p.destination_url
-            ? '<a href="' + p.destination_url + '" target="_blank" rel="noopener noreferrer" class="text-primary hover:underline inline-flex items-center gap-0.5"><span>Link</span><svg class="h-2.5 w-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/></svg></a>'
+            ? '<a href="' + escapeHtml(p.destination_url) + '" target="_blank" rel="noopener noreferrer" class="text-primary hover:underline inline-flex items-center gap-0.5"><span>Link</span><svg class="h-2.5 w-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/></svg></a>'
             : '';
 
           return '<tr class="hover:bg-muted/30 transition-colors">' +
             '<td class="py-3 px-4 text-center"><span class="inline-flex h-6 w-6 items-center justify-center rounded-full text-xs ' + rankBadgeClass + '">' + rank + '</span></td>' +
             '<td class="py-3 px-4"><div class="flex items-center gap-3">' +
-              '<img src="' + imageSrc + '" alt="Pin" class="h-10 w-10 rounded-lg object-cover bg-muted border border-border/80 shrink-0" onerror="this.src=\'' + fallbackSvg + '\'"/>' +
+              '<img src="' + imageSrc + '" alt="Pin" class="h-10 w-10 rounded-lg object-cover bg-muted border border-border/80 shrink-0"/>' +
               '<div class="min-w-0 flex-1">' +
-                '<p class="truncate font-semibold text-foreground text-xs" title="' + (p.title || 'Untitled Pin') + '">' + (p.title || 'Untitled Pin') + '</p>' +
+                '<p class="truncate font-semibold text-foreground text-xs" title="' + safeTitle + '">' + safeTitle + '</p>' +
                 '<div class="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground">' +
-                  '<span class="font-mono">' + (p.pin_id || '—') + '</span>' +
+                  '<span class="font-mono">' + safePinId + '</span>' +
                   linkHtml +
                 '</div></div></div></td>' +
             '<td class="py-3 px-4 text-right font-medium text-foreground">' + formatNumber(p.impressions) + '</td>' +
@@ -464,30 +498,34 @@ const { id: connectionId } = Astro.params;
     } catch (err) {
       tbody.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-red-500">' +
         '<p class="font-bold">Failed to load top pins</p>' +
-        '<p class="text-xs text-muted-foreground mt-1">' + err.message + '</p></td></tr>';
+        '<p class="text-xs text-muted-foreground mt-1">' + escapeHtml(err.message || 'Error') + '</p></td></tr>';
     }
   }
 
   async function reloadAll() {
-    await Promise.all([loadConnectionDetails(), loadDailyMetrics(), loadTopPins()]);
+    try {
+      await Promise.all([loadConnectionDetails(), loadDailyMetrics(), loadTopPins()]);
+      if (watchdogTimer) {
+        clearTimeout(watchdogTimer);
+      }
+    } catch (e) {
+      console.error('reloadAll error:', e);
+    }
   }
 
   document.addEventListener('DOMContentLoaded', function () {
     initDates(30);
 
-    // === F2: 8-second watchdog timeout ===
-    setTimeout(function () {
-      var dailyTbody = document.getElementById('daily-metrics-tbody');
-      if (dailyTbody && dailyTbody.textContent && dailyTbody.textContent.indexOf('Loading') !== -1) {
-        dailyTbody.innerHTML = '<tr><td colspan="12" class="py-8 text-center text-red-500 font-bold">No data received — check network/console</td></tr>';
-      }
-      var topPinsTbody = document.getElementById('top-pins-tbody');
-      if (topPinsTbody && topPinsTbody.textContent && topPinsTbody.textContent.indexOf('Loading') !== -1) {
-        topPinsTbody.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-red-500 font-bold">No data received — check network/console</td></tr>';
-      }
+    // === F2 & C5: 8-second watchdog timeout ===
+    watchdogTimer = setTimeout(function () {
+      document.querySelectorAll('td[colspan]').forEach(function (td) {
+        if (td.textContent && td.textContent.indexOf('Loading') !== -1) {
+          td.innerHTML = '<span class="text-red-500 font-bold">No data received — check network/console</span>';
+        }
+      });
       var lastSync = document.getElementById('connection-last-sync');
-      if (lastSync && lastSync.textContent === 'Loading...') {
-        lastSync.textContent = '—';
+      if (lastSync && lastSync.textContent && lastSync.textContent.indexOf('Loading') !== -1) {
+        lastSync.textContent = '— (timeout)';
       }
     }, 8000);
 

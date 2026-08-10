@@ -296,4 +296,83 @@ describe('Pinner Analytics R11 Contract & V22 Methods Test Suite', () => {
     await analyticsDb.deleteDailyMetricAndRecompute(workspaceId, connectionId, '2026-08-07');
     expect(invalidateSpy).toHaveBeenCalledWith(workspaceId, connectionId);
   });
+
+  it('R19 F3 & C6: 2-step window-pinned reader queries latest snapshot window and avoids cross-window duplicate pins', async () => {
+    // Seed 3 distinct snapshot windows for the same pin/sort
+    const mockSnapshotsWindow1 = [
+      { id: 's1', workspace_id: workspaceId, connection_id: connectionId, sort_by: 'IMPRESSION', window_start: '2026-08-01', window_end: '2026-08-06', rank_position: 1, pin_id: 'pin_101', impressions: 1000 },
+      { id: 's2', workspace_id: workspaceId, connection_id: connectionId, sort_by: 'IMPRESSION', window_start: '2026-08-01', window_end: '2026-08-06', rank_position: 2, pin_id: 'pin_102', impressions: 800 },
+    ];
+    const mockSnapshotsWindow2 = [
+      { id: 's3', workspace_id: workspaceId, connection_id: connectionId, sort_by: 'IMPRESSION', window_start: '2026-08-02', window_end: '2026-08-07', rank_position: 1, pin_id: 'pin_101', impressions: 1200 },
+      { id: 's4', workspace_id: workspaceId, connection_id: connectionId, sort_by: 'IMPRESSION', window_start: '2026-08-02', window_end: '2026-08-07', rank_position: 2, pin_id: 'pin_102', impressions: 900 },
+    ];
+    const mockSnapshotsWindow3Newest = [
+      { id: 's5', workspace_id: workspaceId, connection_id: connectionId, sort_by: 'IMPRESSION', window_start: '2026-08-03', window_end: '2026-08-08', rank_position: 1, pin_id: 'pin_101', impressions: 1500 },
+      { id: 's6', workspace_id: workspaceId, connection_id: connectionId, sort_by: 'IMPRESSION', window_start: '2026-08-03', window_end: '2026-08-08', rank_position: 2, pin_id: 'pin_102', impressions: 1100 },
+    ];
+
+    let queryCount = 0;
+    vi.spyOn(dbClients, 'getAnalytics').mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === 'top_pins_snapshots') {
+          return {
+            select: vi.fn((fields: string) => {
+              queryCount++;
+              if (fields === 'window_start, window_end') {
+                // Step 1: latest window query
+                return {
+                  eq: vi.fn().mockReturnThis(),
+                  gte: vi.fn().mockReturnThis(),
+                  lte: vi.fn().mockReturnThis(),
+                  order: vi.fn().mockReturnThis(),
+                  limit: vi.fn().mockResolvedValue({
+                    data: [{ window_start: '2026-08-03', window_end: '2026-08-08' }],
+                    error: null,
+                  }),
+                };
+              }
+              // Step 2: rows for that exact window
+              return {
+                eq: vi.fn().mockReturnThis(),
+                order: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue({
+                  data: mockSnapshotsWindow3Newest,
+                  error: null,
+                }),
+              };
+            }),
+          };
+        }
+        return {} as any;
+      }),
+    } as any);
+
+    // Test getRankedTopPins
+    const pins = await analyticsDb.getRankedTopPins(workspaceId, connectionId, 'IMPRESSION', 50);
+    expect(pins.length).toBe(2);
+    expect(pins[0].pin_id).toBe('pin_101');
+    expect(pins[0].rank_position).toBe(1);
+    expect(pins[0].window_start).toBe('2026-08-03');
+    expect(pins[0].window_end).toBe('2026-08-08');
+    expect(pins[1].pin_id).toBe('pin_102');
+    expect(pins[1].rank_position).toBe(2);
+
+    // Test getRankedTopPinsWithDateRange
+    const rangePins = await analyticsDb.getRankedTopPinsWithDateRange(
+      workspaceId,
+      connectionId,
+      'IMPRESSION',
+      '2026-08-01',
+      '2026-08-08',
+      50
+    );
+    expect(rangePins.length).toBe(2);
+    expect(rangePins[0].pin_id).toBe('pin_101');
+    expect(rangePins[1].pin_id).toBe('pin_102');
+    // Ensure contiguous 1..N ranks and unique pin IDs
+    const pinIds = rangePins.map((p) => p.pin_id);
+    expect(new Set(pinIds).size).toBe(rangePins.length);
+    expect(rangePins.map((p) => p.rank_position)).toEqual([1, 2]);
+  });
 });

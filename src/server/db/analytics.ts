@@ -405,6 +405,7 @@ export const analyticsDb = {
 
   /**
    * Retrieves ranked top pins for an account from Project 3.
+   * R19 F3: Two-step window-pinned reader returning ONLY the newest window snapshot to prevent duplication.
    */
   async getRankedTopPins(
     workspaceId: string,
@@ -417,12 +418,33 @@ export const analyticsDb = {
     }
 
     const analyticsClient = dbClients.getAnalytics();
+
+    // Step 1 (Latest window):
+    const { data: latestWindow, error: windowError } = await analyticsClient
+      .from('top_pins_snapshots')
+      .select('window_start, window_end')
+      .eq('workspace_id', workspaceId)
+      .eq('connection_id', connectionId)
+      .eq('sort_by', sortBy)
+      .order('window_end', { ascending: false })
+      .limit(1);
+
+    if (windowError) throw windowError;
+    if (!latestWindow || latestWindow.length === 0) {
+      return [];
+    }
+
+    const { window_start: w0, window_end: w1 } = latestWindow[0];
+
+    // Step 2: return rows for THAT exact window
     const { data, error } = await analyticsClient
       .from('top_pins_snapshots')
       .select('*')
       .eq('workspace_id', workspaceId)
       .eq('connection_id', connectionId)
       .eq('sort_by', sortBy)
+      .eq('window_start', w0)
+      .eq('window_end', w1)
       .order('rank_position', { ascending: true })
       .limit(limit);
 
@@ -781,6 +803,7 @@ export const analyticsDb = {
 
   /**
    * Retrieves ranked top pins with date range filtering.
+   * R19 F3: Two-step window-pinned reader returning ONLY the newest window snapshot matching range.
    */
   async getRankedTopPinsWithDateRange(
     workspaceId: string,
@@ -795,19 +818,41 @@ export const analyticsDb = {
     }
 
     const analyticsClient = dbClients.getAnalytics();
-    let query = analyticsClient
+
+    // Step 1 (Latest window within optional range):
+    let windowQuery = analyticsClient
+      .from('top_pins_snapshots')
+      .select('window_start, window_end')
+      .eq('workspace_id', workspaceId)
+      .eq('connection_id', connectionId)
+      .eq('sort_by', sortBy);
+
+    if (fromDate) windowQuery = windowQuery.gte('window_start', fromDate);
+    if (toDate) windowQuery = windowQuery.lte('window_end', toDate);
+
+    const { data: latestWindow, error: windowError } = await windowQuery
+      .order('window_end', { ascending: false })
+      .limit(1);
+
+    if (windowError) throw windowError;
+    if (!latestWindow || latestWindow.length === 0) {
+      return [];
+    }
+
+    const { window_start: w0, window_end: w1 } = latestWindow[0];
+
+    // Step 2: return rows for THAT exact window
+    const { data, error } = await analyticsClient
       .from('top_pins_snapshots')
       .select('*')
       .eq('workspace_id', workspaceId)
       .eq('connection_id', connectionId)
       .eq('sort_by', sortBy)
+      .eq('window_start', w0)
+      .eq('window_end', w1)
       .order('rank_position', { ascending: true })
       .limit(limit);
 
-    if (fromDate) query = query.gte('window_start', fromDate);
-    if (toDate) query = query.lte('window_end', toDate);
-
-    const { data, error } = await query;
     if (error) throw error;
     return (data as TopPinSnapshot[]) || [];
   },

@@ -420,6 +420,50 @@ describe('Pinner Analytics Settings & Security Suite (V20.1 Per-Pipeline Date Of
         top_pins_schedule_status: 'pending',
       })
     );
+
+    // Test num_of_pins change
+    await postConnSettingsHandler({
+      params: { id: connectionId },
+      request: new Request('http://localhost', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          top_pins_num_of_pins: 25,
+        }),
+      }),
+      locals,
+    } as any);
+
+    expect(analyticsDb.updateWorkspaceConnection).toHaveBeenCalledWith(
+      workspaceId,
+      connectionId,
+      expect.objectContaining({
+        top_pins_num_of_pins: 25,
+        top_pins_schedule_status: 'pending',
+      })
+    );
+
+    // Test sort_modes change
+    await postConnSettingsHandler({
+      params: { id: connectionId },
+      request: new Request('http://localhost', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          top_pins_sort_modes: ['IMPRESSION', 'SAVE'],
+        }),
+      }),
+      locals,
+    } as any);
+
+    expect(analyticsDb.updateWorkspaceConnection).toHaveBeenCalledWith(
+      workspaceId,
+      connectionId,
+      expect.objectContaining({
+        top_pins_sort_modes: ['IMPRESSION', 'SAVE'],
+        top_pins_schedule_status: 'pending',
+      })
+    );
   });
 });
 

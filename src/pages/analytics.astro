@@ -608,51 +608,112 @@ export const prerender = false;
 </Layout>
 
 <script>
-  import { safeFetchJson, calculateConnectionHealth } from '../lib/ui-helpers';
+  // Inlined full safeFetchJson for zero-dependency browser reliability
+  async function safeFetchJson(input, init) {
+    var res = await fetch(input, init);
+    if (res.status === 401 || res.status === 403) {
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login';
+      }
+      throw new Error('HTTP ' + res.status + ': Unauthorized or forbidden. Redirecting to login.');
+    }
+    if (res.status === 404) {
+      throw new Error('HTTP 404: Endpoint unavailable - redeploy required');
+    }
+    var contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      throw new Error('HTTP ' + res.status + ': Server returned non-JSON response (' + (contentType || 'empty') + ')');
+    }
+    var data = await res.json();
+    if (!res.ok) {
+      var errorMsg = (data && (data.error || data.message)) || res.statusText || 'Request failed';
+      throw new Error('HTTP ' + res.status + ': ' + errorMsg);
+    }
+    return data;
+  }
 
-  let activeWindowDays = 30;
-  let connectionsList: any[] = [];
-  let currentSelectedConnection: any = null;
+  function calculateConnectionHealth(runs, isRevoked) {
+    if (isRevoked) {
+      return {
+        consecutive_failures: 0,
+        last_success_at: null,
+        total_runs: runs ? runs.length : 0,
+        health_status: 'revoked',
+      };
+    }
+    if (!runs || runs.length === 0) {
+      return {
+        consecutive_failures: 0,
+        last_success_at: null,
+        total_runs: 0,
+        health_status: 'healthy',
+      };
+    }
+    var consecutiveFailures = 0;
+    for (var i = 0; i < runs.length; i++) {
+      if (runs[i].status === 'failed') {
+        consecutiveFailures++;
+      } else {
+        break;
+      }
+    }
+    var lastSuccess = runs.find(function (r) { return r.status === 'completed' || r.status === 'success'; });
+    var healthStatus = 'healthy';
+    if (consecutiveFailures >= 3) {
+      healthStatus = 'critical';
+    } else if (consecutiveFailures >= 1) {
+      healthStatus = 'warning';
+    }
+    return {
+      consecutive_failures: consecutiveFailures,
+      last_success_at: lastSuccess ? lastSuccess.started_at : null,
+      total_runs: runs.length,
+      health_status: healthStatus,
+    };
+  }
 
-  function showToast(message: string, type: 'success' | 'error' | 'info' = 'info') {
-    const container = document.getElementById('toast-container');
+  var activeWindowDays = 30;
+  var connectionsList = [];
+  var currentSelectedConnection = null;
+
+  function showToast(message, type) {
+    if (type === undefined) type = 'info';
+    var container = document.getElementById('toast-container');
     if (!container) {
       alert(message);
       return;
     }
-    const toast = document.createElement('div');
-    toast.className = `pointer-events-auto rounded-xl px-4 py-3 text-xs font-semibold shadow-2xl border transition-all duration-300 transform translate-y-2 opacity-0 flex items-center justify-between gap-3 ${
+    var toast = document.createElement('div');
+    toast.className = 'pointer-events-auto rounded-xl px-4 py-3 text-xs font-semibold shadow-2xl border transition-all duration-300 transform translate-y-2 opacity-0 flex items-center justify-between gap-3 ' + (
       type === 'success'
         ? 'bg-emerald-900 text-emerald-100 border-emerald-700'
         : type === 'error'
         ? 'bg-red-950 text-red-100 border-red-700'
         : 'bg-card text-foreground border-border'
-    }`;
-    toast.innerHTML = `
-      <span>${message}</span>
-      <button class="text-xs opacity-70 hover:opacity-100 ml-2 font-bold">&times;</button>
-    `;
+    );
+    toast.innerHTML = '<span>' + message + '</span><button class="text-xs opacity-70 hover:opacity-100 ml-2 font-bold">&times;</button>';
     container.appendChild(toast);
-    requestAnimationFrame(() => {
+    requestAnimationFrame(function () {
       toast.classList.remove('translate-y-2', 'opacity-0');
     });
-    const dismiss = () => {
+    var dismiss = function () {
       toast.classList.add('opacity-0', 'translate-y-2');
-      setTimeout(() => toast.remove(), 300);
+      setTimeout(function () { toast.remove(); }, 300);
     };
-    toast.querySelector('button')?.addEventListener('click', dismiss);
+    var closeBtn = toast.querySelector('button');
+    if (closeBtn) closeBtn.addEventListener('click', dismiss);
     setTimeout(dismiss, 5000);
   }
 
-  function formatNumber(num: number | undefined | null): string {
+  function formatNumber(num) {
     if (num === undefined || num === null) return '0';
     return Number(num).toLocaleString();
   }
 
-  function formatDate(dateStr: string | null | undefined): string {
+  function formatDate(dateStr) {
     if (!dateStr) return '—';
     try {
-      const d = new Date(dateStr);
+      var d = new Date(dateStr);
       return d.toLocaleDateString(undefined, {
         month: 'short',
         day: 'numeric',
@@ -660,51 +721,40 @@ export const prerender = false;
         hour: '2-digit',
         minute: '2-digit',
       });
-    } catch {
+    } catch (e) {
       return dateStr || '—';
     }
   }
 
   async function loadConnections() {
-    const tbody = document.getElementById('connections-tbody');
+    var tbody = document.getElementById('connections-tbody');
     if (!tbody) return;
 
     try {
-      tbody.innerHTML = `
-        <tr>
-          <td colspan="9" class="py-8 text-center text-muted-foreground">
-            <div class="inline-flex items-center gap-2">
-              <svg class="animate-spin h-4 w-4 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-              <span>Loading connections for ${activeWindowDays}D window...</span>
-            </div>
-          </td>
-        </tr>
-      `;
+      tbody.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-muted-foreground">' +
+        '<div class="inline-flex items-center gap-2">' +
+        '<svg class="animate-spin h-4 w-4 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>' +
+        '<span>Loading connections for ' + activeWindowDays + 'D window...</span>' +
+        '</div></td></tr>';
 
-      const json = await safeFetchJson(`/api/analytics/connections?window_days=${activeWindowDays}`);
+      var json = await safeFetchJson('/api/analytics/connections?window_days=' + activeWindowDays);
       connectionsList = Array.isArray(json.data) ? json.data : [];
 
-      const totalCountEl = document.getElementById('total-accounts-count');
+      var totalCountEl = document.getElementById('total-accounts-count');
       if (totalCountEl) totalCountEl.textContent = connectionsList.length.toString();
 
       if (connectionsList.length === 0) {
-        tbody.innerHTML = `
-          <tr>
-            <td colspan="9" class="py-12 text-center text-muted-foreground">
-              <p class="font-medium text-foreground">No Pinterest connections found</p>
-              <p class="text-xs text-muted-foreground mt-1">Add your first connection to begin syncing metrics and ranked top pins.</p>
-              <button onclick="document.getElementById('add-connection-btn')?.click()" class="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-1.5 text-xs font-bold text-primary-foreground">
-                + Add Connection
-              </button>
-            </td>
-          </tr>
-        `;
+        tbody.innerHTML = '<tr><td colspan="9" class="py-12 text-center text-muted-foreground">' +
+          '<p class="font-medium text-foreground">No Pinterest connections found</p>' +
+          '<p class="text-xs text-muted-foreground mt-1">Add your first connection to begin syncing metrics and ranked top pins.</p>' +
+          '<button onclick="document.getElementById(\'add-connection-btn\')?.click()" class="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-1.5 text-xs font-bold text-primary-foreground">' +
+          '+ Add Connection</button></td></tr>';
         return;
       }
 
       tbody.innerHTML = connectionsList
-        .map((conn) => {
-          const stats = conn.stats || {
+        .map(function (conn) {
+          var stats = conn.stats || {
             impressions: 0,
             engagements: 0,
             pin_clicks: 0,
@@ -712,116 +762,102 @@ export const prerender = false;
             saves: 0,
           };
 
-          const isRevoked = Boolean(conn.revoked_at);
-          const isEnabled = conn.analytics_enabled;
-          const statusBadge = isRevoked
-            ? `<span class="inline-flex items-center rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-bold text-red-600 dark:text-red-400">Revoked (401)</span>`
+          var isRevoked = Boolean(conn.revoked_at);
+          var isEnabled = conn.analytics_enabled;
+          var statusBadge = isRevoked
+            ? '<span class="inline-flex items-center rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-bold text-red-600 dark:text-red-400">Revoked (401)</span>'
             : isEnabled
-            ? `<span class="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">Active</span>`
-            : `<span class="inline-flex items-center rounded-full bg-slate-500/10 px-2 py-0.5 text-[10px] font-bold text-slate-600 dark:text-slate-400">Disabled</span>`;
+            ? '<span class="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">Active</span>'
+            : '<span class="inline-flex items-center rounded-full bg-slate-500/10 px-2 py-0.5 text-[10px] font-bold text-slate-600 dark:text-slate-400">Disabled</span>';
 
-          return `
-            <tr class="hover:bg-muted/30 transition-colors">
-              <td class="py-3.5 px-4 font-semibold">
-                <a href="/analytics/${conn.id}" class="text-primary hover:underline flex items-center gap-1.5 group">
-                  <span class="font-bold text-foreground group-hover:text-primary transition-colors">${conn.display_name}</span>
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 opacity-60 group-hover:opacity-100 transition-opacity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-                </a>
-              </td>
-              <td class="py-3.5 px-4 text-center">${statusBadge}</td>
-              <td class="py-3.5 px-4 text-muted-foreground">${formatDate(conn.last_analytics_sync_at)}</td>
-              <td class="py-3.5 px-4 text-right font-medium text-foreground">${formatNumber(stats.impressions)}</td>
-              <td class="py-3.5 px-4 text-right font-medium text-foreground">${formatNumber(stats.engagements)}</td>
-              <td class="py-3.5 px-4 text-right font-medium text-foreground">${formatNumber(stats.pin_clicks)}</td>
-              <td class="py-3.5 px-4 text-right font-medium text-foreground">${formatNumber(stats.outbound_clicks)}</td>
-              <td class="py-3.5 px-4 text-right font-medium text-foreground">${formatNumber(stats.saves)}</td>
-              <td class="py-3.5 px-4 text-right">
-                <div class="flex items-center justify-end gap-1.5">
-                  <a
-                    href="/analytics/${conn.id}"
-                    class="rounded-lg border border-border bg-card px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-muted transition-all"
-                    title="View Detailed Analytics"
-                  >
-                    View
-                  </a>
-                  <button
-                    data-settings-id="${conn.id}"
-                    class="settings-trigger-btn rounded-lg border border-border bg-card p-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-all"
-                    title="Configure Settings & Schedules"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
-                  </button>
-                </div>
-              </td>
-            </tr>
-          `;
+          return '<tr class="hover:bg-muted/30 transition-colors">' +
+            '<td class="py-3.5 px-4 font-semibold">' +
+              '<a href="/analytics/' + conn.id + '" class="text-primary hover:underline flex items-center gap-1.5 group">' +
+                '<span class="font-bold text-foreground group-hover:text-primary transition-colors">' + (conn.display_name || 'Account') + '</span>' +
+                '<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 opacity-60 group-hover:opacity-100 transition-opacity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>' +
+              '</a>' +
+            '</td>' +
+            '<td class="py-3.5 px-4 text-center">' + statusBadge + '</td>' +
+            '<td class="py-3.5 px-4 text-muted-foreground">' + formatDate(conn.last_analytics_sync_at) + '</td>' +
+            '<td class="py-3.5 px-4 text-right font-medium text-foreground">' + formatNumber(stats.impressions) + '</td>' +
+            '<td class="py-3.5 px-4 text-right font-medium text-foreground">' + formatNumber(stats.engagements) + '</td>' +
+            '<td class="py-3.5 px-4 text-right font-medium text-foreground">' + formatNumber(stats.pin_clicks) + '</td>' +
+            '<td class="py-3.5 px-4 text-right font-medium text-foreground">' + formatNumber(stats.outbound_clicks) + '</td>' +
+            '<td class="py-3.5 px-4 text-right font-medium text-foreground">' + formatNumber(stats.saves) + '</td>' +
+            '<td class="py-3.5 px-4 text-right">' +
+              '<div class="flex items-center justify-end gap-1.5">' +
+                '<a href="/analytics/' + conn.id + '" class="rounded-lg border border-border bg-card px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-muted transition-all" title="View Detailed Analytics">View</a>' +
+                '<button data-settings-id="' + conn.id + '" class="settings-trigger-btn rounded-lg border border-border bg-card p-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-all" title="Configure Settings & Schedules">' +
+                  '<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>' +
+                '</button>' +
+              '</div>' +
+            '</td>' +
+          '</tr>';
         })
         .join('');
 
-      document.querySelectorAll('.settings-trigger-btn').forEach((btn) => {
-        btn.addEventListener('click', (e) => {
+      document.querySelectorAll('.settings-trigger-btn').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
           e.stopPropagation();
-          const connId = btn.getAttribute('data-settings-id');
+          var connId = btn.getAttribute('data-settings-id');
           if (connId) openSettingsDrawer(connId);
         });
       });
-    } catch (err: any) {
-      tbody.innerHTML = `
-        <tr>
-          <td colspan="9" class="py-8 text-center text-red-500">
-            <p class="font-bold">Failed to load connections</p>
-            <p class="text-xs text-muted-foreground mt-1">${err.message}</p>
-          </td>
-        </tr>
-      `;
-      showToast(`Error loading connections: ${err.message}`, 'error');
+    } catch (err) {
+      tbody.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-red-500">' +
+        '<p class="font-bold">Failed to load connections</p>' +
+        '<p class="text-xs text-muted-foreground mt-1">' + (err.message || 'Error') + '</p>' +
+        '</td></tr>';
+      showToast('Error loading connections: ' + (err.message || 'Error'), 'error');
     }
   }
 
-  // Open V23 Upgraded Settings Drawer
-  async function openSettingsDrawer(connectionId: string) {
-    const drawer = document.getElementById('settings-drawer');
+  // Open Upgraded Settings Drawer
+  async function openSettingsDrawer(connectionId) {
+    var drawer = document.getElementById('settings-drawer');
     if (!drawer) return;
 
-    const conn = connectionsList.find((c) => c.id === connectionId);
+    var conn = connectionsList.find(function (c) { return c.id === connectionId; });
     if (!conn) return;
     currentSelectedConnection = conn;
 
-    (document.getElementById('drawer-connection-id') as HTMLInputElement).value = conn.id;
-    const titleEl = document.getElementById('drawer-connection-name');
+    var drawerConnId = document.getElementById('drawer-connection-id');
+    if (drawerConnId) drawerConnId.value = conn.id;
+
+    var titleEl = document.getElementById('drawer-connection-name');
     if (titleEl) titleEl.textContent = conn.display_name;
 
-    const statusBadge = document.getElementById('drawer-connection-status');
-    const reenableBtn = document.getElementById('drawer-reenable-btn');
+    var statusBadge = document.getElementById('drawer-connection-status');
+    var reenableBtn = document.getElementById('drawer-reenable-btn');
     if (statusBadge) {
       if (conn.revoked_at) {
         statusBadge.textContent = 'Revoked (401)';
         statusBadge.className = 'rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-semibold text-red-600 dark:text-red-400';
-        reenableBtn?.classList.remove('hidden');
+        if (reenableBtn) reenableBtn.classList.remove('hidden');
       } else {
         statusBadge.textContent = conn.analytics_enabled ? 'Active' : 'Disabled';
         statusBadge.className = conn.analytics_enabled
           ? 'rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400'
           : 'rounded-full bg-slate-500/10 px-2 py-0.5 text-[10px] font-semibold text-slate-600 dark:text-slate-400';
-        reenableBtn?.classList.add('hidden');
+        if (reenableBtn) reenableBtn.classList.add('hidden');
       }
     }
 
     // Populate FastCron IDs
-    const jobAEl = document.getElementById('pipeline-a-job-id');
-    if (jobAEl) jobAEl.textContent = conn.analytics_fastcron_job_id ? `FastCron Job #${conn.analytics_fastcron_job_id}` : 'FastCron Job: Not configured';
-    const jobBEl = document.getElementById('pipeline-b-job-id');
-    if (jobBEl) jobBEl.textContent = conn.top_pins_fastcron_job_id ? `FastCron Job #${conn.top_pins_fastcron_job_id}` : 'FastCron Job: Not configured';
+    var jobAEl = document.getElementById('pipeline-a-job-id');
+    if (jobAEl) jobAEl.textContent = conn.analytics_fastcron_job_id ? 'FastCron Job #' + conn.analytics_fastcron_job_id : 'FastCron Job: Not configured';
+    var jobBEl = document.getElementById('pipeline-b-job-id');
+    if (jobBEl) jobBEl.textContent = conn.top_pins_fastcron_job_id ? 'FastCron Job #' + conn.top_pins_fastcron_job_id : 'FastCron Job: Not configured';
 
     // Populate Status Badges
-    const badgeA = document.getElementById('drawer-channel-a-badge');
+    var badgeA = document.getElementById('drawer-channel-a-badge');
     if (badgeA) {
       badgeA.textContent = conn.analytics_schedule_status || 'pending';
       badgeA.className = conn.analytics_schedule_status === 'synced'
         ? 'rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400'
         : 'rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400';
     }
-    const badgeB = document.getElementById('drawer-channel-b-badge');
+    var badgeB = document.getElementById('drawer-channel-b-badge');
     if (badgeB) {
       badgeB.textContent = conn.top_pins_schedule_status || 'pending';
       badgeB.className = conn.top_pins_schedule_status === 'synced'
@@ -830,22 +866,31 @@ export const prerender = false;
     }
 
     // Pipeline A
-    (document.getElementById('setting-analytics-webhook') as HTMLInputElement).value = conn.analytics_webhook_url || '';
-    (document.getElementById('setting-analytics-time') as HTMLInputElement).value = conn.analytics_sync_time || '04:00';
-    (document.getElementById('setting-analytics-start-offset') as HTMLInputElement).value = conn.analytics_start_offset_days || '7';
-    (document.getElementById('setting-analytics-end-offset') as HTMLInputElement).value = conn.analytics_end_offset_days || '1';
+    var elAWeb = document.getElementById('setting-analytics-webhook');
+    if (elAWeb) elAWeb.value = conn.analytics_webhook_url || '';
+    var elATime = document.getElementById('setting-analytics-time');
+    if (elATime) elATime.value = conn.analytics_sync_time || '04:00';
+    var elAStart = document.getElementById('setting-analytics-start-offset');
+    if (elAStart) elAStart.value = conn.analytics_start_offset_days || '7';
+    var elAEnd = document.getElementById('setting-analytics-end-offset');
+    if (elAEnd) elAEnd.value = conn.analytics_end_offset_days || '1';
 
     // Pipeline B
-    (document.getElementById('setting-top-pins-webhook') as HTMLInputElement).value = conn.top_pins_webhook_url || '';
-    (document.getElementById('setting-top-pins-time') as HTMLInputElement).value = conn.top_pins_sync_time || '04:30';
-    (document.getElementById('setting-top-pins-start-offset') as HTMLInputElement).value = conn.top_pins_start_offset_days || '7';
-    (document.getElementById('setting-top-pins-end-offset') as HTMLInputElement).value = conn.top_pins_end_offset_days || '2';
-    (document.getElementById('setting-top-pins-num-pins') as HTMLInputElement).value = conn.top_pins_num_of_pins || 50;
+    var elBWeb = document.getElementById('setting-top-pins-webhook');
+    if (elBWeb) elBWeb.value = conn.top_pins_webhook_url || '';
+    var elBTime = document.getElementById('setting-top-pins-time');
+    if (elBTime) elBTime.value = conn.top_pins_sync_time || '04:30';
+    var elBStart = document.getElementById('setting-top-pins-start-offset');
+    if (elBStart) elBStart.value = conn.top_pins_start_offset_days || '7';
+    var elBEnd = document.getElementById('setting-top-pins-end-offset');
+    if (elBEnd) elBEnd.value = conn.top_pins_end_offset_days || '2';
+    var elBPins = document.getElementById('setting-top-pins-num-pins');
+    if (elBPins) elBPins.value = conn.top_pins_num_of_pins || 50;
 
-    // V23 Sort Modes Chips
-    const selectedModes = new Set(conn.top_pins_sort_modes || ['IMPRESSION', 'OUTBOUND_CLICK', 'SAVE', 'ENGAGEMENT', 'PIN_CLICK']);
-    document.querySelectorAll('#sort-modes-chips-container .sort-chip').forEach((chip) => {
-      const mode = chip.getAttribute('data-mode') || '';
+    // Sort Modes Chips
+    var selectedModes = new Set(conn.top_pins_sort_modes || ['IMPRESSION', 'OUTBOUND_CLICK', 'SAVE', 'ENGAGEMENT', 'PIN_CLICK']);
+    document.querySelectorAll('#sort-modes-chips-container .sort-chip').forEach(function (chip) {
+      var mode = chip.getAttribute('data-mode') || '';
       if (selectedModes.has(mode)) {
         chip.classList.add('active', 'border-primary', 'bg-primary/10', 'text-primary');
         chip.classList.remove('border-border', 'text-muted-foreground');
@@ -855,9 +900,9 @@ export const prerender = false;
       }
     });
 
-    // V23 FastCron Options & R16 Per-Connection Token
-    const tokenBadge = document.getElementById('fastcron-token-status-badge');
-    const tokenInput = document.getElementById('setting-fastcron-token') as HTMLInputElement;
+    // FastCron Options & Per-Connection Token
+    var tokenBadge = document.getElementById('fastcron-token-status-badge');
+    var tokenInput = document.getElementById('setting-fastcron-token');
     if (tokenInput) tokenInput.value = '';
     if (tokenBadge) {
       if (conn.has_fastcron_token) {
@@ -868,27 +913,30 @@ export const prerender = false;
         tokenBadge.className = 'rounded-full bg-slate-500/10 px-2 py-0.5 text-[10px] font-semibold text-slate-600 dark:text-slate-400';
       }
     }
-    (document.getElementById('setting-fastcron-notify') as HTMLSelectElement).value = conn.fastcron_notify === false ? 'false' : 'true';
-    (document.getElementById('setting-fastcron-timeout') as HTMLInputElement).value = conn.fastcron_timeout || 30;
-    (document.getElementById('setting-fastcron-instances') as HTMLInputElement).value = conn.fastcron_instances !== undefined ? conn.fastcron_instances : 1;
+    var elNotify = document.getElementById('setting-fastcron-notify');
+    if (elNotify) elNotify.value = conn.fastcron_notify === false ? 'false' : 'true';
+    var elTimeout = document.getElementById('setting-fastcron-timeout');
+    if (elTimeout) elTimeout.value = conn.fastcron_timeout || 30;
+    var elInstances = document.getElementById('setting-fastcron-instances');
+    if (elInstances) elInstances.value = conn.fastcron_instances !== undefined ? conn.fastcron_instances : 1;
 
     drawer.classList.remove('hidden');
 
-    // Fetch and render Health Strip from /runs API (V23.1)
+    // Fetch and render Health Strip from /runs API
     loadConnectionHealthStrip(connectionId, Boolean(conn.revoked_at));
   }
 
-  async function loadConnectionHealthStrip(connectionId: string, isRevoked: boolean) {
+  async function loadConnectionHealthStrip(connectionId, isRevoked) {
     try {
-      const runsJson = await safeFetchJson(`/api/analytics/runs?connection_id=${connectionId}&limit=50`);
-      const runs = Array.isArray(runsJson.data) ? runsJson.data : [];
-      const health = calculateConnectionHealth(runs, isRevoked);
+      var runsJson = await safeFetchJson('/api/analytics/runs?connection_id=' + connectionId + '&limit=50');
+      var runs = Array.isArray(runsJson.data) ? runsJson.data : [];
+      var health = calculateConnectionHealth(runs, isRevoked);
 
-      const dotEl = document.getElementById('health-dot');
-      const labelEl = document.getElementById('health-label');
-      const totalEl = document.getElementById('health-total-runs');
-      const failEl = document.getElementById('health-failures');
-      const successEl = document.getElementById('health-last-success');
+      var dotEl = document.getElementById('health-dot');
+      var labelEl = document.getElementById('health-label');
+      var totalEl = document.getElementById('health-total-runs');
+      var failEl = document.getElementById('health-failures');
+      var successEl = document.getElementById('health-last-success');
 
       if (totalEl) totalEl.textContent = health.total_runs.toString();
       if (failEl) failEl.textContent = health.consecutive_failures.toString();
@@ -909,23 +957,23 @@ export const prerender = false;
           labelEl.textContent = 'Connection Healthy';
         }
       }
-    } catch (e: any) {
+    } catch (e) {
       console.warn('Failed to load runs for health strip:', e);
-      const labelEl = document.getElementById('health-label');
-      if (labelEl) labelEl.textContent = 'Health Status Unavailable';
+      var labelEl2 = document.getElementById('health-label');
+      if (labelEl2) labelEl2.textContent = 'Health Status Unavailable';
     }
   }
 
   function closeSettingsDrawer() {
-    const drawer = document.getElementById('settings-drawer');
-    drawer?.classList.add('hidden');
+    var drawer = document.getElementById('settings-drawer');
+    if (drawer) drawer.classList.add('hidden');
   }
 
-  document.addEventListener('DOMContentLoaded', () => {
+  document.addEventListener('DOMContentLoaded', function () {
     // Window selector buttons
-    document.querySelectorAll('#global-window-toggles .window-btn').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('#global-window-toggles .window-btn').forEach((b) => {
+    document.querySelectorAll('#global-window-toggles .window-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        document.querySelectorAll('#global-window-toggles .window-btn').forEach(function (b) {
           b.classList.remove('active', 'bg-primary', 'text-primary-foreground', 'shadow-sm');
           b.classList.add('text-muted-foreground');
         });
@@ -933,67 +981,85 @@ export const prerender = false;
         btn.classList.remove('text-muted-foreground');
 
         activeWindowDays = parseInt(btn.getAttribute('data-window') || '30', 10);
-        const winLabel = document.getElementById('active-window-label');
-        if (winLabel) winLabel.textContent = `${activeWindowDays} Days`;
+        var winLabel = document.getElementById('active-window-label');
+        if (winLabel) winLabel.textContent = activeWindowDays + ' Days';
 
         loadConnections();
       });
     });
 
-    document.getElementById('refresh-connections-btn')?.addEventListener('click', () => {
-      loadConnections();
-    });
+    var refreshConnBtn = document.getElementById('refresh-connections-btn');
+    if (refreshConnBtn) {
+      refreshConnBtn.addEventListener('click', function () {
+        loadConnections();
+      });
+    }
 
     // Add Connection Modal
-    const addModal = document.getElementById('add-connection-modal');
-    document.getElementById('add-connection-btn')?.addEventListener('click', () => {
-      addModal?.classList.remove('hidden');
-      document.getElementById('new-connection-name')?.focus();
-    });
+    var addModal = document.getElementById('add-connection-modal');
+    var addConnBtn = document.getElementById('add-connection-btn');
+    if (addConnBtn) {
+      addConnBtn.addEventListener('click', function () {
+        if (addModal) addModal.classList.remove('hidden');
+        var newConnInput = document.getElementById('new-connection-name');
+        if (newConnInput) newConnInput.focus();
+      });
+    }
 
-    document.getElementById('close-add-modal-btn')?.addEventListener('click', () => addModal?.classList.add('hidden'));
-    document.getElementById('cancel-add-modal-btn')?.addEventListener('click', () => addModal?.classList.add('hidden'));
+    var closeAddBtn = document.getElementById('close-add-modal-btn');
+    if (closeAddBtn) closeAddBtn.addEventListener('click', function () { if (addModal) addModal.classList.add('hidden'); });
+    var cancelAddBtn = document.getElementById('cancel-add-modal-btn');
+    if (cancelAddBtn) cancelAddBtn.addEventListener('click', function () { if (addModal) addModal.classList.add('hidden'); });
 
-    document.getElementById('add-connection-form')?.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const input = document.getElementById('new-connection-name') as HTMLInputElement;
-      const name = input?.value.trim();
-      if (!name) return;
+    var addConnForm = document.getElementById('add-connection-form');
+    if (addConnForm) {
+      addConnForm.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        var input = document.getElementById('new-connection-name');
+        var name = input ? input.value.trim() : '';
+        if (!name) return;
 
-      const submitBtn = document.getElementById('submit-add-btn') as HTMLButtonElement;
-      submitBtn.disabled = true;
-      submitBtn.textContent = 'Creating...';
+        var submitBtn = document.getElementById('submit-add-btn');
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.textContent = 'Creating...';
+        }
 
-      try {
-        const json = await safeFetchJson('/api/analytics/connections', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ display_name: name, analytics_enabled: true }),
-        });
-        if (!json.success) throw new Error(json.error || 'Failed to create connection');
+        try {
+          var json = await safeFetchJson('/api/analytics/connections', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ display_name: name, analytics_enabled: true }),
+          });
+          if (!json.success) throw new Error(json.error || 'Failed to create connection');
 
-        addModal?.classList.add('hidden');
-        input.value = '';
-        showToast('✅ Connection created successfully!', 'success');
-        await loadConnections();
-      } catch (err: any) {
-        showToast(err.message, 'error');
-      } finally {
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Create Connection';
-      }
-    });
+          if (addModal) addModal.classList.add('hidden');
+          if (input) input.value = '';
+          showToast('✅ Connection created successfully!', 'success');
+          await loadConnections();
+        } catch (err) {
+          showToast(err.message || 'Create failed', 'error');
+        } finally {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Create Connection';
+          }
+        }
+      });
+    }
 
     // Drawer close buttons
-    document.getElementById('close-settings-drawer-btn')?.addEventListener('click', closeSettingsDrawer);
-    document.getElementById('settings-drawer-backdrop')?.addEventListener('click', closeSettingsDrawer);
+    var closeDrawerBtn = document.getElementById('close-settings-drawer-btn');
+    if (closeDrawerBtn) closeDrawerBtn.addEventListener('click', closeSettingsDrawer);
+    var drawerBackdrop = document.getElementById('settings-drawer-backdrop');
+    if (drawerBackdrop) drawerBackdrop.addEventListener('click', closeSettingsDrawer);
 
     // Sort Mode Chips Toggle
-    document.querySelectorAll('#sort-modes-chips-container .sort-chip').forEach((chip) => {
-      chip.addEventListener('click', () => {
-        const isActive = chip.classList.contains('active');
+    document.querySelectorAll('#sort-modes-chips-container .sort-chip').forEach(function (chip) {
+      chip.addEventListener('click', function () {
+        var isActive = chip.classList.contains('active');
         if (isActive) {
-          const activeCount = document.querySelectorAll('#sort-modes-chips-container .sort-chip.active').length;
+          var activeCount = document.querySelectorAll('#sort-modes-chips-container .sort-chip.active').length;
           if (activeCount <= 1) {
             showToast('At least one sort mode must remain selected.', 'error');
             return;
@@ -1007,269 +1073,328 @@ export const prerender = false;
       });
     });
 
-    // Save Drawer Settings (V23 & R15.3.3)
-    document.getElementById('connection-settings-form')?.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const connId = (document.getElementById('drawer-connection-id') as HTMLInputElement).value;
-      if (!connId) return;
+    // Save Drawer Settings
+    var settingsForm = document.getElementById('connection-settings-form');
+    if (settingsForm) {
+      settingsForm.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        var drawerConnIdEl = document.getElementById('drawer-connection-id');
+        var connId = drawerConnIdEl ? drawerConnIdEl.value : '';
+        if (!connId) return;
 
-      const saveBtn = document.getElementById('save-drawer-settings-btn') as HTMLButtonElement;
-      saveBtn.disabled = true;
-      saveBtn.textContent = 'Saving...';
+        var saveBtn = document.getElementById('save-drawer-settings-btn');
+        if (saveBtn) {
+          saveBtn.disabled = true;
+          saveBtn.textContent = 'Saving...';
+        }
 
-      const activeSortModes: string[] = [];
-      document.querySelectorAll('#sort-modes-chips-container .sort-chip.active').forEach((c) => {
-        const mode = c.getAttribute('data-mode');
-        if (mode) activeSortModes.push(mode);
-      });
-
-      const payload = {
-        analytics_webhook_url: (document.getElementById('setting-analytics-webhook') as HTMLInputElement).value.trim() || null,
-        analytics_sync_time: (document.getElementById('setting-analytics-time') as HTMLInputElement).value.trim() || '04:00',
-        analytics_start_offset_days: parseInt((document.getElementById('setting-analytics-start-offset') as HTMLInputElement).value || '7', 10),
-        analytics_end_offset_days: parseInt((document.getElementById('setting-analytics-end-offset') as HTMLInputElement).value || '1', 10),
-        top_pins_webhook_url: (document.getElementById('setting-top-pins-webhook') as HTMLInputElement).value.trim() || null,
-        top_pins_sync_time: (document.getElementById('setting-top-pins-time') as HTMLInputElement).value.trim() || '04:30',
-        top_pins_start_offset_days: parseInt((document.getElementById('setting-top-pins-start-offset') as HTMLInputElement).value || '7', 10),
-        top_pins_end_offset_days: parseInt((document.getElementById('setting-top-pins-end-offset') as HTMLInputElement).value || '2', 10),
-        top_pins_num_of_pins: parseInt((document.getElementById('setting-top-pins-num-pins') as HTMLInputElement).value || '50', 10),
-        top_pins_sort_modes: activeSortModes,
-        fastcron_notify: (document.getElementById('setting-fastcron-notify') as HTMLSelectElement).value === 'true',
-        fastcron_timeout: parseInt((document.getElementById('setting-fastcron-timeout') as HTMLInputElement).value || '30', 10),
-        fastcron_instances: parseInt((document.getElementById('setting-fastcron-instances') as HTMLInputElement).value || '1', 10),
-        timezone: (document.getElementById('setting-workspace-timezone') as HTMLSelectElement).value,
-      };
-
-      const fastcronTokenInput = document.getElementById('setting-fastcron-token') as HTMLInputElement;
-      const fastcronTokenVal = fastcronTokenInput ? fastcronTokenInput.value.trim() : '';
-      if (fastcronTokenVal) {
-        (payload as any).fastcron_token = fastcronTokenVal;
-      }
-
-      try {
-        const json = await safeFetchJson(`/api/analytics/connections/${connId}/settings`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
+        var activeSortModes = [];
+        document.querySelectorAll('#sort-modes-chips-container .sort-chip.active').forEach(function (c) {
+          var mode = c.getAttribute('data-mode');
+          if (mode) activeSortModes.push(mode);
         });
-        if (!json.success) throw new Error(json.error || 'Failed to save settings.');
 
-        showToast('✅ Settings saved successfully', 'success');
-        closeSettingsDrawer();
-        await loadConnections();
-      } catch (err: any) {
-        showToast(err.message, 'error');
-      } finally {
-        saveBtn.disabled = false;
-        saveBtn.textContent = 'Save Settings';
-      }
-    });
+        var elAWeb = document.getElementById('setting-analytics-webhook');
+        var elATime = document.getElementById('setting-analytics-time');
+        var elAStart = document.getElementById('setting-analytics-start-offset');
+        var elAEnd = document.getElementById('setting-analytics-end-offset');
+        var elBWeb = document.getElementById('setting-top-pins-webhook');
+        var elBTime = document.getElementById('setting-top-pins-time');
+        var elBStart = document.getElementById('setting-top-pins-start-offset');
+        var elBEnd = document.getElementById('setting-top-pins-end-offset');
+        var elBPins = document.getElementById('setting-top-pins-num-pins');
+        var elNotify = document.getElementById('setting-fastcron-notify');
+        var elTimeout = document.getElementById('setting-fastcron-timeout');
+        var elInstances = document.getElementById('setting-fastcron-instances');
+        var elTz = document.getElementById('setting-workspace-timezone');
+
+        var payload = {
+          analytics_webhook_url: elAWeb ? elAWeb.value.trim() || null : null,
+          analytics_sync_time: elATime ? elATime.value.trim() || '04:00' : '04:00',
+          analytics_start_offset_days: elAStart ? parseInt(elAStart.value || '7', 10) : 7,
+          analytics_end_offset_days: elAEnd ? parseInt(elAEnd.value || '1', 10) : 1,
+          top_pins_webhook_url: elBWeb ? elBWeb.value.trim() || null : null,
+          top_pins_sync_time: elBTime ? elBTime.value.trim() || '04:30' : '04:30',
+          top_pins_start_offset_days: elBStart ? parseInt(elBStart.value || '7', 10) : 7,
+          top_pins_end_offset_days: elBEnd ? parseInt(elBEnd.value || '2', 10) : 2,
+          top_pins_num_of_pins: elBPins ? parseInt(elBPins.value || '50', 10) : 50,
+          top_pins_sort_modes: activeSortModes,
+          fastcron_notify: elNotify ? elNotify.value === 'true' : true,
+          fastcron_timeout: elTimeout ? parseInt(elTimeout.value || '30', 10) : 30,
+          fastcron_instances: elInstances ? parseInt(elInstances.value || '1', 10) : 1,
+          timezone: elTz ? elTz.value : 'UTC',
+        };
+
+        var fastcronTokenInput = document.getElementById('setting-fastcron-token');
+        var fastcronTokenVal = fastcronTokenInput ? fastcronTokenInput.value.trim() : '';
+        if (fastcronTokenVal) {
+          payload.fastcron_token = fastcronTokenVal;
+        }
+
+        try {
+          var json = await safeFetchJson('/api/analytics/connections/' + connId + '/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          if (!json.success) throw new Error(json.error || 'Failed to save settings.');
+
+          showToast('✅ Settings saved successfully', 'success');
+          closeSettingsDrawer();
+          await loadConnections();
+        } catch (err) {
+          showToast(err.message || 'Save failed', 'error');
+        } finally {
+          if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Save Settings';
+          }
+        }
+      });
+    }
 
     // Test Ping Buttons
-    document.getElementById('ping-analytics-btn')?.addEventListener('click', async () => {
-      const connId = (document.getElementById('drawer-connection-id') as HTMLInputElement).value;
-      if (!connId) return;
-      const btn = document.getElementById('ping-analytics-btn') as HTMLButtonElement;
-      btn.disabled = true;
-      try {
-        const json = await safeFetchJson('/api/analytics/trigger-sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ connection_id: connId, channel: 'analytics', mode: 'ping' }),
-        });
-        showToast(json.message || '✅ Pipeline A ping successful!', 'success');
-      } catch (err: any) {
-        showToast(`Ping failed: ${err.message}`, 'error');
-      } finally {
-        btn.disabled = false;
-      }
-    });
+    var pingABtn = document.getElementById('ping-analytics-btn');
+    if (pingABtn) {
+      pingABtn.addEventListener('click', async function () {
+        var drawerConnIdEl = document.getElementById('drawer-connection-id');
+        var connId = drawerConnIdEl ? drawerConnIdEl.value : '';
+        if (!connId) return;
+        pingABtn.disabled = true;
+        try {
+          var json = await safeFetchJson('/api/analytics/trigger-sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ connection_id: connId, channel: 'analytics', mode: 'ping' }),
+          });
+          showToast(json.message || '✅ Pipeline A ping successful!', 'success');
+        } catch (err) {
+          showToast('Ping failed: ' + (err.message || 'Error'), 'error');
+        } finally {
+          pingABtn.disabled = false;
+        }
+      });
+    }
 
-    document.getElementById('ping-top-pins-btn')?.addEventListener('click', async () => {
-      const connId = (document.getElementById('drawer-connection-id') as HTMLInputElement).value;
-      if (!connId) return;
-      const btn = document.getElementById('ping-top-pins-btn') as HTMLButtonElement;
-      btn.disabled = true;
-      try {
-        const json = await safeFetchJson('/api/analytics/trigger-sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ connection_id: connId, channel: 'top_pins', mode: 'ping' }),
-        });
-        showToast(json.message || '✅ Pipeline B ping successful!', 'success');
-      } catch (err: any) {
-        showToast(`Ping failed: ${err.message}`, 'error');
-      } finally {
-        btn.disabled = false;
-      }
-    });
+    var pingBBtn = document.getElementById('ping-top-pins-btn');
+    if (pingBBtn) {
+      pingBBtn.addEventListener('click', async function () {
+        var drawerConnIdEl = document.getElementById('drawer-connection-id');
+        var connId = drawerConnIdEl ? drawerConnIdEl.value : '';
+        if (!connId) return;
+        pingBBtn.disabled = true;
+        try {
+          var json = await safeFetchJson('/api/analytics/trigger-sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ connection_id: connId, channel: 'top_pins', mode: 'ping' }),
+          });
+          showToast(json.message || '✅ Pipeline B ping successful!', 'success');
+        } catch (err) {
+          showToast('Ping failed: ' + (err.message || 'Error'), 'error');
+        } finally {
+          pingBBtn.disabled = false;
+        }
+      });
+    }
 
     // Run Now Buttons
-    document.getElementById('run-analytics-btn')?.addEventListener('click', async () => {
-      const connId = (document.getElementById('drawer-connection-id') as HTMLInputElement).value;
-      if (!connId) return;
-      const btn = document.getElementById('run-analytics-btn') as HTMLButtonElement;
-      btn.disabled = true;
-      try {
-        const json = await safeFetchJson('/api/analytics/trigger-sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ connection_id: connId, channel: 'analytics', mode: 'sync' }),
-        });
-        showToast(json.message || '✅ Analytics sync triggered!', 'success');
-      } catch (err: any) {
-        showToast(`Run failed: ${err.message}`, 'error');
-      } finally {
-        btn.disabled = false;
-      }
-    });
-
-    document.getElementById('run-top-pins-btn')?.addEventListener('click', async () => {
-      const connId = (document.getElementById('drawer-connection-id') as HTMLInputElement).value;
-      if (!connId) return;
-      const btn = document.getElementById('run-top-pins-btn') as HTMLButtonElement;
-      btn.disabled = true;
-      try {
-        const json = await safeFetchJson('/api/analytics/trigger-sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ connection_id: connId, channel: 'top_pins', mode: 'sync' }),
-        });
-        showToast(json.message || '✅ Top pins sync triggered!', 'success');
-      } catch (err: any) {
-        showToast(`Run failed: ${err.message}`, 'error');
-      } finally {
-        btn.disabled = false;
-      }
-    });
-
-    // Sync Schedule Buttons with Verbatim Error Display (V23 & R15.3.4)
-    document.getElementById('sync-fastcron-a-btn')?.addEventListener('click', async () => {
-      const connId = (document.getElementById('drawer-connection-id') as HTMLInputElement).value;
-      if (!connId) return;
-      const btn = document.getElementById('sync-fastcron-a-btn') as HTMLButtonElement;
-      btn.disabled = true;
-      try {
-        const json = await safeFetchJson('/api/analytics/schedule/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ connection_id: connId, channel: 'analytics' }),
-        });
-        if (json.success) {
-          showToast(`✅ Schedule synced! FastCron Job #${json.fastcron_job_id}`, 'success');
-          await loadConnections();
-          if (currentSelectedConnection) openSettingsDrawer(connId);
-        } else {
-          showToast(`FastCron Sync Error: ${json.error}`, 'error');
+    var runABtn = document.getElementById('run-analytics-btn');
+    if (runABtn) {
+      runABtn.addEventListener('click', async function () {
+        var drawerConnIdEl = document.getElementById('drawer-connection-id');
+        var connId = drawerConnIdEl ? drawerConnIdEl.value : '';
+        if (!connId) return;
+        runABtn.disabled = true;
+        try {
+          var json = await safeFetchJson('/api/analytics/trigger-sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ connection_id: connId, channel: 'analytics', mode: 'sync' }),
+          });
+          showToast(json.message || '✅ Analytics sync triggered!', 'success');
+        } catch (err) {
+          showToast('Run failed: ' + (err.message || 'Error'), 'error');
+        } finally {
+          runABtn.disabled = false;
         }
-      } catch (err: any) {
-        showToast(`FastCron Sync Error: ${err.message}`, 'error');
-      } finally {
-        btn.disabled = false;
-      }
-    });
+      });
+    }
 
-    document.getElementById('sync-fastcron-b-btn')?.addEventListener('click', async () => {
-      const connId = (document.getElementById('drawer-connection-id') as HTMLInputElement).value;
-      if (!connId) return;
-      const btn = document.getElementById('sync-fastcron-b-btn') as HTMLButtonElement;
-      btn.disabled = true;
-      try {
-        const json = await safeFetchJson('/api/analytics/schedule/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ connection_id: connId, channel: 'top_pins' }),
-        });
-        if (json.success) {
-          showToast(`✅ Schedule synced! FastCron Job #${json.fastcron_job_id}`, 'success');
-          await loadConnections();
-          if (currentSelectedConnection) openSettingsDrawer(connId);
-        } else {
-          showToast(`FastCron Sync Error: ${json.error}`, 'error');
+    var runBBtn = document.getElementById('run-top-pins-btn');
+    if (runBBtn) {
+      runBBtn.addEventListener('click', async function () {
+        var drawerConnIdEl = document.getElementById('drawer-connection-id');
+        var connId = drawerConnIdEl ? drawerConnIdEl.value : '';
+        if (!connId) return;
+        runBBtn.disabled = true;
+        try {
+          var json = await safeFetchJson('/api/analytics/trigger-sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ connection_id: connId, channel: 'top_pins', mode: 'sync' }),
+          });
+          showToast(json.message || '✅ Top pins sync triggered!', 'success');
+        } catch (err) {
+          showToast('Run failed: ' + (err.message || 'Error'), 'error');
+        } finally {
+          runBBtn.disabled = false;
         }
-      } catch (err: any) {
-        showToast(`FastCron Sync Error: ${err.message}`, 'error');
-      } finally {
-        btn.disabled = false;
-      }
-    });
+      });
+    }
+
+    // Sync Schedule Buttons
+    var syncABtn = document.getElementById('sync-fastcron-a-btn');
+    if (syncABtn) {
+      syncABtn.addEventListener('click', async function () {
+        var drawerConnIdEl = document.getElementById('drawer-connection-id');
+        var connId = drawerConnIdEl ? drawerConnIdEl.value : '';
+        if (!connId) return;
+        syncABtn.disabled = true;
+        try {
+          var json = await safeFetchJson('/api/analytics/schedule/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ connection_id: connId, channel: 'analytics' }),
+          });
+          if (json.success) {
+            showToast('✅ Schedule synced! FastCron Job #' + json.fastcron_job_id, 'success');
+            await loadConnections();
+            if (currentSelectedConnection) openSettingsDrawer(connId);
+          } else {
+            showToast('FastCron Sync Error: ' + json.error, 'error');
+          }
+        } catch (err) {
+          showToast('FastCron Sync Error: ' + (err.message || 'Error'), 'error');
+        } finally {
+          syncABtn.disabled = false;
+        }
+      });
+    }
+
+    var syncBBtn = document.getElementById('sync-fastcron-b-btn');
+    if (syncBBtn) {
+      syncBBtn.addEventListener('click', async function () {
+        var drawerConnIdEl = document.getElementById('drawer-connection-id');
+        var connId = drawerConnIdEl ? drawerConnIdEl.value : '';
+        if (!connId) return;
+        syncBBtn.disabled = true;
+        try {
+          var json = await safeFetchJson('/api/analytics/schedule/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ connection_id: connId, channel: 'top_pins' }),
+          });
+          if (json.success) {
+            showToast('✅ Schedule synced! FastCron Job #' + json.fastcron_job_id, 'success');
+            await loadConnections();
+            if (currentSelectedConnection) openSettingsDrawer(connId);
+          } else {
+            showToast('FastCron Sync Error: ' + json.error, 'error');
+          }
+        } catch (err) {
+          showToast('FastCron Sync Error: ' + (err.message || 'Error'), 'error');
+        } finally {
+          syncBBtn.disabled = false;
+        }
+      });
+    }
 
     // View Logs Buttons
-    document.getElementById('view-logs-a-btn')?.addEventListener('click', async () => {
-      const connId = (document.getElementById('drawer-connection-id') as HTMLInputElement).value;
-      if (!connId) return;
-      try {
-        const json = await safeFetchJson(`/api/analytics/cron/logs?connection_id=${connId}&channel=analytics`);
-        if (json.success && Array.isArray(json.logs)) {
-          alert(`FastCron Logs (Job #${json.job_id}):\n` + json.logs.map((l: any) => `[${l.date || l.time}] HTTP ${l.http_status || '200'}`).join('\n'));
-        } else {
-          showToast(json.error || 'No logs available.', 'info');
+    var viewLogsABtn = document.getElementById('view-logs-a-btn');
+    if (viewLogsABtn) {
+      viewLogsABtn.addEventListener('click', async function () {
+        var drawerConnIdEl = document.getElementById('drawer-connection-id');
+        var connId = drawerConnIdEl ? drawerConnIdEl.value : '';
+        if (!connId) return;
+        try {
+          var json = await safeFetchJson('/api/analytics/cron/logs?connection_id=' + connId + '&channel=analytics');
+          if (json.success && Array.isArray(json.logs)) {
+            alert('FastCron Logs (Job #' + json.job_id + '):\n' + json.logs.map(function (l) { return '[' + (l.date || l.time) + '] HTTP ' + (l.http_status || '200'); }).join('\n'));
+          } else {
+            showToast(json.error || 'No logs available.', 'info');
+          }
+        } catch (err) {
+          showToast('Failed to load logs: ' + (err.message || 'Error'), 'error');
         }
-      } catch (err: any) {
-        showToast(`Failed to load logs: ${err.message}`, 'error');
-      }
-    });
+      });
+    }
 
-    document.getElementById('view-logs-b-btn')?.addEventListener('click', async () => {
-      const connId = (document.getElementById('drawer-connection-id') as HTMLInputElement).value;
-      if (!connId) return;
-      try {
-        const json = await safeFetchJson(`/api/analytics/cron/logs?connection_id=${connId}&channel=top_pins`);
-        if (json.success && Array.isArray(json.logs)) {
-          alert(`FastCron Logs (Job #${json.job_id}):\n` + json.logs.map((l: any) => `[${l.date || l.time}] HTTP ${l.http_status || '200'}`).join('\n'));
-        } else {
-          showToast(json.error || 'No logs available.', 'info');
+    var viewLogsBBtn = document.getElementById('view-logs-b-btn');
+    if (viewLogsBBtn) {
+      viewLogsBBtn.addEventListener('click', async function () {
+        var drawerConnIdEl = document.getElementById('drawer-connection-id');
+        var connId = drawerConnIdEl ? drawerConnIdEl.value : '';
+        if (!connId) return;
+        try {
+          var json = await safeFetchJson('/api/analytics/cron/logs?connection_id=' + connId + '&channel=top_pins');
+          if (json.success && Array.isArray(json.logs)) {
+            alert('FastCron Logs (Job #' + json.job_id + '):\n' + json.logs.map(function (l) { return '[' + (l.date || l.time) + '] HTTP ' + (l.http_status || '200'); }).join('\n'));
+          } else {
+            showToast(json.error || 'No logs available.', 'info');
+          }
+        } catch (err) {
+          showToast('Failed to load logs: ' + (err.message || 'Error'), 'error');
         }
-      } catch (err: any) {
-        showToast(`Failed to load logs: ${err.message}`, 'error');
-      }
-    });
+      });
+    }
 
     // Typed Delete Confirmation Modal (Danger Zone)
-    const deleteModal = document.getElementById('delete-confirm-modal');
-    const deleteTargetName = document.getElementById('delete-target-name');
-    const deletePromptCode = document.getElementById('delete-prompt-code');
-    const deleteTypedInput = document.getElementById('delete-typed-input') as HTMLInputElement;
-    const executeDeleteBtn = document.getElementById('execute-delete-btn') as HTMLButtonElement;
+    var deleteModal = document.getElementById('delete-confirm-modal');
+    var deleteTargetName = document.getElementById('delete-target-name');
+    var deletePromptCode = document.getElementById('delete-prompt-code');
+    var deleteTypedInput = document.getElementById('delete-typed-input');
+    var executeDeleteBtn = document.getElementById('execute-delete-btn');
 
-    document.getElementById('delete-connection-btn')?.addEventListener('click', () => {
-      if (!currentSelectedConnection) return;
-      if (deleteTargetName) deleteTargetName.textContent = currentSelectedConnection.display_name;
-      if (deletePromptCode) deletePromptCode.textContent = currentSelectedConnection.display_name;
-      if (deleteTypedInput) deleteTypedInput.value = '';
-      if (executeDeleteBtn) executeDeleteBtn.disabled = true;
-      deleteModal?.classList.remove('hidden');
-    });
+    var deleteConnBtn = document.getElementById('delete-connection-btn');
+    if (deleteConnBtn) {
+      deleteConnBtn.addEventListener('click', function () {
+        if (!currentSelectedConnection) return;
+        if (deleteTargetName) deleteTargetName.textContent = currentSelectedConnection.display_name;
+        if (deletePromptCode) deletePromptCode.textContent = currentSelectedConnection.display_name;
+        if (deleteTypedInput) deleteTypedInput.value = '';
+        if (executeDeleteBtn) executeDeleteBtn.disabled = true;
+        if (deleteModal) deleteModal.classList.remove('hidden');
+      });
+    }
 
-    document.getElementById('close-delete-modal-btn')?.addEventListener('click', () => deleteModal?.classList.add('hidden'));
-    document.getElementById('cancel-delete-modal-btn')?.addEventListener('click', () => deleteModal?.classList.add('hidden'));
+    var closeDelBtn = document.getElementById('close-delete-modal-btn');
+    if (closeDelBtn) closeDelBtn.addEventListener('click', function () { if (deleteModal) deleteModal.classList.add('hidden'); });
+    var cancelDelBtn = document.getElementById('cancel-delete-modal-btn');
+    if (cancelDelBtn) cancelDelBtn.addEventListener('click', function () { if (deleteModal) deleteModal.classList.add('hidden'); });
 
-    deleteTypedInput?.addEventListener('input', (e: any) => {
-      const val = e.target.value.trim();
-      executeDeleteBtn.disabled = (val !== currentSelectedConnection?.display_name);
-    });
+    if (deleteTypedInput) {
+      deleteTypedInput.addEventListener('input', function (e) {
+        var val = e.target.value.trim();
+        if (executeDeleteBtn) {
+          executeDeleteBtn.disabled = (val !== (currentSelectedConnection ? currentSelectedConnection.display_name : ''));
+        }
+      });
+    }
 
-    executeDeleteBtn?.addEventListener('click', async () => {
-      if (!currentSelectedConnection) return;
-      executeDeleteBtn.disabled = true;
-      executeDeleteBtn.textContent = 'Deleting...';
+    if (executeDeleteBtn) {
+      executeDeleteBtn.addEventListener('click', async function () {
+        if (!currentSelectedConnection) return;
+        executeDeleteBtn.disabled = true;
+        executeDeleteBtn.textContent = 'Deleting...';
 
-      try {
-        const json = await safeFetchJson(`/api/analytics/connections/${currentSelectedConnection.id}`, {
-          method: 'DELETE',
-        });
-        if (!json.success) throw new Error(json.error || 'Failed to delete connection.');
+        try {
+          var json = await safeFetchJson('/api/analytics/connections/' + currentSelectedConnection.id, {
+            method: 'DELETE',
+          });
+          if (!json.success) throw new Error(json.error || 'Failed to delete connection.');
 
-        showToast('✅ Connection deleted successfully.', 'success');
-        deleteModal?.classList.add('hidden');
-        closeSettingsDrawer();
-        await loadConnections();
-      } catch (err: any) {
-        showToast(err.message, 'error');
-      } finally {
-        executeDeleteBtn.textContent = 'Delete Connection';
-      }
-    });
+          showToast('✅ Connection deleted successfully.', 'success');
+          if (deleteModal) deleteModal.classList.add('hidden');
+          closeSettingsDrawer();
+          await loadConnections();
+        } catch (err) {
+          showToast(err.message || 'Delete error', 'error');
+        } finally {
+          executeDeleteBtn.textContent = 'Delete Connection';
+        }
+      });
+    }
 
     loadConnections();
   });
