@@ -449,4 +449,10 @@ async function init() {
   renderS2();
 }
 
+window.addEventListener('analytics:data-purged', () => {
+  renderS1();
+  renderS2();
+});
+
 init();
+

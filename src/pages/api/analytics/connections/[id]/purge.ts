@@ -159,7 +159,7 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
     );
 
     // Invalidate edge cache for this connection
-    const runtimeKvNamespace = (locals as any)?.runtime?.env?.KV;
+    const runtimeKvNamespace = (locals as any)?.runtime?.env?.ANALYTICS_KV;
     await edgeCache.invalidateConnection(workspaceId, connectionId, runtimeKvNamespace);
 
     return new Response(

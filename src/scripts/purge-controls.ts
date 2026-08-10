@@ -100,6 +100,23 @@ if (purgeConnId) {
     }
   });
 
+  async function safeFetchJson<T = any>(url: string, options?: RequestInit): Promise<T> {
+    const res = await fetch(url, options);
+    const contentType = res.headers.get('content-type') || '';
+
+    if (!contentType.includes('application/json')) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Invalid server response (Content-Type: ${contentType || 'unknown'}). ${text.slice(0, 100)}`);
+    }
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || json.success === false) {
+      throw new Error(json.error || `Request failed with status HTTP ${res.status}`);
+    }
+
+    return json as T;
+  }
+
   // Preview Button Handler
   previewBtn?.addEventListener('click', async () => {
     if (!fromInput || !toInput) return;
@@ -139,14 +156,9 @@ if (purgeConnId) {
     }
 
     try {
-      const res = await fetch(
+      const json = await safeFetchJson(
         `/api/analytics/connections/${purgeConnId}/purge-preview?from=${from}&to=${to}&targets=${targets.join(',')}`
       );
-      const json = await res.json();
-
-      if (!res.ok || !json.success) {
-        throw new Error(json.error || 'Failed to generate purge preview');
-      }
 
       currentPreview = json.preview;
       renderPreview(json.preview);
@@ -228,7 +240,7 @@ if (purgeConnId) {
     deleteBtn.textContent = 'Purging Data...';
 
     try {
-      const res = await fetch(`/api/analytics/connections/${purgeConnId}/purge`, {
+      const json = await safeFetchJson(`/api/analytics/connections/${purgeConnId}/purge`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -238,11 +250,6 @@ if (purgeConnId) {
           confirm_name: confirmName,
         }),
       });
-
-      const json = await res.json();
-      if (!res.ok || !json.success) {
-        throw new Error(json.error || 'Purge failed.');
-      }
 
       const c = json.counts || {};
       const totalDeleted = (c.daily_deleted || 0) + (c.summaries_deleted || 0) + (c.top_pins_deleted || 0) + (c.url_perf_deleted || 0);
@@ -258,7 +265,7 @@ if (purgeConnId) {
       if (confirmSection) confirmSection.classList.add('hidden');
       if (confirmInput) confirmInput.value = '';
 
-      // Notify analytics tables to reload if applicable
+      // Notify analytics tables and pin intelligence to reload
       window.dispatchEvent(new CustomEvent('analytics:data-purged'));
 
     } catch (err: any) {

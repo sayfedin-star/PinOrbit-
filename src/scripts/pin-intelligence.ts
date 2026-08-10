@@ -370,4 +370,11 @@ if (intelConnId) {
     hasLoadedIntel = true;
     loadPinLeaderboard();
   }
+
+  window.addEventListener('analytics:data-purged', () => {
+    if (hasLoadedIntel) {
+      loadPinLeaderboard();
+    }
+  });
 }
+

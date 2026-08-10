@@ -1404,7 +1404,13 @@ export const analyticsDb = {
   },
 
   /**
-   * Previews the number of records that would be purged for a connection within a date range.
+   * Preview data purge record counts and affected rollup dates.
+   * Scoped across the 5 analytics data layers:
+   * - D1: account_analytics_daily (daily metrics per connection)
+   * - D2: account_analytics_summaries (period summaries per connection)
+   * - D3: daily_workspace_metrics (workspace rollups recalculated across remaining connections)
+   * - D4: top_pins_snapshots (ranked top pins snapshots)
+   * - D5: url_performance_history (destination URL performance history)
    */
   async previewPurge(
     workspaceId: string,

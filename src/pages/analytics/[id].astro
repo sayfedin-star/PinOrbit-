@@ -465,14 +465,22 @@ const accountName = connection.display_name || 'Account';
 
   <!-- PANEL 4: DATA PURGE (V27) -->
   <section id="panel-purge" role="tabpanel" aria-labelledby="tab-purge" hidden class="space-y-6">
-    <!-- Warning Banner -->
+    <!-- Warning Banner (Documenting D1-D5 Data Purge Lifecycle) -->
     <div class="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-600 dark:text-amber-400 flex items-start gap-3">
       <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-      <div>
+      <div class="space-y-1">
         <h3 class="font-bold text-sm">Permanent Data Deletion & Audit Trail</h3>
-        <p class="mt-0.5 text-[11px] leading-relaxed">
-          Deletes are permanent and removed from the database. Ingestion run history is kept for audit. Rollups in <code class="font-mono bg-background/50 px-1 py-0.5 rounded">daily_workspace_metrics</code> will be atomically recalculated across any remaining connection data.
+        <p class="text-[11px] leading-relaxed">
+          Deletes are permanent and removed from the database. Ingestion run history is kept for audit.
         </p>
+        <div class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+          <div class="rounded-lg bg-background/60 p-2 border border-amber-500/20" title="D3 (daily_workspace_metrics): Recalculated atomically from remaining active connections">
+            <strong class="font-bold text-foreground">D3 Workspace Rollups:</strong> <code class="font-mono bg-muted px-1 py-0.5 rounded text-[10px]">daily_workspace_metrics</code> are atomically recalculated & rebuilt across all remaining connection data for the purged range.
+          </div>
+          <div class="rounded-lg bg-background/60 p-2 border border-amber-500/20" title="D5 (url_performance_history): Purged when Top Pins target is selected">
+            <strong class="font-bold text-foreground">D5 URL Performance:</strong> <code class="font-mono bg-muted px-1 py-0.5 rounded text-[10px]">url_performance_history</code> records for the selected period are permanently deleted alongside Top Pins snapshots.
+          </div>
+        </div>
       </div>
     </div>
 
