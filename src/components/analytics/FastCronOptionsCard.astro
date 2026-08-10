@@ -1,0 +1,31 @@
+---
+// src/components/analytics/FastCronOptionsCard.astro
+---
+<article class="rounded-2xl border border-border bg-card p-5 shadow-sm space-y-4" id="fastcron-options-card">
+  <header>
+    <h3 class="text-sm font-bold">FastCron Execution Options</h3>
+    <p class="text-[11px] text-muted-foreground mt-0.5">Advanced settings for scheduled cron jobs</p>
+  </header>
+
+  <div class="grid gap-4 sm:grid-cols-3">
+    <label class="space-y-1.5 flex flex-col justify-start">
+      <span class="text-xs font-semibold text-muted-foreground">Notify on Failure</span>
+      <div class="flex items-center gap-2 mt-1">
+        <input data-field="fastcron_notify" type="checkbox" class="h-4 w-4 rounded border-border text-primary focus:ring-primary" checked />
+        <span class="text-[11px]">Send Email Alerts</span>
+      </div>
+    </label>
+
+    <label class="space-y-1 text-xs">
+      <span class="font-semibold text-muted-foreground">Timeout (5–60 mins)</span>
+      <input data-field="fastcron_timeout" type="number" min="5" max="60" placeholder="30" class="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs" />
+      <p data-err="fastcron_timeout" class="hidden text-[10px] font-bold text-red-500"></p>
+    </label>
+
+    <label class="space-y-1 text-xs">
+      <span class="font-semibold text-muted-foreground">Instances (0–5)</span>
+      <input data-field="fastcron_instances" type="number" min="0" max="5" placeholder="1" class="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs" />
+      <p data-err="fastcron_instances" class="hidden text-[10px] font-bold text-red-500"></p>
+    </label>
+  </div>
+</article>

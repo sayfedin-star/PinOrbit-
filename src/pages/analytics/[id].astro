@@ -1,13 +1,47 @@
 ---
 import Layout from '../../layouts/Layout.astro';
 import SectionHeader from '../../components/ui/SectionHeader.astro';
+import PipelineCard from '../../components/analytics/PipelineCard.astro';
+import FastCronOptionsCard from '../../components/analytics/FastCronOptionsCard.astro';
+import ConnectionHealthBanner from '../../components/analytics/ConnectionHealthBanner.astro';
+
+import { dbClients } from '../../server/db/clients';
+import { assertWorkspaceAccess } from '../../lib/auth';
+import type { Database } from '../../lib/database.types';
 
 export const prerender = false;
 
 const { id: connectionId } = Astro.params;
+const workspaceId = Astro.cookies.get('po_workspace_id')?.value || '';
+
+if (!workspaceId || !connectionId) {
+  return Astro.redirect('/analytics');
+}
+
+// C1: DYNAMIC SECTION TITLES
+let connection: Database['public']['Tables']['analytics_connections']['Row'] | null = null;
+try {
+  const analyticsClient = dbClients.getAnalytics(Astro.locals?.runtime?.env);
+  const { data } = await analyticsClient
+    .from('analytics_connections')
+    .select('*')
+    .eq('id', connectionId)
+    .eq('workspace_id', workspaceId)
+    .is('deleted_at', null)
+    .single();
+  connection = data;
+} catch (e) {
+  console.error('Failed to load connection details', e);
+}
+
+if (!connection) {
+  return Astro.redirect('/analytics');
+}
+
+const accountName = connection.display_name || 'Account';
 ---
 
-<Layout title="Pinterest Account Analytics" description="Detailed daily snapshot logs and ranked top pins performance.">
+<Layout title={`${accountName} — Analytics`} description="Detailed daily snapshot logs and ranked top pins performance.">
   <!-- Back Link & Page Header -->
   <div class="mb-6" data-connection-id={connectionId}>
     <a
@@ -22,7 +56,7 @@ const { id: connectionId } = Astro.params;
       <div>
         <div class="flex items-center gap-3">
           <h1 id="connection-title" class="text-2xl font-black tracking-tight text-foreground">
-            Account Analytics
+            {accountName} — Analytics
           </h1>
           <span id="connection-status-badge" class="rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-bold text-emerald-600 dark:text-emerald-400">
             Active
@@ -34,545 +68,220 @@ const { id: connectionId } = Astro.params;
           <span>Last Sync: <strong id="connection-last-sync" class="text-foreground">Loading...</strong></span>
         </div>
       </div>
-
-      <!-- Action Buttons & Logs -->
-      <div class="flex items-center gap-2">
-        <a
-          href={`/logs?connection_id=${connectionId}`}
-          class="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-3.5 py-2 text-xs font-semibold text-foreground shadow-sm hover:bg-muted transition-all"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-          <span>View Logs</span>
-        </a>
-
-        <button
-          id="refresh-page-btn"
-          class="inline-flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2 text-xs font-bold text-primary-foreground shadow-sm hover:bg-primary/90 transition-all"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
-          <span>Refresh Data</span>
-        </button>
-      </div>
     </div>
   </div>
 
-  <!-- Global Date Range Picker with Presets (Applies to BOTH Section 1 & Section 2) -->
-  <div class="mb-8 rounded-2xl border border-border bg-card p-4 shadow-sm">
-    <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-      <div class="flex items-center gap-3">
-        <span class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Date Range:</span>
-        <!-- Presets -->
-        <div class="inline-flex rounded-xl border border-border bg-muted/30 p-1" id="range-presets">
-          <button data-days="7" class="preset-btn rounded-lg px-2.5 py-1 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all">7D</button>
-          <button data-days="14" class="preset-btn rounded-lg px-2.5 py-1 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all">14D</button>
-          <button data-days="30" class="preset-btn active rounded-lg bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground shadow-sm transition-all">30D</button>
-          <button data-days="90" class="preset-btn rounded-lg px-2.5 py-1 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all">90D</button>
+  <!-- C2: Tabs Shell -->
+  <div role="tablist" aria-label="Analytics views" class="mb-6 inline-flex rounded-xl border border-border bg-muted/30 p-1">
+    <button role="tab" id="tab-data" aria-controls="panel-data" aria-selected="true"
+      data-tab="data" class="rounded-lg px-4 py-1.5 text-xs font-bold bg-primary text-primary-foreground shadow-sm">📊 Data & Analytics</button>
+    <button role="tab" id="tab-pipe" aria-controls="panel-pipe" aria-selected="false"
+      data-tab="pipeline" class="rounded-lg px-4 py-1.5 text-xs font-semibold text-muted-foreground">⚙️ Pipeline & Automation</button>
+  </div>
+
+  <!-- PANEL 1: DATA & ANALYTICS -->
+  <section id="panel-data" role="tabpanel" aria-labelledby="tab-data">
+    <!-- Global Date Range Picker with Presets (Applies to BOTH Section 1 & Section 2) -->
+    <div class="mb-8 rounded-2xl border border-border bg-card p-4 shadow-sm">
+      <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div class="flex items-center gap-3">
+          <span class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Date Range:</span>
+          <!-- Presets -->
+          <div class="inline-flex rounded-xl border border-border bg-muted/30 p-1" id="range-presets">
+            <button data-days="7" class="preset-btn rounded-lg px-2.5 py-1 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all">7D</button>
+            <button data-days="14" class="preset-btn rounded-lg px-2.5 py-1 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all">14D</button>
+            <button data-days="30" class="preset-btn active rounded-lg bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground shadow-sm transition-all">30D</button>
+            <button data-days="90" class="preset-btn rounded-lg px-2.5 py-1 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all">90D</button>
+          </div>
+        </div>
+
+        <!-- Custom From/To Date Inputs -->
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="flex items-center gap-1.5">
+            <label class="text-xs font-semibold text-muted-foreground">From:</label>
+            <input
+              type="date"
+              id="from-date-input"
+              class="rounded-xl border border-border bg-card px-2.5 py-1.5 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+          </div>
+          <div class="flex items-center gap-1.5">
+            <label class="text-xs font-semibold text-muted-foreground">To:</label>
+            <input
+              type="date"
+              id="to-date-input"
+              class="rounded-xl border border-border bg-card px-2.5 py-1.5 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+          </div>
+          <button
+            id="apply-range-btn"
+            class="rounded-xl border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted transition-all shadow-sm"
+          >
+            Apply Range
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECTION 1 — IMPORT HISTORY & SNAPSHOT LOG (Daily) -->
+    <div class="mb-10 rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+      <div class="flex flex-col gap-2 border-b border-border p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <!-- C1: Dynamic Section Title -->
+          <h2 id="s1-title" class="text-base font-bold text-foreground">{accountName} — Daily Metrics</h2>
+          <p class="text-xs text-muted-foreground">Daily metric records from Pinterest API v5 with pooled summary totals</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <label class="text-xs font-semibold text-muted-foreground flex items-center gap-2">
+            Show: 
+            <select id="s1-ps" class="rounded-xl border border-border bg-background px-2 py-1 text-xs focus:outline-none focus:border-primary">
+              <option value="10">10</option>
+              <option value="25" selected>25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+          </label>
         </div>
       </div>
 
-      <!-- Custom From/To Date Inputs -->
-      <div class="flex flex-wrap items-center gap-2">
-        <div class="flex items-center gap-1.5">
-          <label class="text-xs font-semibold text-muted-foreground">From:</label>
-          <input
-            type="date"
-            id="from-date-input"
-            class="rounded-xl border border-border bg-card px-2.5 py-1.5 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-          />
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs">
+          <thead class="border-b border-border bg-muted/20 text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
+            <tr>
+              <th class="py-3 px-4 min-w-[130px] cursor-pointer hover:text-primary transition-colors select-none" data-s1-sort="metric_date">Date <span class="sort-icon"></span></th>
+              <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s1-sort="impressions">Impressions <span class="sort-icon"></span></th>
+              <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s1-sort="engagements">Engagements <span class="sort-icon"></span></th>
+              <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s1-sort="outbound_clicks">Outbound Clicks <span class="sort-icon"></span></th>
+              <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s1-sort="pin_clicks">Pin Clicks <span class="sort-icon"></span></th>
+              <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s1-sort="saves">Saves <span class="sort-icon"></span></th>
+            </tr>
+          </thead>
+          <tbody id="daily-metrics-tbody" class="divide-y divide-border">
+            <tr>
+              <td colspan="6" class="py-12 text-center text-muted-foreground">
+                Loading daily metrics...
+              </td>
+            </tr>
+          </tbody>
+          <tfoot id="daily-metrics-tfoot" class="border-t-2 border-border bg-muted/40 font-bold text-foreground">
+            <!-- Populated by client script -->
+          </tfoot>
+        </table>
+      </div>
+      <div id="s1-pagination" class="flex items-center justify-between p-4 border-t border-border bg-muted/10 text-xs">
+        <div class="text-muted-foreground">Showing <span id="s1-range">0-0</span> of <span id="s1-total">0</span></div>
+        <div class="flex gap-1" id="s1-page-buttons"></div>
+      </div>
+    </div>
+
+    <!-- SECTION 2 — RANKED TOP 50 PINS -->
+    <div class="mb-10 rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+      <div class="flex flex-col gap-4 border-b border-border p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <!-- C1: Dynamic Section Title -->
+          <h2 id="s2-title" class="text-base font-bold text-foreground">{accountName} — Top Pins</h2>
+          <p class="text-xs text-muted-foreground">Top organic pins ranked by Pinterest API v5 across core engagement metrics</p>
+          <div class="mt-1" id="s2-window-badge"></div>
         </div>
-        <div class="flex items-center gap-1.5">
-          <label class="text-xs font-semibold text-muted-foreground">To:</label>
-          <input
-            type="date"
-            id="to-date-input"
-            class="rounded-xl border border-border bg-card px-2.5 py-1.5 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-          />
+
+        <!-- 5 Sort Tabs -->
+        <div class="flex flex-col items-end gap-2">
+          <div class="flex flex-wrap items-center gap-1.5 rounded-xl border border-border bg-muted/40 p-1" id="top-pins-sort-tabs">
+            <button data-mode="IMPRESSION" class="mode-tab active rounded-lg bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground shadow-sm transition-all">Impressions</button>
+            <button data-mode="OUTBOUND_CLICK" class="mode-tab rounded-lg px-3 py-1 text-xs font-semibold text-muted-foreground transition-all hover:text-foreground">Outbound Clicks</button>
+            <button data-mode="SAVE" class="mode-tab rounded-lg px-3 py-1 text-xs font-semibold text-muted-foreground transition-all hover:text-foreground">Saves</button>
+            <button data-mode="ENGAGEMENT" class="mode-tab rounded-lg px-3 py-1 text-xs font-semibold text-muted-foreground transition-all hover:text-foreground">Engagements</button>
+            <button data-mode="PIN_CLICK" class="mode-tab rounded-lg px-3 py-1 text-xs font-semibold text-muted-foreground transition-all hover:text-foreground">Pin Clicks</button>
+          </div>
+          <div class="flex items-center gap-2">
+            <input type="text" id="s2-q" placeholder="Search title or ID..." class="rounded-xl border border-border bg-background px-2.5 py-1 text-xs focus:outline-none focus:border-primary w-48" />
+            <label class="text-xs font-semibold text-muted-foreground flex items-center gap-2">
+              Show: 
+              <select id="s2-ps" class="rounded-xl border border-border bg-background px-2 py-1 text-xs focus:outline-none focus:border-primary">
+                <option value="10">10</option>
+                <option value="25" selected>25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+              </select>
+            </label>
+          </div>
         </div>
-        <button
-          id="apply-range-btn"
-          class="rounded-xl border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted transition-all shadow-sm"
-        >
-          Apply Range
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- SECTION 1 — IMPORT HISTORY & SNAPSHOT LOG (Daily) -->
-  <div class="mb-10 rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
-    <div class="flex flex-col gap-2 border-b border-border p-4 sm:flex-row sm:items-center sm:justify-between">
-      <div>
-        <h2 class="text-base font-bold text-foreground">Section 1: Daily Import History & Snapshot Log</h2>
-        <p class="text-xs text-muted-foreground">Daily metric records from Pinterest API v5 with pooled summary totals</p>
-      </div>
-    </div>
-
-    <div class="overflow-x-auto">
-      <table class="w-full text-left text-xs">
-        <thead class="border-b border-border bg-muted/20 text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
-          <tr>
-            <th class="py-3 px-4 min-w-[130px]">Date</th>
-            <th class="py-3 px-4 text-right">Impressions</th>
-            <th class="py-3 px-4 text-right">Engagements</th>
-            <th class="py-3 px-4 text-right">Outbound Clicks</th>
-            <th class="py-3 px-4 text-right">Pin Clicks</th>
-            <th class="py-3 px-4 text-right">Saves</th>
-            <th class="py-3 px-4 text-center min-w-[80px]">Actions</th>
-          </tr>
-        </thead>
-        <tbody id="daily-metrics-tbody" class="divide-y divide-border">
-          <tr>
-            <td colspan="7" class="py-12 text-center text-muted-foreground">
-              Loading daily metrics...
-            </td>
-          </tr>
-        </tbody>
-        <tfoot id="daily-metrics-tfoot" class="border-t-2 border-border bg-muted/40 font-bold text-foreground">
-          <!-- Populated by client script -->
-        </tfoot>
-      </table>
-    </div>
-  </div>
-
-  <!-- SECTION 2 — RANKED TOP 50 PINS -->
-  <div class="mb-10 rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
-    <div class="flex flex-col gap-4 border-b border-border p-4 sm:flex-row sm:items-center sm:justify-between">
-      <div>
-        <h2 class="text-base font-bold text-foreground">Section 2: Ranked Top 50 Pins</h2>
-        <p class="text-xs text-muted-foreground">Top organic pins ranked by Pinterest API v5 across core engagement metrics</p>
       </div>
 
-      <!-- 5 Sort Tabs -->
-      <div class="flex flex-wrap items-center gap-1.5 rounded-xl border border-border bg-muted/40 p-1" id="top-pins-sort-tabs">
-        <button
-          data-sort="IMPRESSION"
-          class="sort-tab active rounded-lg bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground shadow-sm transition-all"
-        >
-          Impressions
-        </button>
-        <button
-          data-sort="OUTBOUND_CLICK"
-          class="sort-tab rounded-lg px-3 py-1 text-xs font-semibold text-muted-foreground transition-all hover:text-foreground"
-        >
-          Outbound Clicks
-        </button>
-        <button
-          data-sort="SAVE"
-          class="sort-tab rounded-lg px-3 py-1 text-xs font-semibold text-muted-foreground transition-all hover:text-foreground"
-        >
-          Saves
-        </button>
-        <button
-          data-sort="ENGAGEMENT"
-          class="sort-tab rounded-lg px-3 py-1 text-xs font-semibold text-muted-foreground transition-all hover:text-foreground"
-        >
-          Engagements
-        </button>
-        <button
-          data-sort="PIN_CLICK"
-          class="sort-tab rounded-lg px-3 py-1 text-xs font-semibold text-muted-foreground transition-all hover:text-foreground"
-        >
-          Pin Clicks
-        </button>
+      <!-- Top Pins Table -->
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs">
+          <thead class="border-b border-border bg-muted/20 text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
+            <tr>
+              <th class="py-3 px-4 w-14 text-center cursor-pointer hover:text-primary transition-colors select-none" data-s2-sort="rank_position">Rank <span class="sort-icon"></span></th>
+              <th class="py-3 px-4 min-w-[280px]">Pin Details</th>
+              <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s2-sort="impressions">Impressions <span class="sort-icon"></span></th>
+              <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s2-sort="engagement">Engagements <span class="sort-icon"></span></th>
+              <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s2-sort="outbound_clicks">Outbound Clicks <span class="sort-icon"></span></th>
+              <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s2-sort="pin_clicks">Pin Clicks <span class="sort-icon"></span></th>
+              <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s2-sort="saves">Saves <span class="sort-icon"></span></th>
+            </tr>
+          </thead>
+          <tbody id="top-pins-tbody" class="divide-y divide-border">
+            <tr>
+              <td colspan="7" class="py-12 text-center text-muted-foreground">
+                Loading top pins snapshots...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="s2-pagination" class="flex items-center justify-between p-4 border-t border-border bg-muted/10 text-xs">
+        <div class="text-muted-foreground">Showing <span id="s2-range">0-0</span> of <span id="s2-total">0</span></div>
+        <div class="flex gap-1" id="s2-page-buttons"></div>
       </div>
     </div>
+  </section>
 
-    <!-- Top Pins Table -->
-    <div class="overflow-x-auto">
-      <table class="w-full text-left text-xs">
-        <thead class="border-b border-border bg-muted/20 text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
-          <tr>
-            <th class="py-3 px-4 w-14 text-center">Rank</th>
-            <th class="py-3 px-4 min-w-[280px]">Pin Details</th>
-            <th class="py-3 px-4 text-right">Impressions</th>
-            <th class="py-3 px-4 text-right">Engagements</th>
-            <th class="py-3 px-4 text-right">Outbound Clicks</th>
-            <th class="py-3 px-4 text-right">Pin Clicks</th>
-            <th class="py-3 px-4 text-right">Saves</th>
-          </tr>
-        </thead>
-        <tbody id="top-pins-tbody" class="divide-y divide-border">
-          <tr>
-            <td colspan="7" class="py-12 text-center text-muted-foreground">
-              Loading top pins snapshots...
-            </td>
-          </tr>
-        </tbody>
-      </table>
+  <!-- PANEL 2: PIPELINE & AUTOMATION -->
+  <section id="panel-pipe" role="tabpanel" aria-labelledby="tab-pipe" hidden class="space-y-6">
+    <!-- C2.1: Health Banner -->
+    <ConnectionHealthBanner />
+
+    <!-- C2.2: Pipeline Cards -->
+    <PipelineCard channel="analytics" title="Pipeline A: Account Analytics" endpointBadge="/v5/user_account/analytics · GET" />
+    <PipelineCard channel="top_pins" title="Pipeline B: Ranked Top Pins" endpointBadge="/v5/user_account/analytics/top_pins · GET" isTopPins />
+    
+    <div class="grid md:grid-cols-2 gap-6">
+      <!-- C2.3: FastCron Options -->
+      <FastCronOptionsCard />
+
+      <!-- C2.4 & C2.5: Timezone Select and Danger Zone -->
+      <article class="rounded-2xl border border-border bg-card p-5 shadow-sm space-y-4">
+        <header>
+          <h3 class="text-sm font-bold">Workspace Configuration</h3>
+          <p class="text-[11px] text-muted-foreground mt-0.5">Global settings for this workspace</p>
+        </header>
+        
+        <label class="space-y-1 text-xs block">
+          <span class="font-semibold text-muted-foreground">Workspace Timezone</span>
+          <select id="workspace-timezone" class="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs focus:border-primary focus:outline-none">
+            <option value="UTC">UTC (Default)</option>
+            <option value="America/New_York">America/New_York (EST)</option>
+            <option value="America/Los_Angeles">America/Los_Angeles (PST)</option>
+            <option value="Europe/London">Europe/London (GMT)</option>
+            <option value="Asia/Tokyo">Asia/Tokyo (JST)</option>
+          </select>
+        </label>
+        
+        <div class="border-t border-destructive/20 pt-4 mt-4">
+          <h4 class="text-xs font-bold text-destructive mb-2">Danger Zone</h4>
+          <p class="text-[11px] text-muted-foreground mb-3">Deleting this connection is permanent and will cascade delete all its analytics data.</p>
+          <div class="flex gap-2">
+            <input type="text" id="delete-confirm-input" placeholder={`Type "${accountName}" to confirm`} class="flex-1 rounded-xl border border-destructive/30 bg-background px-3 py-1.5 text-xs focus:border-destructive focus:outline-none" />
+            <button id="delete-connection-btn" disabled class="rounded-xl bg-destructive px-3 py-1.5 text-xs font-bold text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50">Delete Connection</button>
+          </div>
+        </div>
+      </article>
     </div>
-  </div>
+  </section>
 </Layout>
 
-<script>
-  // Inlined full safeFetchJson for zero-dependency browser reliability
-  async function safeFetchJson(input, init) {
-    var res = await fetch(input, init);
-    if (res.status === 401 || res.status === 403) {
-      if (typeof window !== 'undefined') {
-        window.location.href = '/login';
-      }
-      throw new Error('HTTP ' + res.status + ': Unauthorized or forbidden. Redirecting to login.');
-    }
-    if (res.status === 404) {
-      throw new Error('HTTP 404: Endpoint unavailable - redeploy required');
-    }
-    var contentType = res.headers.get('content-type') || '';
-    if (!contentType.includes('application/json')) {
-      throw new Error('HTTP ' + res.status + ': Server returned non-JSON response (' + (contentType || 'empty') + ')');
-    }
-    var data = await res.json();
-    if (!res.ok) {
-      var errorMsg = (data && (data.error || data.message)) || res.statusText || 'Request failed';
-      throw new Error('HTTP ' + res.status + ': ' + errorMsg);
-    }
-    return data;
-  }
-
-  // === F2: Execution watchdog — register BEFORE any other logic ===
-  var watchdogTimer = null;
-
-  function showScriptError(message) {
-    console.error('[PinOrbit Script Error]', message);
-    document.querySelectorAll('td').forEach(function (td) {
-      if (td.textContent && td.textContent.indexOf('Loading') !== -1) {
-        td.innerHTML = '<span class="text-red-500 font-bold">Client error: ' + (message || 'Unknown error') + ' — open console for details.</span>';
-      }
-    });
-    var lastSync = document.getElementById('connection-last-sync');
-    if (lastSync && lastSync.textContent && lastSync.textContent.indexOf('Loading') !== -1) {
-      lastSync.textContent = '— (timeout)';
-    }
-  }
-  window.addEventListener('error', function (e) { showScriptError(e.message || String(e)); });
-
-  // === F1: Read connectionId from data attribute (no define:vars) ===
-  var connectionIdEl = document.querySelector('[data-connection-id]');
-  var connectionId = connectionIdEl ? connectionIdEl.getAttribute('data-connection-id') || '' : '';
-
-  var activeSortBy = 'IMPRESSION';
-  var fromDate = '';
-  var toDate = '';
-
-  var FALLBACK_IMG = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="%239ca3af" stroke-width="1.5"><rect width="18" height="18" x="3" y="3" rx="3" fill="%23f3f4f6"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>');
-
-  function escapeHtml(str) {
-    if (!str) return '';
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
-  }
-
-  function formatNumber(n) {
-    if (n === undefined || n === null) return '0';
-    return Number(n).toLocaleString();
-  }
-
-  function formatPercent(r) {
-    if (r === undefined || r === null) return '0.00%';
-    var num = Number(r);
-    if (isNaN(num)) return '0.00%';
-    return (num * 100).toFixed(2) + '%';
-  }
-
-  function initDates(days) {
-    if (days === undefined) days = 30;
-    var end = new Date();
-    var start = new Date(end.getTime() - days * 24 * 60 * 60 * 1000);
-    toDate = end.toISOString().split('T')[0];
-    fromDate = start.toISOString().split('T')[0];
-
-    var fromInput = document.getElementById('from-date-input');
-    var toInput = document.getElementById('to-date-input');
-    if (fromInput) fromInput.value = fromDate;
-    if (toInput) toInput.value = toDate;
-  }
-
-  async function loadConnectionDetails() {
-    try {
-      var json = await safeFetchJson('/api/analytics/connections?window_days=30');
-      if (json.success && Array.isArray(json.data)) {
-        var conn = json.data.find(function (c) { return c.id === connectionId; });
-        if (conn) {
-          var titleEl = document.getElementById('connection-title');
-          if (titleEl) titleEl.textContent = (conn.display_name || 'Account') + ' — Analytics';
-
-          var lastSyncEl = document.getElementById('connection-last-sync');
-          if (lastSyncEl) {
-            lastSyncEl.textContent = conn.last_analytics_sync_at
-              ? new Date(conn.last_analytics_sync_at).toLocaleString()
-              : '—';
-          }
-
-          var badge = document.getElementById('connection-status-badge');
-          if (badge) {
-            if (conn.revoked_at) {
-              badge.textContent = 'Revoked (401)';
-              badge.className = 'rounded-full bg-red-500/10 px-2.5 py-0.5 text-xs font-bold text-red-600 dark:text-red-400';
-            } else if (conn.analytics_enabled) {
-              badge.textContent = 'Active';
-              badge.className = 'rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-bold text-emerald-600 dark:text-emerald-400';
-            } else {
-              badge.textContent = 'Disabled';
-              badge.className = 'rounded-full bg-slate-500/10 px-2.5 py-0.5 text-xs font-bold text-slate-600 dark:text-slate-400';
-            }
-          }
-        }
-      }
-    } catch (e) {
-      console.warn('Failed to load connection details:', e);
-      var lastSyncEl2 = document.getElementById('connection-last-sync');
-      if (lastSyncEl2) lastSyncEl2.textContent = '—';
-    }
-  }
-
-  async function loadDailyMetrics() {
-    var tbody = document.getElementById('daily-metrics-tbody');
-    var tfoot = document.getElementById('daily-metrics-tfoot');
-    if (!tbody) return;
-
-    try {
-      tbody.innerHTML = '<tr><td colspan="7" class="py-8 text-center text-muted-foreground">' +
-        '<div class="inline-flex items-center gap-2">' +
-        '<svg class="animate-spin h-4 w-4 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>' +
-        '<span>Loading daily snapshot log...</span></div></td></tr>';
-
-      var json = await safeFetchJson('/api/analytics/connections/' + connectionId + '/daily?from_date=' + fromDate + '&to_date=' + toDate);
-
-      if (!json.success || !json.data) {
-        throw new Error(json.error || 'Failed to load daily metrics');
-      }
-
-      var rows = json.data.rows;
-      var totals = json.data.totals;
-
-      if (!rows || rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="py-8 text-center text-muted-foreground">No daily snapshots found for the selected date range.</td></tr>';
-        if (tfoot) tfoot.innerHTML = '';
-        return;
-      }
-
-      tbody.innerHTML = rows
-        .map(function (r) {
-          var isReady = r.data_status === 'READY';
-          var statusDot = isReady
-            ? '<span class="inline-block h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-emerald-500/20 shrink-0" title="READY"></span>'
-            : '<span class="inline-block h-2 w-2 rounded-full bg-amber-500 ring-2 ring-amber-500/20 shrink-0" title="' + escapeHtml(r.data_status || 'PENDING') + '"></span>';
-
-          return '<tr class="hover:bg-muted/30 transition-colors">' +
-            '<td class="py-3.5 px-4 font-semibold text-foreground"><div class="flex items-center gap-2">' + statusDot + '<span>' + escapeHtml(r.metric_date) + '</span></div></td>' +
-            '<td class="py-3.5 px-4 text-right font-bold text-foreground">' + formatNumber(r.impressions) + '</td>' +
-            '<td class="py-3.5 px-4 text-right font-medium text-foreground">' + formatNumber(r.engagements) + ' <span class="text-[11px] font-normal text-muted-foreground">(' + formatPercent(r.engagement_rate) + ')</span></td>' +
-            '<td class="py-3.5 px-4 text-right font-medium text-foreground">' + formatNumber(r.outbound_clicks) + ' <span class="text-[11px] font-normal text-muted-foreground">(' + formatPercent(r.outbound_click_rate) + ')</span></td>' +
-            '<td class="py-3.5 px-4 text-right font-medium text-foreground">' + formatNumber(r.pin_clicks) + ' <span class="text-[11px] font-normal text-muted-foreground">(' + formatPercent(r.pin_click_rate) + ')</span></td>' +
-            '<td class="py-3.5 px-4 text-right font-medium text-foreground">' + formatNumber(r.saves) + ' <span class="text-[11px] font-normal text-muted-foreground">(' + formatPercent(r.save_rate) + ')</span></td>' +
-            '<td class="py-3.5 px-4 text-center">' +
-              '<button data-date="' + escapeHtml(r.metric_date) + '" class="delete-daily-btn rounded-lg border border-destructive/20 bg-destructive/10 px-2.5 py-1 text-[11px] font-semibold text-destructive hover:bg-destructive/20 transition-all" title="Delete Snapshot Record">Delete</button>' +
-            '</td></tr>';
-        })
-        .join('');
-
-      if (tfoot && totals) {
-        var readyCount = rows.filter(function (r) { return r.data_status === 'READY'; }).length;
-        tfoot.innerHTML = '<tr class="bg-muted/50 border-t-2 border-border font-bold">' +
-          '<td class="py-3.5 px-4 text-foreground font-black"><div class="flex items-center gap-2"><span class="inline-block h-2 w-2 rounded-full bg-emerald-500 shrink-0"></span><span>∑ Totals</span> <span class="text-[10px] text-muted-foreground font-normal">(' + readyCount + ' READY)</span></div></td>' +
-          '<td class="py-3.5 px-4 text-right font-black text-foreground">' + formatNumber(totals.impressions) + '</td>' +
-          '<td class="py-3.5 px-4 text-right font-black text-foreground">' + formatNumber(totals.engagements) + ' <span class="text-[11px] font-bold text-primary">(' + formatPercent(totals.engagement_rate) + ')</span></td>' +
-          '<td class="py-3.5 px-4 text-right font-black text-foreground">' + formatNumber(totals.outbound_clicks) + ' <span class="text-[11px] font-bold text-primary">(' + formatPercent(totals.outbound_click_rate) + ')</span></td>' +
-          '<td class="py-3.5 px-4 text-right font-black text-foreground">' + formatNumber(totals.pin_clicks) + ' <span class="text-[11px] font-bold text-primary">(' + formatPercent(totals.pin_click_rate) + ')</span></td>' +
-          '<td class="py-3.5 px-4 text-right font-black text-foreground">' + formatNumber(totals.saves) + ' <span class="text-[11px] font-bold text-primary">(' + formatPercent(totals.save_rate) + ')</span></td>' +
-          '<td class="py-3.5 px-4 text-center text-muted-foreground">—</td></tr>';
-      }
-
-      document.querySelectorAll('.delete-daily-btn').forEach(function (btn) {
-        btn.addEventListener('click', async function () {
-          var date = btn.getAttribute('data-date');
-          if (!date) return;
-
-          if (!confirm('Are you sure you want to delete daily record for ' + date + '? Workspace rollups will be automatically recomputed.')) {
-            return;
-          }
-
-          try {
-            var delJson = await safeFetchJson('/api/analytics/connections/' + connectionId + '/daily/' + date, {
-              method: 'DELETE',
-            });
-            if (!delJson.success) throw new Error(delJson.error || 'Failed to delete record.');
-            await loadDailyMetrics();
-          } catch (err) {
-            alert('Delete failed: ' + (err.message || 'Error'));
-          }
-        });
-      });
-    } catch (err) {
-      tbody.innerHTML = '<tr><td colspan="7" class="py-8 text-center text-red-500">' +
-        '<p class="font-bold">Failed to load daily metrics</p>' +
-        '<p class="text-xs text-muted-foreground mt-1">' + escapeHtml(err.message || 'Error') + '</p></td></tr>';
-      if (tfoot) tfoot.innerHTML = '';
-    }
-  }
-
-  async function loadTopPins() {
-    var tbody = document.getElementById('top-pins-tbody');
-    if (!tbody) return;
-
-    try {
-      tbody.innerHTML = '<tr><td colspan="7" class="py-8 text-center text-muted-foreground">' +
-        '<div class="inline-flex items-center gap-2">' +
-        '<svg class="animate-spin h-4 w-4 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>' +
-        '<span>Loading top 50 ranked pins (' + escapeHtml(activeSortBy) + ')...</span></div></td></tr>';
-
-      var json = await safeFetchJson('/api/analytics/connections/' + connectionId + '/top-pins?sort_by=' + activeSortBy + '&from_date=' + fromDate + '&to_date=' + toDate);
-      if (!json.success || !Array.isArray(json.data)) {
-        throw new Error(json.error || 'Failed to load top pins');
-      }
-
-      var pins = json.data;
-
-      if (pins.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="py-12 text-center text-muted-foreground">' +
-          '<p class="font-medium text-foreground">No ranked pins found</p>' +
-          '<p class="text-xs text-muted-foreground mt-1">Pins populate after a Pipeline B sync run.</p></td></tr>';
-        return;
-      }
-
-      tbody.innerHTML = pins
-        .map(function (p, idx) {
-          var rank = p.rank_position || idx + 1;
-          var rankBadgeClass =
-            rank === 1
-              ? 'bg-amber-500 text-white font-black shadow-sm ring-2 ring-amber-500/20'
-              : rank === 2
-              ? 'bg-slate-400 text-white font-black shadow-sm ring-2 ring-slate-400/20'
-              : rank === 3
-              ? 'bg-amber-700 text-white font-black shadow-sm ring-2 ring-amber-700/20'
-              : 'bg-muted text-muted-foreground font-bold';
-
-          var imageSrc = p.image_url || FALLBACK_IMG;
-          var safeTitle = escapeHtml(p.title || 'Untitled Pin');
-          var safePinId = escapeHtml(p.pin_id || '—');
-
-          var linkHtml = p.destination_url
-            ? '<a href="' + escapeHtml(p.destination_url) + '" target="_blank" rel="noopener noreferrer" class="text-primary hover:underline inline-flex items-center gap-0.5 ml-1"><span>Link</span><svg class="h-2.5 w-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/></svg></a>'
-            : '';
-
-          var outboundRate = p.impressions && p.outbound_clicks !== undefined ? ' <span class="text-[11px] font-normal text-muted-foreground">(' + formatPercent(p.outbound_clicks / p.impressions) + ')</span>' : '';
-          var pinClickRate = p.impressions && p.pin_clicks !== undefined ? ' <span class="text-[11px] font-normal text-muted-foreground">(' + formatPercent(p.pin_clicks / p.impressions) + ')</span>' : '';
-          var saveRate = p.impressions && p.saves !== undefined ? ' <span class="text-[11px] font-normal text-muted-foreground">(' + formatPercent(p.saves / p.impressions) + ')</span>' : '';
-
-          return '<tr class="hover:bg-muted/30 transition-colors">' +
-            '<td class="py-3 px-4 text-center"><span class="inline-flex h-6 w-6 items-center justify-center rounded-full text-xs ' + rankBadgeClass + '">' + rank + '</span></td>' +
-            '<td class="py-3 px-4"><div class="flex items-center gap-3">' +
-              '<img src="' + imageSrc + '" alt="Pin" class="h-10 w-10 rounded-lg object-cover bg-muted border border-border/80 shrink-0"/>' +
-              '<div class="min-w-0 flex-1">' +
-                '<p class="truncate font-semibold text-foreground text-xs" title="' + safeTitle + '">' + safeTitle + '</p>' +
-                '<div class="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground">' +
-                  '<span class="font-mono bg-muted/60 px-1.5 py-0.5 rounded text-[10px]">' + safePinId + '</span>' +
-                  linkHtml +
-                '</div></div></div></td>' +
-            '<td class="py-3 px-4 text-right font-bold text-foreground">' + formatNumber(p.impressions) + '</td>' +
-            '<td class="py-3 px-4 text-right font-medium text-foreground">' + formatNumber(p.engagement) + ' <span class="text-[11px] font-normal text-muted-foreground">(' + formatPercent(p.engagement_rate) + ')</span></td>' +
-            '<td class="py-3 px-4 text-right font-medium text-foreground">' + formatNumber(p.outbound_clicks) + outboundRate + '</td>' +
-            '<td class="py-3 px-4 text-right font-medium text-foreground">' + formatNumber(p.pin_clicks) + pinClickRate + '</td>' +
-            '<td class="py-3 px-4 text-right font-medium text-foreground">' + formatNumber(p.saves) + saveRate + '</td>' +
-            '</tr>';
-        })
-        .join('');
-    } catch (err) {
-      tbody.innerHTML = '<tr><td colspan="7" class="py-8 text-center text-red-500">' +
-        '<p class="font-bold">Failed to load top pins</p>' +
-        '<p class="text-xs text-muted-foreground mt-1">' + escapeHtml(err.message || 'Error') + '</p></td></tr>';
-    }
-  }
-
-  async function reloadAll() {
-    try {
-      await Promise.all([loadConnectionDetails(), loadDailyMetrics(), loadTopPins()]);
-      if (watchdogTimer) {
-        clearTimeout(watchdogTimer);
-      }
-    } catch (e) {
-      console.error('reloadAll error:', e);
-    }
-  }
-
-  document.addEventListener('DOMContentLoaded', function () {
-    initDates(30);
-
-    // === F2 & C5: 8-second watchdog timeout ===
-    watchdogTimer = setTimeout(function () {
-      document.querySelectorAll('td[colspan]').forEach(function (td) {
-        if (td.textContent && td.textContent.indexOf('Loading') !== -1) {
-          td.innerHTML = '<span class="text-red-500 font-bold">No data received — check network/console</span>';
-        }
-      });
-      var lastSync = document.getElementById('connection-last-sync');
-      if (lastSync && lastSync.textContent && lastSync.textContent.indexOf('Loading') !== -1) {
-        lastSync.textContent = '— (timeout)';
-      }
-    }, 8000);
-
-    // Preset buttons
-    document.querySelectorAll('#range-presets .preset-btn').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        document.querySelectorAll('#range-presets .preset-btn').forEach(function (b) {
-          b.classList.remove('active', 'bg-primary', 'text-primary-foreground', 'shadow-sm');
-          b.classList.add('text-muted-foreground');
-        });
-        btn.classList.add('active', 'bg-primary', 'text-primary-foreground', 'shadow-sm');
-        btn.classList.remove('text-muted-foreground');
-
-        var days = parseInt(btn.getAttribute('data-days') || '30', 10);
-        initDates(days);
-        reloadAll();
-      });
-    });
-
-    // Apply custom range
-    var applyBtn = document.getElementById('apply-range-btn');
-    if (applyBtn) {
-      applyBtn.addEventListener('click', function () {
-        var fromInput = document.getElementById('from-date-input');
-        var toInput = document.getElementById('to-date-input');
-        var fromVal = fromInput ? fromInput.value : '';
-        var toVal = toInput ? toInput.value : '';
-        if (fromVal && toVal) {
-          fromDate = fromVal;
-          toDate = toVal;
-          document.querySelectorAll('#range-presets .preset-btn').forEach(function (b) {
-            b.classList.remove('active', 'bg-primary', 'text-primary-foreground', 'shadow-sm');
-            b.classList.add('text-muted-foreground');
-          });
-          reloadAll();
-        }
-      });
-    }
-
-    // Top Pins Sort Tabs
-    document.querySelectorAll('#top-pins-sort-tabs .sort-tab').forEach(function (tab) {
-      tab.addEventListener('click', function () {
-        document.querySelectorAll('#top-pins-sort-tabs .sort-tab').forEach(function (t) {
-          t.classList.remove('active', 'bg-primary', 'text-primary-foreground', 'shadow-sm');
-          t.classList.add('text-muted-foreground');
-        });
-        tab.classList.add('active', 'bg-primary', 'text-primary-foreground', 'shadow-sm');
-        tab.classList.remove('text-muted-foreground');
-
-        activeSortBy = tab.getAttribute('data-sort') || 'IMPRESSION';
-        loadTopPins();
-      });
-    });
-
-    // Refresh page button
-    var refreshBtn = document.getElementById('refresh-page-btn');
-    if (refreshBtn) {
-      refreshBtn.addEventListener('click', function () {
-        reloadAll();
-      });
-    }
-
-    reloadAll();
-  });
-</script>
+<script src="../../scripts/tabs.ts"></script>
+<script src="../../scripts/analytics-tables.ts"></script>
+<script src="../../scripts/pipeline-controls.ts"></script>

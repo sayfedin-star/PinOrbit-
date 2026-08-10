@@ -349,15 +349,15 @@ describe('Pinner Analytics Settings & Security Suite (V20.1 Per-Pipeline Date Of
     expect(analyticsDb.updateWorkspaceConnection).toHaveBeenCalledWith(
       workspaceId,
       connectionId,
-      expect.objectContaining({ fastcron_token: 'custom_conn_token_123456789' })
+      expect.objectContaining({ fastcron_token: expect.stringMatching(/^v1:/) })
     );
   });
 
-  it('R16.3: FastCron token resolution hierarchy: connection -> workspace -> env -> null', () => {
+  it('R16.3: FastCron token resolution hierarchy: connection -> workspace -> env -> null', async () => {
     const runtimeEnv = { FASTCRON_API_TOKEN: 'env_token_value_123456' };
 
     // 1. Connection token takes highest priority
-    const t1 = fastcronService.resolveFastCronToken(
+    const t1 = await fastcronService.resolveFastCronToken(
       'conn_token_value_123456',
       'workspace_token_value_123456',
       runtimeEnv
@@ -365,7 +365,7 @@ describe('Pinner Analytics Settings & Security Suite (V20.1 Per-Pipeline Date Of
     expect(t1).toBe('conn_token_value_123456');
 
     // 2. Workspace token used if connection token is null/empty
-    const t2 = fastcronService.resolveFastCronToken(
+    const t2 = await fastcronService.resolveFastCronToken(
       null,
       'workspace_token_value_123456',
       runtimeEnv
@@ -373,11 +373,11 @@ describe('Pinner Analytics Settings & Security Suite (V20.1 Per-Pipeline Date Of
     expect(t2).toBe('workspace_token_value_123456');
 
     // 3. Env token used if connection & workspace tokens are null
-    const t3 = fastcronService.resolveFastCronToken(null, null, runtimeEnv);
+    const t3 = await fastcronService.resolveFastCronToken(null, null, runtimeEnv);
     expect(t3).toBe('env_token_value_123456');
 
     // 4. Null returned if all are absent or < 16 chars
-    const t4 = fastcronService.resolveFastCronToken('', 'short', { FASTCRON_API_TOKEN: '' });
+    const t4 = await fastcronService.resolveFastCronToken('', 'short', { FASTCRON_API_TOKEN: '' });
     expect(t4).toBeNull();
   });
 

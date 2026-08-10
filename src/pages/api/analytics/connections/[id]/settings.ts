@@ -4,6 +4,8 @@ import type { APIRoute } from 'astro';
 import { assertWorkspaceAccess } from '../../../../../server/auth/workspace-guard';
 import { analyticsDb } from '../../../../../server/db/analytics';
 import { fastcronService } from '../../../../../server/services/fastcron-service';
+import { getServerEnv } from '../../../../../server/db/clients';
+import { encryptToken } from '../../../../../server/lib/token-crypto';
 import type { AnalyticsConnectionSettingsResponse } from '../../../../../lib/types';
 
 export const GET: APIRoute = async ({ params, locals }) => {
@@ -411,7 +413,12 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
             { status: 422, headers: { 'Content-Type': 'application/json' } }
           );
         }
-        updates.fastcron_token = tok;
+        if (!tok.startsWith('v1:')) {
+          const env = getServerEnv();
+          updates.fastcron_token = await encryptToken(tok, env.TOKEN_KEK);
+        } else {
+          updates.fastcron_token = tok;
+        }
       }
     }
 

@@ -4,6 +4,7 @@ import type { APIRoute } from 'astro';
 import { assertWorkspaceAccess } from '../../../server/auth/workspace-guard';
 import { analyticsDb } from '../../../server/db/analytics';
 import { getServerEnv } from '../../../server/db/clients';
+import { encryptToken } from '../../../server/lib/token-crypto';
 import type { WorkspaceAnalyticsSettingsResponse } from '../../../lib/types';
 
 export const GET: APIRoute = async ({ locals }) => {
@@ -133,7 +134,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
             { status: 422, headers: { 'Content-Type': 'application/json' } }
           );
         }
-        tokenToSave = rawToken;
+        if (!rawToken.startsWith('v1:')) {
+          const env = getServerEnv();
+          tokenToSave = await encryptToken(rawToken, env.TOKEN_KEK);
+        } else {
+          tokenToSave = rawToken;
+        }
       }
     }
 

@@ -15,6 +15,7 @@ export interface ServerEnvConfig {
   CRON_DISPATCH_SECRET: string;
   SNITCH_WEBHOOK_URL: string;
   FASTCRON_API_TOKEN: string;
+  TOKEN_KEK: string;
 }
 
 /**
@@ -81,6 +82,20 @@ export function getServerEnv(runtimeEnv?: Record<string, any>): ServerEnvConfig 
   const SNITCH_WEBHOOK_URL = env.SNITCH_WEBHOOK_URL || '';
   const FASTCRON_API_TOKEN = env.FASTCRON_API_TOKEN || '';
 
+  let rawTokenKek: string | undefined;
+  if (runtimeEnv && 'TOKEN_KEK' in runtimeEnv) {
+    rawTokenKek = runtimeEnv.TOKEN_KEK;
+  } else if (typeof process !== 'undefined' && process.env.TOKEN_KEK !== undefined) {
+    rawTokenKek = process.env.TOKEN_KEK;
+  }
+
+  const TOKEN_KEK =
+    rawTokenKek !== undefined && rawTokenKek.trim().length >= 16
+      ? rawTokenKek.trim()
+      : isDev
+      ? 'pinorbit_dev_token_kek_00000000'
+      : '';
+
   return {
     SCHEDULING_SUPABASE_URL,
     SCHEDULING_SUPABASE_PUBLISHABLE_KEY,
@@ -95,6 +110,7 @@ export function getServerEnv(runtimeEnv?: Record<string, any>): ServerEnvConfig 
     CRON_DISPATCH_SECRET,
     SNITCH_WEBHOOK_URL,
     FASTCRON_API_TOKEN,
+    TOKEN_KEK,
   };
 }
 

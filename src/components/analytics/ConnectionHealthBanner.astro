@@ -1,0 +1,18 @@
+---
+// src/components/analytics/ConnectionHealthBanner.astro
+---
+<div id="health-banner-container" class="mb-6 rounded-2xl border border-border bg-card p-4 shadow-sm flex items-center justify-between">
+  <div class="flex items-center gap-4">
+    <div id="health-status-chip" class="rounded-full px-3 py-1 text-xs font-bold bg-muted text-muted-foreground shadow-sm">Loading...</div>
+    <div class="flex flex-col gap-0.5">
+      <h3 class="text-sm font-bold text-foreground">Pipeline Health</h3>
+      <p class="text-[11px] text-muted-foreground">
+        Total Runs: <span id="health-total-runs" class="font-mono text-foreground font-semibold">--</span> | 
+        Consecutive Failures: <span id="health-consecutive-failures" class="font-mono text-foreground font-semibold">--</span>
+      </p>
+    </div>
+  </div>
+  <div class="text-right text-[11px] text-muted-foreground flex flex-col gap-0.5">
+    <div>Last Success: <span id="health-last-success" class="font-semibold text-foreground">--</span></div>
+  </div>
+</div>

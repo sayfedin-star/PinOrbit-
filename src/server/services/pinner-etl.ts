@@ -143,23 +143,32 @@ export interface ETLProcessingResult {
  * Forward-compatibility: unknown metric keys are preserved ONLY in raw_metrics JSONB.
  */
 function normalizeMetrics(raw: PinnerRawMetrics = {}) {
-  const parseCount = (v: any): number => {
+  const sanitizeNumber = (v: any): number => {
     if (v === undefined || v === null) return 0;
-    const n = Number(v);
-    return isNaN(n) || n < 0 ? 0 : Math.floor(n);
+    if (typeof v === 'number') return v;
+    let s = String(v).trim().toLowerCase();
+    let multiplier = 1;
+    if (s.endsWith('k')) { multiplier = 1000; s = s.slice(0, -1); }
+    else if (s.endsWith('m')) { multiplier = 1000000; s = s.slice(0, -1); }
+    else if (s.endsWith('b')) { multiplier = 1000000000; s = s.slice(0, -1); }
+    s = s.replace(/[^0-9.-]/g, '');
+    const n = Number(s);
+    return isNaN(n) ? 0 : n * multiplier;
+  };
+
+  const parseCount = (v: any): number => {
+    const n = sanitizeNumber(v);
+    return n < 0 ? 0 : Math.floor(n);
   };
 
   const parseRate = (v: any): number => {
-    if (v === undefined || v === null) return 0.0;
-    const n = Number(v);
-    if (isNaN(n)) return 0.0;
+    const n = sanitizeNumber(v);
     return parseFloat(n.toFixed(6));
   };
 
   const parseTiming = (v: any): number => {
-    if (v === undefined || v === null) return 0.0;
-    const n = Number(v);
-    return isNaN(n) || n < 0 ? 0.0 : parseFloat(n.toFixed(2));
+    const n = sanitizeNumber(v);
+    return n < 0 ? 0.0 : parseFloat(n.toFixed(2));
   };
 
   const impressions = parseCount(raw.IMPRESSION);

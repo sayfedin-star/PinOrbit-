@@ -18,24 +18,22 @@ describe('FastCron Per-Connection Schedule Synchronization Suite (V19 & R6)', ()
     vi.clearAllMocks();
   });
 
-  it('resolves FastCron token from DB first, then environment', () => {
+  it('resolves FastCron token from DB first, then environment', async () => {
     // 1. DB token takes priority
-    const resolvedDb = fastcronService.resolveFastCronToken('db_token_1234567890', {
+    const resolvedDb = await fastcronService.resolveFastCronToken('db_token_1234567890', null, {
       FASTCRON_API_TOKEN: 'env_token_1234567890',
     });
     expect(resolvedDb).toBe('db_token_1234567890');
 
     // 2. Env fallback when DB token absent
-    const resolvedEnv = fastcronService.resolveFastCronToken(null, {
+    const resolvedEnv = await fastcronService.resolveFastCronToken(null, null, {
       FASTCRON_API_TOKEN: 'env_token_1234567890',
     });
     expect(resolvedEnv).toBe('env_token_1234567890');
 
     // 3. Null when both absent
-    const resolvedNone = fastcronService.resolveFastCronToken(null, {
-      FASTCRON_API_TOKEN: '',
-    });
-    expect(resolvedNone).toBeNull();
+    const resolvedNull = await fastcronService.resolveFastCronToken(null, null, {});
+    expect(resolvedNull).toBeNull();
   });
 
   it('handles FastCron API creation (cron_add) vs edit (cron_edit) for connection', async () => {
