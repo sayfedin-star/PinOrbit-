@@ -253,5 +253,37 @@ describe('Data Purge Suite (V27)', () => {
       );
       expect(edgeCache.invalidateConnection).toHaveBeenCalledWith(workspaceId, connectionId, undefined);
     });
+
+    it('passes runtime.env.ANALYTICS_KV to edgeCache.invalidateConnection on purge execution', async () => {
+      (analyticsDb.purgeAnalyticsData as any).mockResolvedValue({
+        purge_log_id: 'purge-log-uuid-101',
+        counts: { daily_deleted: 2, summaries_deleted: 1, rollups_rebuilt: 1, top_pins_deleted: 10, url_perf_deleted: 0 },
+      });
+
+      const mockKvNamespace = { list: vi.fn(), delete: vi.fn(), get: vi.fn(), put: vi.fn() };
+      const locals = {
+        user: { id: 'u1' },
+        supabase: {},
+        activeWorkspaceId: workspaceId,
+        runtime: { env: { ANALYTICS_KV: mockKvNamespace } },
+      };
+
+      const res = await postPurgeHandler({
+        params: { id: connectionId },
+        request: new Request('http://localhost/api/analytics/connections/conn-uuid-12345/purge', {
+          method: 'POST',
+          body: JSON.stringify({
+            from_date: '2026-08-01',
+            to_date: '2026-08-05',
+            targets: ['daily', 'top_pins'],
+            confirm_name: displayName,
+          }),
+        }),
+        locals,
+      } as any);
+
+      expect(res.status).toBe(200);
+      expect(edgeCache.invalidateConnection).toHaveBeenCalledWith(workspaceId, connectionId, mockKvNamespace);
+    });
   });
 });
