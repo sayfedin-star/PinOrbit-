@@ -544,9 +544,11 @@ export interface AnalyticsConnection {
 
   // FastCron Execution Options (V23 & R16)
   fastcron_token?: string | null;
-  fastcron_notify?: boolean;
-  fastcron_timeout?: number;
-  fastcron_instances?: number;
+  fastcron_notify: boolean;
+  fastcron_timeout: number;
+  fastcron_instances: number;
+  analytics_fastcron_token?: string | null;
+  top_pins_fastcron_token?: string | null;
 
   created_at: string;
   updated_at: string;
@@ -594,6 +596,11 @@ export interface AnalyticsConnectionSettingsResponse {
   fastcron_notify?: boolean;
   fastcron_timeout?: number;
   fastcron_instances?: number;
+  analytics_fastcron_token_fingerprint?: string | null;
+  top_pins_fastcron_token_fingerprint?: string | null;
+  last_analytics_sync_at?: string | null;
+  last_error_a?: string | null;
+  last_error_b?: string | null;
 }
 
 export type PinnerConnection = AnalyticsConnection;

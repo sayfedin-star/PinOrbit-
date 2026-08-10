@@ -146,17 +146,23 @@ const accountName = connection.display_name || 'Account';
 
       <div class="overflow-x-auto">
         <table class="w-full text-left text-xs">
-          <thead class="border-b border-border bg-muted/20 text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
+          <thead class="border-b border-border bg-muted/20 text-[11px] uppercase tracking-wider text-muted-foreground font-semibold sticky top-0 z-10 shadow-sm">
             <tr>
               <th class="py-3 px-4 min-w-[130px] cursor-pointer hover:text-primary transition-colors select-none" data-s1-sort="metric_date">Date <span class="sort-icon"></span></th>
+              <th class="py-3 px-4 text-center cursor-pointer hover:text-primary transition-colors select-none" data-s1-sort="data_status">Status <span class="sort-icon"></span></th>
               <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s1-sort="impressions">Impressions <span class="sort-icon"></span></th>
               <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s1-sort="engagements">Engagements <span class="sort-icon"></span></th>
+              <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s1-sort="engagement_rate">Engagement Rate <span class="sort-icon"></span></th>
               <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s1-sort="outbound_clicks">Outbound Clicks <span class="sort-icon"></span></th>
+              <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s1-sort="outbound_click_rate">Outbound Click Rate <span class="sort-icon"></span></th>
               <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s1-sort="pin_clicks">Pin Clicks <span class="sort-icon"></span></th>
+              <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s1-sort="pin_click_rate">Pin Click Rate <span class="sort-icon"></span></th>
               <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s1-sort="saves">Saves <span class="sort-icon"></span></th>
+              <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s1-sort="save_rate">Save Rate <span class="sort-icon"></span></th>
+              <th class="py-3 px-4 text-center">Delete</th>
             </tr>
           </thead>
-          <tbody id="daily-metrics-tbody" class="divide-y divide-border">
+          <tbody id="daily-metrics-tbody" class="divide-y divide-border [&>tr:nth-child(even)]:bg-muted/5">
             <tr>
               <td colspan="6" class="py-12 text-center text-muted-foreground">
                 Loading daily metrics...
@@ -211,18 +217,20 @@ const accountName = connection.display_name || 'Account';
       <!-- Top Pins Table -->
       <div class="overflow-x-auto">
         <table class="w-full text-left text-xs">
-          <thead class="border-b border-border bg-muted/20 text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
+          <thead class="border-b border-border bg-muted/20 text-[11px] uppercase tracking-wider text-muted-foreground font-semibold sticky top-0 z-10 shadow-sm">
             <tr>
-              <th class="py-3 px-4 w-14 text-center cursor-pointer hover:text-primary transition-colors select-none" data-s2-sort="rank_position">Rank <span class="sort-icon"></span></th>
+              <th class="py-3 px-4 w-14 text-center">Rank</th>
               <th class="py-3 px-4 min-w-[280px]">Pin Details</th>
-              <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s2-sort="impressions">Impressions <span class="sort-icon"></span></th>
-              <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s2-sort="engagement">Engagements <span class="sort-icon"></span></th>
-              <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s2-sort="outbound_clicks">Outbound Clicks <span class="sort-icon"></span></th>
-              <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s2-sort="pin_clicks">Pin Clicks <span class="sort-icon"></span></th>
-              <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s2-sort="saves">Saves <span class="sort-icon"></span></th>
+              <th class="py-3 px-4 text-center">Status</th>
+              <th class="py-3 px-4 text-right">Impressions</th>
+              <th class="py-3 px-4 text-right">Engagements</th>
+              <th class="py-3 px-4 text-right">Engagement Rate</th>
+              <th class="py-3 px-4 text-right">Outbound Clicks</th>
+              <th class="py-3 px-4 text-right">Pin Clicks</th>
+              <th class="py-3 px-4 text-right">Saves</th>
             </tr>
           </thead>
-          <tbody id="top-pins-tbody" class="divide-y divide-border">
+          <tbody id="top-pins-tbody" class="divide-y divide-border [&>tr:nth-child(even)]:bg-muted/5">
             <tr>
               <td colspan="7" class="py-12 text-center text-muted-foreground">
                 Loading top pins snapshots...

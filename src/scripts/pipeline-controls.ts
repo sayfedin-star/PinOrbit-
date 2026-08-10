@@ -32,6 +32,13 @@ if (pipeConnId) {
       }
       const { data } = await res.json();
       
+      const lastSyncEl = document.getElementById('connection-last-sync');
+      if (lastSyncEl) {
+        lastSyncEl.textContent = data.last_analytics_sync_at 
+          ? new Date(data.last_analytics_sync_at).toLocaleString() 
+          : '—';
+      }
+
       const pA = document.querySelector('[data-pipeline="analytics"]');
       if (pA) {
         (pA.querySelector('[data-field="webhook_url"]') as HTMLInputElement).value = data.analytics_webhook_url || '';
@@ -39,6 +46,24 @@ if (pipeConnId) {
         (pA.querySelector('[data-field="start_offset"]') as HTMLInputElement).value = data.analytics_start_offset_days ?? 7;
         (pA.querySelector('[data-field="end_offset"]') as HTMLInputElement).value = data.analytics_end_offset_days ?? 1;
         pA.querySelector('[data-chip]')!.textContent = data.analytics_schedule_status || 'pending';
+        
+        const badgeA = pA.querySelector('[data-token-badge]');
+        if (badgeA) {
+          badgeA.textContent = data.analytics_fastcron_token_fingerprint 
+            ? `Custom: ${data.analytics_fastcron_token_fingerprint}` 
+            : 'Workspace Default';
+        }
+
+        const errMsgA = pA.querySelector('[data-err-msg]') as HTMLElement;
+        if (errMsgA) {
+          if (data.analytics_schedule_status === 'error' && data.last_error_a) {
+            errMsgA.textContent = data.last_error_a;
+            errMsgA.title = data.last_error_a;
+            errMsgA.classList.remove('hidden');
+          } else {
+            errMsgA.classList.add('hidden');
+          }
+        }
       }
       
       const pB = document.querySelector('[data-pipeline="top_pins"]');
@@ -49,6 +74,24 @@ if (pipeConnId) {
         (pB.querySelector('[data-field="end_offset"]') as HTMLInputElement).value = data.top_pins_end_offset_days ?? 2;
         (pB.querySelector('[data-field="num_of_pins"]') as HTMLInputElement).value = data.top_pins_num_of_pins ?? 50;
         pB.querySelector('[data-chip]')!.textContent = data.top_pins_schedule_status || 'pending';
+
+        const badgeB = pB.querySelector('[data-token-badge]');
+        if (badgeB) {
+          badgeB.textContent = data.top_pins_fastcron_token_fingerprint 
+            ? `Custom: ${data.top_pins_fastcron_token_fingerprint}` 
+            : 'Workspace Default';
+        }
+
+        const errMsgB = pB.querySelector('[data-err-msg]') as HTMLElement;
+        if (errMsgB) {
+          if (data.top_pins_schedule_status === 'error' && data.last_error_b) {
+            errMsgB.textContent = data.last_error_b;
+            errMsgB.title = data.last_error_b;
+            errMsgB.classList.remove('hidden');
+          } else {
+            errMsgB.classList.add('hidden');
+          }
+        }
         
         // Sort modes
         const modes = data.top_pins_sort_modes || [];
@@ -107,11 +150,21 @@ if (pipeConnId) {
         const modes: string[] = [];
         target.querySelectorAll('[data-mode][aria-pressed="true"]').forEach(b => modes.push(b.getAttribute('data-mode')!));
         payload.top_pins_sort_modes = modes;
+
+        const tokenVal = (target.querySelector('[data-field="fastcron_token"]') as HTMLInputElement)?.value;
+        if (tokenVal !== undefined && tokenVal !== '') {
+          payload.top_pins_fastcron_token = tokenVal;
+        }
       } else {
         payload.analytics_webhook_url = (target.querySelector('[data-field="webhook_url"]') as HTMLInputElement).value;
         payload.analytics_sync_time = (target.querySelector('[data-field="sync_time"]') as HTMLInputElement).value;
         payload.analytics_start_offset_days = parseInt((target.querySelector('[data-field="start_offset"]') as HTMLInputElement).value);
         payload.analytics_end_offset_days = parseInt((target.querySelector('[data-field="end_offset"]') as HTMLInputElement).value);
+
+        const tokenVal = (target.querySelector('[data-field="fastcron_token"]') as HTMLInputElement)?.value;
+        if (tokenVal !== undefined && tokenVal !== '') {
+          payload.analytics_fastcron_token = tokenVal;
+        }
       }
       
       // Add fastcron settings globally

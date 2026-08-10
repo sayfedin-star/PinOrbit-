@@ -13,8 +13,13 @@ function escapeHtml(str: string | null | undefined): string {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 }
-
 function formatNum(n: number) { return new Intl.NumberFormat('en-US').format(n || 0); }
+function formatPct(n: number) { return new Intl.NumberFormat('en-US', { style: 'percent', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0); }
+function getStatusBadge(status: string) {
+  const s = (status || 'READY').toUpperCase();
+  if (s === 'READY') return '<span class="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-bold text-emerald-500">READY</span>';
+  return `<span class="rounded bg-yellow-500/10 px-1.5 py-0.5 text-[9px] font-bold text-yellow-600">${s}</span>`;
+}
 
 // State
 const state = {
@@ -26,8 +31,6 @@ const state = {
   s2Page: 1,
   s2Size: 25,
   s2Mode: 'IMPRESSION',
-  s2Sort: 'rank_position',
-  s2Desc: false,
   s2Query: '',
   
   from: '',
@@ -45,9 +48,7 @@ function syncStateToUrl() {
 
   if (state.s2Page > 1) p.set('s2_page', String(state.s2Page));
   if (state.s2Size !== 25) p.set('s2_ps', String(state.s2Size));
-  if (state.s2Mode !== 'IMPRESSION') p.set('s2_mode', state.s2Mode);
-  if (state.s2Sort !== 'rank_position') p.set('s2_sort', state.s2Sort);
-  if (state.s2Desc) p.set('s2_dir', 'desc');
+  if (state.s2Mode !== 'IMPRESSION') p.set('sort_by', state.s2Mode);
   if (state.s2Query) p.set('s2_q', state.s2Query);
   
   if (state.from) p.set('from', state.from);
@@ -66,9 +67,7 @@ function loadStateFromUrl() {
 
   state.s2Page = Number(p.get('s2_page')) || 1;
   state.s2Size = Number(p.get('s2_ps')) || 25;
-  state.s2Mode = p.get('s2_mode') || 'IMPRESSION';
-  state.s2Sort = p.get('s2_sort') || 'rank_position';
-  state.s2Desc = p.get('s2_dir') === 'desc';
+  state.s2Mode = p.get('sort_by') || 'IMPRESSION';
   state.s2Query = p.get('s2_q') || '';
   
   state.from = p.get('from') || '';
@@ -148,28 +147,52 @@ async function renderS1() {
     document.getElementById('s1-range')!.textContent = total > 0 ? `${start + 1}-${Math.min(start + state.s1Size, total)}` : '0-0';
     
     if (rows.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="6" class="py-12 text-center text-muted-foreground">No data found</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="12" class="py-12 text-center text-muted-foreground">
+        <p class="mb-2">No daily metrics found.</p>
+        <button onclick="document.getElementById('tab-pipe')?.click()" class="text-primary hover:underline font-semibold">Go to Pipeline & Automation to Sync</button>
+      </td></tr>`;
     } else {
       tbody.innerHTML = rows.map((d: any) => `
         <tr class="hover:bg-muted/10 transition-colors">
           <td class="py-2.5 px-4 font-mono font-medium">${d.metric_date}</td>
+          <td class="py-2.5 px-4 text-center">${getStatusBadge(d.data_status)}</td>
           <td class="py-2.5 px-4 text-right">${formatNum(d.impressions)}</td>
           <td class="py-2.5 px-4 text-right">${formatNum(d.engagements)}</td>
+          <td class="py-2.5 px-4 text-right">${formatPct(d.engagement_rate)}</td>
           <td class="py-2.5 px-4 text-right">${formatNum(d.outbound_clicks)}</td>
+          <td class="py-2.5 px-4 text-right">${formatPct(d.outbound_click_rate)}</td>
           <td class="py-2.5 px-4 text-right">${formatNum(d.pin_clicks)}</td>
+          <td class="py-2.5 px-4 text-right">${formatPct(d.pin_click_rate)}</td>
           <td class="py-2.5 px-4 text-right">${formatNum(d.saves)}</td>
+          <td class="py-2.5 px-4 text-right">${formatPct(d.save_rate)}</td>
+          <td class="py-2.5 px-4 text-center">
+            <button class="text-red-500 hover:text-red-700 transition-colors" onclick="deleteDailyRecord('${d.metric_date}')" title="Delete record">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+            </button>
+          </td>
         </tr>
       `).join('');
     }
     
+    const pooledEr = totals.impressions ? totals.engagements / totals.impressions : 0;
+    const pooledOcr = totals.impressions ? totals.outbound_clicks / totals.impressions : 0;
+    const pooledPcr = totals.impressions ? totals.pin_clicks / totals.impressions : 0;
+    const pooledSr = totals.impressions ? totals.saves / totals.impressions : 0;
+
     document.getElementById('daily-metrics-tfoot')!.innerHTML = `
       <tr>
         <td class="py-3 px-4">Totals (Filtered)</td>
+        <td class="py-3 px-4 text-center">—</td>
         <td class="py-3 px-4 text-right">${formatNum(totals.impressions)}</td>
         <td class="py-3 px-4 text-right">${formatNum(totals.engagements)}</td>
+        <td class="py-3 px-4 text-right">${formatPct(pooledEr)}</td>
         <td class="py-3 px-4 text-right">${formatNum(totals.outbound_clicks)}</td>
+        <td class="py-3 px-4 text-right">${formatPct(pooledOcr)}</td>
         <td class="py-3 px-4 text-right">${formatNum(totals.pin_clicks)}</td>
+        <td class="py-3 px-4 text-right">${formatPct(pooledPcr)}</td>
         <td class="py-3 px-4 text-right">${formatNum(totals.saves)}</td>
+        <td class="py-3 px-4 text-right">${formatPct(pooledSr)}</td>
+        <td class="py-3 px-4 text-center">—</td>
       </tr>
     `;
     
@@ -189,17 +212,10 @@ async function renderS2() {
   tbody.innerHTML = `<tr><td colspan="7" class="py-12 text-center text-muted-foreground">Loading top pins...</td></tr>`;
   syncStateToUrl();
 
-  document.querySelectorAll('[data-s2-sort]').forEach(th => {
-    const s = th.getAttribute('data-s2-sort');
-    th.querySelector('.sort-icon')!.textContent = s === state.s2Sort ? (state.s2Desc ? '↓' : '↑') : '';
-  });
-
   const url = new URL(`/api/analytics/connections/${connectionId}/top-pins`, window.location.origin);
   url.searchParams.set('sort_by', state.s2Mode);
   url.searchParams.set('page', String(state.s2Page));
   url.searchParams.set('page_size', String(state.s2Size));
-  url.searchParams.set('sort', state.s2Sort);
-  url.searchParams.set('dir', state.s2Desc ? 'desc' : 'asc');
   if (state.s2Query) url.searchParams.set('q', state.s2Query);
   if (state.from) url.searchParams.set('from_date', state.from);
   if (state.to) url.searchParams.set('to_date', state.to);
@@ -211,7 +227,7 @@ async function renderS2() {
     if (window) {
       document.getElementById('s2-window-badge')!.innerHTML = `
         <span class="rounded-full bg-muted/50 px-2 py-0.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-          Window: ${window.start} — ${window.end}
+          Window: ${window.start.split('T')[0]} — ${window.end.split('T')[0]}
         </span>
       `;
     } else {
@@ -229,34 +245,39 @@ async function renderS2() {
     document.getElementById('s2-range')!.textContent = total > 0 ? `${start + 1}-${Math.min(start + state.s2Size, total)}` : '0-0';
     
     if (rows.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="7" class="py-12 text-center text-muted-foreground">No pins found</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="9" class="py-12 text-center text-muted-foreground">
+        <p class="mb-2">No top pins snapshots found.</p>
+        <button onclick="document.getElementById('tab-pipe')?.click()" class="text-primary hover:underline font-semibold">Go to Pipeline & Automation to Sync</button>
+      </td></tr>`;
     } else {
-      tbody.innerHTML = rows.map((p: any) => {
-        const title = escapeHtml(p.title) || 'Untitled Pin';
-        const destUrl = escapeHtml(p.destination_url);
-        const img = escapeHtml(p.image_url) || FALLBACK_IMG;
-        
-        return `
+      tbody.innerHTML = rows.map((p: any) => `
         <tr class="hover:bg-muted/10 transition-colors">
-          <td class="py-2.5 px-4 text-center font-bold text-muted-foreground">#${p.rank_position}</td>
-          <td class="py-2.5 px-4">
+          <td class="py-3 px-4 text-center font-bold text-muted-foreground">#${p.rank_position}</td>
+          <td class="py-3 px-4">
             <div class="flex items-center gap-3">
-              <div class="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-border/50 shadow-sm bg-muted">
-                <img src="${img}" class="h-full w-full object-cover" loading="lazy" />
+              <div class="h-10 w-10 flex-shrink-0 overflow-hidden rounded-md border border-border bg-muted">
+                <img src="${p.image_url || FALLBACK_IMG}" alt="Pin" class="h-full w-full object-cover" loading="lazy" />
               </div>
-              <div class="flex flex-col truncate min-w-0">
-                <span class="font-semibold truncate text-foreground/90">${title}</span>
-                ${destUrl ? `<a href="${destUrl}" target="_blank" class="text-[10px] text-blue-500 hover:underline truncate">Link</a>` : '<span class="text-[10px] text-muted-foreground">No Link</span>'}
+              <div class="min-w-0 max-w-[200px]">
+                <a href="https://pinterest.com/pin/${p.pin_id}" target="_blank" rel="noopener noreferrer" class="block truncate font-semibold hover:text-primary transition-colors">
+                  ${escapeHtml(p.title) || 'Untitled Pin / No Link'}
+                </a>
+                <div class="flex items-center gap-2 text-[10px] text-muted-foreground mt-0.5">
+                  <span class="truncate font-mono">${p.pin_id}</span>
+                  ${p.destination_url ? `<a href="${p.destination_url}" target="_blank" rel="noopener noreferrer" class="hover:text-primary transition-colors">🔗 Link</a>` : ''}
+                </div>
               </div>
             </div>
           </td>
-          <td class="py-2.5 px-4 text-right">${formatNum(p.impressions)}</td>
-          <td class="py-2.5 px-4 text-right">${formatNum(p.engagement)}</td>
-          <td class="py-2.5 px-4 text-right">${formatNum(p.outbound_clicks)}</td>
-          <td class="py-2.5 px-4 text-right">${formatNum(p.pin_clicks)}</td>
-          <td class="py-2.5 px-4 text-right">${formatNum(p.saves)}</td>
+          <td class="py-3 px-4 text-center">${getStatusBadge(p.data_status)}</td>
+          <td class="py-3 px-4 text-right font-medium">${formatNum(p.impressions)}</td>
+          <td class="py-3 px-4 text-right font-medium">${formatNum(p.engagement)}</td>
+          <td class="py-3 px-4 text-right font-medium">${formatPct(p.engagement_rate)}</td>
+          <td class="py-3 px-4 text-right font-medium">${formatNum(p.outbound_clicks)}</td>
+          <td class="py-3 px-4 text-right font-medium">${formatNum(p.pin_clicks)}</td>
+          <td class="py-3 px-4 text-right font-medium">${formatNum(p.saves)}</td>
         </tr>
-      `}).join('');
+      `).join('');
     }
     
     const btnDiv = document.getElementById('s2-page-buttons')!;
@@ -269,6 +290,20 @@ async function renderS2() {
     tbody.innerHTML = `<tr><td colspan="7" class="py-12 text-center text-red-500">${escapeHtml(e.message)}</td></tr>`;
   }
 }
+
+(window as any).deleteDailyRecord = async (date: string) => {
+  if (!confirm(`Are you sure you want to delete metrics for ${date}?`)) return;
+  try {
+    const res = await fetch(`/api/analytics/connections/${connectionId}/daily/${date}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to delete record');
+    }
+    renderS1();
+  } catch (e: any) {
+    alert(e.message);
+  }
+};
 
 (window as any).goS1 = (p: number) => { state.s1Page = p; renderS1(); };
 (window as any).goS2 = (p: number) => { state.s2Page = p; renderS2(); };
@@ -298,19 +333,6 @@ document.querySelectorAll('[data-s1-sort]').forEach(th => {
       state.s1Desc = true;
     }
     renderS1();
-  });
-});
-
-document.querySelectorAll('[data-s2-sort]').forEach(th => {
-  th.addEventListener('click', () => {
-    const s = th.getAttribute('data-s2-sort')!;
-    if (state.s2Sort === s) {
-      state.s2Desc = !state.s2Desc;
-    } else {
-      state.s2Sort = s;
-      state.s2Desc = true;
-    }
-    renderS2();
   });
 });
 

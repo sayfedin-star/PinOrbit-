@@ -58,10 +58,14 @@ export const GET: APIRoute = async ({ params, locals }) => {
       );
     }
 
+    const latestFailedAccount = await analyticsDb.getLatestFailedRun(workspaceId, connection.id, 'account_analytics');
+    const latestFailedTopPins = await analyticsDb.getLatestFailedRun(workspaceId, connection.id, 'top_pins');
+
     const responseData: AnalyticsConnectionSettingsResponse = {
       id: connection.id,
       display_name: connection.display_name,
       revoked_at: connection.revoked_at || null,
+      last_analytics_sync_at: connection.last_analytics_sync_at || null,
       analytics_webhook_url: connection.analytics_webhook_url || null,
       analytics_sync_time: connection.analytics_sync_time || '04:00',
       analytics_cron_expression: connection.analytics_cron_expression || '0 4 * * *',
@@ -86,10 +90,18 @@ export const GET: APIRoute = async ({ params, locals }) => {
       token_fingerprint: connection.fastcron_token && connection.fastcron_token.trim().length >= 16 
         ? '••••' + connection.fastcron_token.trim().slice(-4) 
         : null,
+      analytics_fastcron_token_fingerprint: connection.analytics_fastcron_token && connection.analytics_fastcron_token.trim().length >= 16
+        ? '••••' + connection.analytics_fastcron_token.trim().slice(-4)
+        : null,
+      top_pins_fastcron_token_fingerprint: connection.top_pins_fastcron_token && connection.top_pins_fastcron_token.trim().length >= 16
+        ? '••••' + connection.top_pins_fastcron_token.trim().slice(-4)
+        : null,
       fastcron_notify: connection.fastcron_notify ?? true,
       fastcron_timeout: connection.fastcron_timeout ?? 30,
       fastcron_instances: connection.fastcron_instances ?? 1,
       health: await analyticsDb.getConnectionHealth(connection.id),
+      last_error_a: latestFailedAccount?.error_details?.message || null,
+      last_error_b: latestFailedTopPins?.error_details?.message || null,
     };
 
     return new Response(JSON.stringify({ success: true, data: responseData }), {
@@ -405,12 +417,12 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
       updates.fastcron_notify = body.fastcron_notify;
     }
 
-    // Validate R16: fastcron_token (write-only; if provided length >= 16 else 422)
-    if (body.fastcron_token !== undefined) {
-      if (body.fastcron_token === null || body.fastcron_token === '') {
-        updates.fastcron_token = null;
+    // Validate R23.1: analytics_fastcron_token (write-only; if provided length >= 16 else 422)
+    if (body.analytics_fastcron_token !== undefined) {
+      if (body.analytics_fastcron_token === null || body.analytics_fastcron_token === '') {
+        updates.analytics_fastcron_token = null;
       } else {
-        const tok = String(body.fastcron_token).trim();
+        const tok = String(body.analytics_fastcron_token).trim();
         if (tok.length < 16) {
           return new Response(
             JSON.stringify({ success: false, error: 'FastCron API Token must be at least 16 characters.' }),
@@ -419,9 +431,30 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
         }
         if (!tok.startsWith('v1:')) {
           const env = getServerEnv();
-          updates.fastcron_token = await encryptToken(tok, env.TOKEN_KEK);
+          updates.analytics_fastcron_token = await encryptToken(tok, env.TOKEN_KEK);
         } else {
-          updates.fastcron_token = tok;
+          updates.analytics_fastcron_token = tok;
+        }
+      }
+    }
+
+    // Validate R23.1: top_pins_fastcron_token (write-only; if provided length >= 16 else 422)
+    if (body.top_pins_fastcron_token !== undefined) {
+      if (body.top_pins_fastcron_token === null || body.top_pins_fastcron_token === '') {
+        updates.top_pins_fastcron_token = null;
+      } else {
+        const tok = String(body.top_pins_fastcron_token).trim();
+        if (tok.length < 16) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'FastCron API Token must be at least 16 characters.' }),
+            { status: 422, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+        if (!tok.startsWith('v1:')) {
+          const env = getServerEnv();
+          updates.top_pins_fastcron_token = await encryptToken(tok, env.TOKEN_KEK);
+        } else {
+          updates.top_pins_fastcron_token = tok;
         }
       }
     }
@@ -463,6 +496,12 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
       has_fastcron_token: Boolean(updated.fastcron_token && updated.fastcron_token.trim().length >= 16),
       token_fingerprint: updated.fastcron_token && updated.fastcron_token.trim().length >= 16 
         ? '••••' + updated.fastcron_token.trim().slice(-4) 
+        : null,
+      analytics_fastcron_token_fingerprint: updated.analytics_fastcron_token && updated.analytics_fastcron_token.trim().length >= 16
+        ? '••••' + updated.analytics_fastcron_token.trim().slice(-4)
+        : null,
+      top_pins_fastcron_token_fingerprint: updated.top_pins_fastcron_token && updated.top_pins_fastcron_token.trim().length >= 16
+        ? '••••' + updated.top_pins_fastcron_token.trim().slice(-4)
         : null,
       fastcron_notify: updated.fastcron_notify ?? true,
       fastcron_timeout: updated.fastcron_timeout ?? 30,
