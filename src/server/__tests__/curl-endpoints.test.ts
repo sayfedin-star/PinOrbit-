@@ -16,8 +16,11 @@ import { GET as getSettings, POST as postSettings } from '../../pages/api/analyt
 import { GET as getTimeseries } from '../../pages/api/analytics/timeseries';
 import { GET as getTopPins } from '../../pages/api/analytics/top-pins';
 import { POST as postTriggerSync } from '../../pages/api/analytics/trigger-sync';
+import { GET as getPinLeaderboard } from '../../pages/api/analytics/connections/[id]/pin-leaderboard';
+import { GET as getPinTrends } from '../../pages/api/analytics/connections/[id]/pin-trends';
 import { POST as postDailyDispatch } from '../../pages/api/internal/pinterest/daily-dispatch';
 import { POST as postIngest } from '../../pages/api/internal/pinterest/ingest';
+import { POST as postCleanupRetention } from '../../pages/api/internal/pinterest/cleanup-retention';
 
 vi.mock('../../server/auth/workspace-guard', () => ({
   assertWorkspaceAccess: vi.fn().mockResolvedValue({
@@ -58,6 +61,8 @@ vi.mock('../../server/db/analytics', () => ({
     deleteWorkspaceConnection: vi.fn().mockResolvedValue(undefined),
     softDeleteWorkspaceConnection: vi.fn().mockResolvedValue(undefined),
     getWorkspaceDailyMetrics: vi.fn().mockResolvedValue({ rows: [], totals: {} }),
+    getPinLeaderboard: vi.fn().mockResolvedValue([]),
+    getPinTrends: vi.fn().mockResolvedValue([]),
     getDailyMetricsForConnection: vi.fn().mockResolvedValue({ rows: [], totals: {} }),
     getConnectionDailyMetrics: vi.fn().mockResolvedValue({ rows: [], totals: {} }),
     deleteDailySnapshotRecord: vi.fn().mockResolvedValue(undefined),
@@ -247,10 +252,22 @@ describe('R12/R15 Full 17-Endpoint Route Verification Suite', () => {
     const r23 = await postIngest({ request: new Request('http://localhost/api/internal/pinterest/ingest', { method: 'POST', headers: { 'x-ingest-secret': 'test_sec' }, body: JSON.stringify({ connection_id: connId, channel: 'account_analytics', success: true, request_id: 'req1', account_analytics: {} }) }), locals: { runtimeEnv: { INGEST_SECRET_KEY: 'test_sec' } } } as any);
     results.push({ endpoint: '/api/internal/pinterest/ingest', method: 'POST', status: r23.status, contentType: r23.headers.get('content-type') || '' });
 
+    // 24. GET /api/analytics/connections/[id]/pin-leaderboard
+    const r24 = await getPinLeaderboard({ params: { id: connId }, request: new Request(`http://localhost/api/analytics/connections/${connId}/pin-leaderboard?sort_by=IMPRESSION`), locals } as any);
+    results.push({ endpoint: '/api/analytics/connections/[id]/pin-leaderboard', method: 'GET', status: r24.status, contentType: r24.headers.get('content-type') || '' });
+
+    // 25. GET /api/analytics/connections/[id]/pin-trends
+    const r25 = await getPinTrends({ params: { id: connId }, request: new Request(`http://localhost/api/analytics/connections/${connId}/pin-trends?pin_id=pin123&sort_by=IMPRESSION`), locals } as any);
+    results.push({ endpoint: '/api/analytics/connections/[id]/pin-trends', method: 'GET', status: r25.status, contentType: r25.headers.get('content-type') || '' });
+
+    // 26. POST /api/internal/pinterest/cleanup-retention
+    const r26 = await postCleanupRetention({ request: new Request('http://localhost/api/internal/pinterest/cleanup-retention', { method: 'POST', headers: { 'x-ingest-secret': 'test_sec' } }), locals: { runtimeEnv: { INGEST_SECRET_KEY: 'test_sec' } } } as any);
+    results.push({ endpoint: '/api/internal/pinterest/cleanup-retention', method: 'POST', status: r26.status, contentType: r26.headers.get('content-type') || '' });
+
     // Verify all returned application/json and NO text/html
-    console.log('\n--- 23-ROUTE VERIFICATION TABLE ---');
+    console.log('\n--- 26-ROUTE VERIFICATION TABLE ---');
     console.table(results);
-    expect(results.length).toBeGreaterThanOrEqual(17);
+    expect(results.length).toBe(26);
     for (const res of results) {
       expect(res.contentType).toContain('application/json');
       expect(res.contentType).not.toContain('text/html');

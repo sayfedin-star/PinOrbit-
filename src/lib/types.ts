@@ -644,15 +644,42 @@ export interface TriggerSyncRequest {
 
 export interface TriggerSyncResponse {
   success: boolean;
-  connection_id: string;
-  channel: 'analytics' | 'top_pins';
-  mode: 'ping' | 'sync';
-  startDate?: string;
-  endDate?: string;
-  webhookResponseStatus?: number;
   message?: string;
+  fastcron_job_id?: number | null;
+  mode?: 'ping' | 'sync';
   error?: string;
 }
 
+export interface PinLeaderboardItem {
+  pin_id: string;
+  title: string | null;
+  image_url?: string | null;
+  destination_url?: string | null;
+  appearances: number;
+  best_rank: number;
+  total_impressions: number;
+  total_engagements: number;
+  total_saves: number;
+  total_outbound_clicks: number;
+  total_pin_clicks: number;
+  last_seen: string;
+  prev_rank?: number | null;
+  trend: string;
+}
 
-
+export interface PinTrendPoint {
+  window_end: string;
+  rank_position: number;
+  impressions: number;
+  engagements: number;
+  saves: number;
+  engagement_rate: number;
+  outbound_clicks: number;
+  pin_clicks: number;
+  outbound_click_rate?: number;
+  pin_click_rate?: number;
+  save_rate?: number;
+  title?: string | null;
+  image_url?: string | null;
+  destination_url?: string | null;
+}

@@ -77,6 +77,8 @@ const accountName = connection.display_name || 'Account';
       data-tab="data" class="rounded-lg px-4 py-1.5 text-xs font-bold bg-primary text-primary-foreground shadow-sm">📊 Data & Analytics</button>
     <button role="tab" id="tab-pipe" aria-controls="panel-pipe" aria-selected="false"
       data-tab="pipeline" class="rounded-lg px-4 py-1.5 text-xs font-semibold text-muted-foreground">⚙️ Pipeline & Automation</button>
+    <button role="tab" id="tab-intel" aria-controls="panel-intel" aria-selected="false"
+      data-tab="intelligence" class="rounded-lg px-4 py-1.5 text-xs font-semibold text-muted-foreground">📌 Pin Intelligence</button>
   </div>
 
   <!-- PANEL 1: DATA & ANALYTICS -->
@@ -308,8 +310,159 @@ const accountName = connection.display_name || 'Account';
       </article>
     </div>
   </section>
+
+  <!-- PANEL 3: PIN INTELLIGENCE (V26.1) -->
+  <section id="panel-intel" role="tabpanel" aria-labelledby="tab-intel" hidden class="space-y-6">
+    <div class="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+      <!-- Section Header -->
+      <div class="flex flex-col gap-4 border-b border-border p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 id="intel-title" class="text-base font-bold text-foreground">{accountName} — Pin Intelligence</h2>
+          <p class="text-xs text-muted-foreground">Aggregated lifetime pin performance strictly scoped per ranking sort mode (Zero duplication)</p>
+        </div>
+
+        <!-- Sort Mode Tabs -->
+        <div class="flex flex-wrap items-center gap-1.5 rounded-xl border border-border bg-muted/40 p-1" id="intel-sort-tabs">
+          <button data-intel-sort="IMPRESSION" class="mode-tab active rounded-lg bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground shadow-sm transition-all">Impressions</button>
+          <button data-intel-sort="OUTBOUND_CLICK" class="mode-tab rounded-lg px-3 py-1 text-xs font-semibold text-muted-foreground transition-all hover:text-foreground">Outbound Clicks</button>
+          <button data-intel-sort="SAVE" class="mode-tab rounded-lg px-3 py-1 text-xs font-semibold text-muted-foreground transition-all hover:text-foreground">Saves</button>
+          <button data-intel-sort="ENGAGEMENT" class="mode-tab rounded-lg px-3 py-1 text-xs font-semibold text-muted-foreground transition-all hover:text-foreground">Engagements</button>
+          <button data-intel-sort="PIN_CLICK" class="mode-tab rounded-lg px-3 py-1 text-xs font-semibold text-muted-foreground transition-all hover:text-foreground">Pin Clicks</button>
+        </div>
+      </div>
+
+      <!-- Controls Bar: Range Presets & Search Box -->
+      <div class="flex flex-wrap items-center justify-between gap-3 bg-muted/10 px-4 py-2.5 border-b border-border text-xs">
+        <div class="flex items-center gap-2">
+          <span class="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Window:</span>
+          <div class="inline-flex rounded-xl border border-border bg-muted/30 p-0.5" id="intel-range-presets">
+            <button data-intel-days="30" class="preset-btn active rounded-lg bg-primary px-2.5 py-0.5 text-xs font-semibold text-primary-foreground shadow-sm transition-all">30D</button>
+            <button data-intel-days="90" class="preset-btn rounded-lg px-2.5 py-0.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all">90D</button>
+            <button data-intel-days="180" class="preset-btn rounded-lg px-2.5 py-0.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all">180D</button>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <input
+            type="text"
+            id="intel-search"
+            placeholder="Search pin ID or title..."
+            class="rounded-xl border border-border bg-background px-3 py-1 text-xs focus:border-primary focus:outline-none w-56"
+          />
+        </div>
+      </div>
+
+      <!-- Leaderboard Table -->
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs">
+          <thead class="border-b border-border bg-muted/20 text-[11px] uppercase tracking-wider text-muted-foreground font-semibold sticky top-0 z-10 shadow-sm">
+            <tr>
+              <th class="py-3 px-4 w-12 text-center">#</th>
+              <th class="py-3 px-4 min-w-[260px]">Pin</th>
+              <th class="py-3 px-4 text-center">Appearances</th>
+              <th class="py-3 px-4 text-center">Best Rank</th>
+              <th class="py-3 px-4 text-right">Total Impressions</th>
+              <th class="py-3 px-4 text-right">Total Saves</th>
+              <th class="py-3 px-4 text-right">Last Seen</th>
+              <th class="py-3 px-4 text-center">Trend</th>
+            </tr>
+          </thead>
+          <tbody id="intel-leaderboard-tbody" class="divide-y divide-border [&>tr:nth-child(even)]:bg-muted/5">
+            <tr>
+              <td colspan="8" class="py-12 text-center text-muted-foreground">
+                Loading pin intelligence leaderboard...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Sliding Pin Timeline Drawer -->
+    <div id="intel-drawer-backdrop" class="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm opacity-0 pointer-events-none transition-opacity duration-300"></div>
+    <div id="intel-timeline-drawer" class="fixed top-0 right-0 z-50 h-full w-full max-w-xl bg-card border-l border-border shadow-2xl transform translate-x-full transition-transform duration-300 overflow-y-auto flex flex-col">
+      <!-- Drawer Header -->
+      <div class="p-5 border-b border-border flex items-start justify-between gap-4 sticky top-0 bg-card/95 backdrop-blur z-10">
+        <div class="flex items-center gap-3 min-w-0">
+          <img id="drawer-pin-image" src="" alt="" class="w-12 h-12 rounded-xl object-cover border border-border shrink-0 hidden" />
+          <div class="min-w-0">
+            <h3 id="drawer-pin-title" class="text-sm font-bold text-foreground truncate">Pin Timeline</h3>
+            <div class="flex items-center gap-2 mt-1">
+              <span class="font-mono text-xs text-muted-foreground">ID: <span id="drawer-pin-id"></span></span>
+              <a id="drawer-pin-link" href="#" target="_blank" rel="noopener noreferrer" class="text-xs text-primary hover:underline font-semibold inline-flex items-center gap-0.5">
+                <span>Pinterest</span>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              </a>
+            </div>
+          </div>
+        </div>
+        <button id="intel-drawer-close" class="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
+
+      <!-- Drawer Body -->
+      <div class="p-5 space-y-6 flex-1">
+        <!-- KPI Metrics Grid -->
+        <div class="grid grid-cols-4 gap-2">
+          <div class="rounded-xl border border-border bg-muted/20 p-2.5 text-center">
+            <span class="text-[10px] uppercase font-bold text-muted-foreground block">Best Rank</span>
+            <span id="drawer-best-rank" class="text-sm font-black text-foreground mt-0.5 block">—</span>
+          </div>
+          <div class="rounded-xl border border-border bg-muted/20 p-2.5 text-center">
+            <span class="text-[10px] uppercase font-bold text-muted-foreground block">Total Impr</span>
+            <span id="drawer-total-impr" class="text-sm font-black text-foreground mt-0.5 block">—</span>
+          </div>
+          <div class="rounded-xl border border-border bg-muted/20 p-2.5 text-center">
+            <span class="text-[10px] uppercase font-bold text-muted-foreground block">Total Saves</span>
+            <span id="drawer-total-saves" class="text-sm font-black text-foreground mt-0.5 block">—</span>
+          </div>
+          <div class="rounded-xl border border-border bg-muted/20 p-2.5 text-center">
+            <span class="text-[10px] uppercase font-bold text-muted-foreground block">Snapshots</span>
+            <span id="drawer-appearances" class="text-sm font-black text-foreground mt-0.5 block">—</span>
+          </div>
+        </div>
+
+        <!-- Trend Sparkline Card -->
+        <div class="rounded-xl border border-border bg-muted/10 p-4">
+          <div class="flex items-center justify-between mb-2">
+            <h4 class="text-xs font-bold text-foreground uppercase tracking-wider">Performance Trend (90D)</h4>
+            <span class="text-[10px] text-muted-foreground">Historical trajectory</span>
+          </div>
+          <div id="drawer-sparkline-container" class="w-full h-24 flex items-center justify-center">
+            <!-- Rendered by pin-intelligence.ts -->
+          </div>
+        </div>
+
+        <!-- History Snapshot Table -->
+        <div class="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
+          <div class="p-3 border-b border-border bg-muted/20 flex items-center justify-between">
+            <h4 class="text-xs font-bold text-foreground">Timeline History</h4>
+            <span class="text-[11px] text-muted-foreground">Ordered by date</span>
+          </div>
+          <div class="overflow-x-auto max-h-72">
+            <table class="w-full text-left text-xs">
+              <thead class="border-b border-border bg-muted/30 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold sticky top-0">
+                <tr>
+                  <th class="py-2 px-3">Date</th>
+                  <th class="py-2 px-3 text-center">Rank</th>
+                  <th class="py-2 px-3 text-right">Impressions</th>
+                  <th class="py-2 px-3 text-right">Engagements</th>
+                  <th class="py-2 px-3 text-right">Saves</th>
+                </tr>
+              </thead>
+              <tbody id="drawer-history-tbody" class="divide-y divide-border">
+                <!-- Rendered by pin-intelligence.ts -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
 </Layout>
 
 <script src="../../scripts/tabs.ts"></script>
 <script src="../../scripts/analytics-tables.ts"></script>
 <script src="../../scripts/pipeline-controls.ts"></script>
+<script src="../../scripts/pin-intelligence.ts"></script>

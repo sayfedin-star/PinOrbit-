@@ -9,6 +9,8 @@ import type {
   WorkspaceAnalyticsSettings,
   AnalyticsConnection,
   AnalyticsIngestionRun,
+  PinLeaderboardItem,
+  PinTrendPoint,
 } from '../../lib/types';
 
 export interface MetricSummary {
@@ -535,6 +537,179 @@ export const analyticsDb = {
 
     if (error) throw error;
     return (data as TopPinSnapshot[]) || [];
+  },
+
+  /**
+   * Retrieves aggregated pin leaderboard scoped strictly to a single sort_by mode (V26.1).
+   */
+  async getPinLeaderboard(
+    workspaceId: string,
+    connectionId: string,
+    sortBy: PinnerSortBy,
+    days = 30,
+    limit = 25,
+    search?: string | null
+  ): Promise<PinLeaderboardItem[]> {
+    if (!workspaceId || !connectionId) {
+      throw new Error('Tenant Boundary Violation: workspaceId and connectionId are required.');
+    }
+
+    const analyticsClient = dbClients.getAnalytics();
+    
+    // Call stored RPC get_pin_leaderboard
+    const { data, error } = await analyticsClient.rpc('get_pin_leaderboard', {
+      p_connection_id: connectionId,
+      p_sort_by: sortBy,
+      p_days: days,
+      p_limit: limit,
+      p_search: search && search.trim().length > 0 ? search.trim() : null,
+    });
+
+    if (error) {
+      console.warn('[AnalyticsDb] get_pin_leaderboard RPC error, falling back to query:', error.message);
+      const cutoff = new Date(Date.now() - days * 86400000).toISOString();
+      let query = analyticsClient
+        .from('top_pins_snapshots')
+        .select('*')
+        .eq('workspace_id', workspaceId)
+        .eq('connection_id', connectionId)
+        .eq('sort_by', sortBy)
+        .gte('window_end', cutoff)
+        .order('window_end', { ascending: false });
+
+      if (search && search.trim()) {
+        const term = search.trim();
+        query = query.or(`pin_id.ilike.%${term}%,title.ilike.%${term}%`);
+      }
+
+      const { data: rawRows, error: rawError } = await query;
+      if (rawError || !rawRows) return [];
+
+      const pinMap = new Map<string, any>();
+      for (const row of rawRows) {
+        const existing = pinMap.get(row.pin_id);
+        if (!existing) {
+          pinMap.set(row.pin_id, {
+            pin_id: row.pin_id,
+            title: row.title || null,
+            image_url: row.image_url || null,
+            destination_url: row.destination_url || null,
+            appearances: 1,
+            best_rank: row.rank_position,
+            total_impressions: Number(row.impressions || 0),
+            total_engagements: Number(row.engagement || 0),
+            total_saves: Number(row.saves || 0),
+            total_outbound_clicks: Number(row.outbound_clicks || 0),
+            total_pin_clicks: Number(row.pin_clicks || 0),
+            last_seen: row.window_end,
+            prev_rank: null,
+          });
+        } else {
+          existing.appearances++;
+          if (row.rank_position < existing.best_rank) existing.best_rank = row.rank_position;
+          existing.total_impressions += Number(row.impressions || 0);
+          existing.total_engagements += Number(row.engagement || 0);
+          existing.total_saves += Number(row.saves || 0);
+          existing.total_outbound_clicks += Number(row.outbound_clicks || 0);
+          existing.total_pin_clicks += Number(row.pin_clicks || 0);
+          if (new Date(row.window_end) > new Date(existing.last_seen)) existing.last_seen = row.window_end;
+          if (!existing.title && row.title) existing.title = row.title;
+        }
+      }
+
+      const items = Array.from(pinMap.values());
+      items.sort((a, b) => {
+        if (sortBy === 'OUTBOUND_CLICK') return b.total_outbound_clicks - a.total_outbound_clicks;
+        if (sortBy === 'SAVE') return b.total_saves - a.total_saves;
+        if (sortBy === 'ENGAGEMENT') return b.total_engagements - a.total_engagements;
+        if (sortBy === 'PIN_CLICK') return b.total_pin_clicks - a.total_pin_clicks;
+        return b.total_impressions - a.total_impressions;
+      });
+
+      return items.slice(0, limit).map(item => ({
+        ...item,
+        last_seen: item.last_seen ? new Date(item.last_seen).toISOString().split('T')[0] : '',
+        trend: 'NEW',
+      }));
+    }
+
+    if (!data || !Array.isArray(data)) return [];
+
+    return data.map((row: any) => {
+      let trend = 'NEW';
+      if (row.prev_rank !== null && row.prev_rank !== undefined && row.best_rank !== null) {
+        const diff = Number(row.prev_rank) - Number(row.best_rank);
+        if (diff > 0) trend = `▲${diff}`;
+        else if (diff < 0) trend = `▼${Math.abs(diff)}`;
+        else trend = '▬';
+      }
+
+      return {
+        pin_id: row.pin_id,
+        title: row.title || null,
+        image_url: row.image_url || null,
+        destination_url: row.destination_url || null,
+        appearances: Number(row.appearances || 0),
+        best_rank: Number(row.best_rank || 0),
+        total_impressions: Number(row.total_impressions || 0),
+        total_engagements: Number(row.total_engagements || 0),
+        total_saves: Number(row.total_saves || 0),
+        total_outbound_clicks: Number(row.total_outbound_clicks || 0),
+        total_pin_clicks: Number(row.total_pin_clicks || 0),
+        last_seen: row.last_seen ? new Date(row.last_seen).toISOString().split('T')[0] : '',
+        prev_rank: row.prev_rank !== null && row.prev_rank !== undefined ? Number(row.prev_rank) : null,
+        trend,
+      };
+    });
+  },
+
+  /**
+   * Retrieves chronological trend timeline points for a single pin (V26.1).
+   */
+  async getPinTrends(
+    workspaceId: string,
+    connectionId: string,
+    pinId: string,
+    sortBy: PinnerSortBy,
+    days = 90
+  ): Promise<PinTrendPoint[]> {
+    if (!workspaceId || !connectionId || !pinId) {
+      throw new Error('Tenant Boundary Violation: workspaceId, connectionId, and pinId are required.');
+    }
+
+    const analyticsClient = dbClients.getAnalytics();
+    const cutoff = new Date(Date.now() - days * 86400000).toISOString();
+
+    const { data, error } = await analyticsClient
+      .from('top_pins_snapshots')
+      .select('window_end, rank_position, impressions, engagement, saves, outbound_clicks, pin_clicks, engagement_rate, outbound_click_rate, pin_click_rate, save_rate, title, image_url, destination_url')
+      .eq('workspace_id', workspaceId)
+      .eq('connection_id', connectionId)
+      .eq('pin_id', pinId)
+      .eq('sort_by', sortBy)
+      .gte('window_end', cutoff)
+      .order('window_end', { ascending: true });
+
+    if (error || !data) {
+      return [];
+    }
+
+    return data.map((r: any) => ({
+      window_end: r.window_end ? new Date(r.window_end).toISOString().split('T')[0] : '',
+      rank_position: Number(r.rank_position || 0),
+      impressions: Number(r.impressions || 0),
+      engagements: Number(r.engagement || 0),
+      saves: Number(r.saves || 0),
+      outbound_clicks: Number(r.outbound_clicks || 0),
+      pin_clicks: Number(r.pin_clicks || 0),
+      engagement_rate: Number(r.engagement_rate || 0),
+      outbound_click_rate: Number(r.outbound_click_rate || 0),
+      pin_click_rate: Number(r.pin_click_rate || 0),
+      save_rate: Number(r.save_rate || 0),
+      title: r.title || null,
+      image_url: r.image_url || null,
+      destination_url: r.destination_url || null,
+    }));
   },
 
   /**

@@ -21,4 +21,6 @@ tabs.forEach(tab => {
 
 if (hash === '#pipeline') {
   document.querySelector('[data-tab="pipeline"]')?.dispatchEvent(new Event('click'));
+} else if (hash === '#intelligence' || hash === '#intel') {
+  document.querySelector('[data-tab="intelligence"]')?.dispatchEvent(new Event('click'));
 }
