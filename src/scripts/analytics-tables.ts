@@ -15,8 +15,13 @@ function escapeHtml(str: string | null | undefined): string {
 }
 function formatNum(n: number) { return new Intl.NumberFormat('en-US').format(n || 0); }
 function formatPct(n: number) { return new Intl.NumberFormat('en-US', { style: 'percent', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0); }
-function getStatusBadge(status: string) {
-  const s = (status || 'READY').toUpperCase();
+
+const asText   = (v: any, d = '')  => (typeof v === 'string' ? v : v == null ? d : String(v));
+const asStatus = (v: any)          => { const s = typeof v === 'string' && v ? v : 'READY'; return s.toUpperCase(); };
+const asNumber = (v: any)          => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+
+function getStatusBadge(status: any) {
+  const s = asStatus(status);
   if (s === 'READY') return '<span class="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-bold text-emerald-500">READY</span>';
   return `<span class="rounded bg-yellow-500/10 px-1.5 py-0.5 text-[9px] font-bold text-yellow-600">${s}</span>`;
 }
@@ -152,26 +157,31 @@ async function renderS1() {
         <button onclick="document.getElementById('tab-pipe')?.click()" class="text-primary hover:underline font-semibold">Go to Pipeline & Automation to Sync</button>
       </td></tr>`;
     } else {
-      tbody.innerHTML = rows.map((d: any) => `
-        <tr class="hover:bg-muted/10 transition-colors">
-          <td class="py-2.5 px-4 font-mono font-medium">${d.metric_date}</td>
-          <td class="py-2.5 px-4 text-center">${getStatusBadge(d.data_status)}</td>
-          <td class="py-2.5 px-4 text-right">${formatNum(d.impressions)}</td>
-          <td class="py-2.5 px-4 text-right">${formatNum(d.engagements)}</td>
-          <td class="py-2.5 px-4 text-right">${formatPct(d.engagement_rate)}</td>
-          <td class="py-2.5 px-4 text-right">${formatNum(d.outbound_clicks)}</td>
-          <td class="py-2.5 px-4 text-right">${formatPct(d.outbound_click_rate)}</td>
-          <td class="py-2.5 px-4 text-right">${formatNum(d.pin_clicks)}</td>
-          <td class="py-2.5 px-4 text-right">${formatPct(d.pin_click_rate)}</td>
-          <td class="py-2.5 px-4 text-right">${formatNum(d.saves)}</td>
-          <td class="py-2.5 px-4 text-right">${formatPct(d.save_rate)}</td>
-          <td class="py-2.5 px-4 text-center">
-            <button class="text-red-500 hover:text-red-700 transition-colors" onclick="deleteDailyRecord('${d.metric_date}')" title="Delete record">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-            </button>
-          </td>
-        </tr>
-      `).join('');
+      tbody.innerHTML = rows.map((d: any) => {
+        try {
+          return `
+          <tr class="hover:bg-muted/10 transition-colors">
+            <td class="py-2.5 px-4 font-mono font-medium">${escapeHtml(asText(d.metric_date))}</td>
+            <td class="py-2.5 px-4 text-center">${getStatusBadge(d.data_status)}</td>
+            <td class="py-2.5 px-4 text-right">${formatNum(asNumber(d.impressions))}</td>
+            <td class="py-2.5 px-4 text-right">${formatNum(asNumber(d.engagements))}</td>
+            <td class="py-2.5 px-4 text-right">${formatPct(asNumber(d.engagement_rate))}</td>
+            <td class="py-2.5 px-4 text-right">${formatNum(asNumber(d.outbound_clicks))}</td>
+            <td class="py-2.5 px-4 text-right">${formatPct(asNumber(d.outbound_click_rate))}</td>
+            <td class="py-2.5 px-4 text-right">${formatNum(asNumber(d.pin_clicks))}</td>
+            <td class="py-2.5 px-4 text-right">${formatPct(asNumber(d.pin_click_rate))}</td>
+            <td class="py-2.5 px-4 text-right">${formatNum(asNumber(d.saves))}</td>
+            <td class="py-2.5 px-4 text-right">${formatPct(asNumber(d.save_rate))}</td>
+            <td class="py-2.5 px-4 text-center">
+              <button class="text-red-500 hover:text-red-700 transition-colors" onclick="deleteDailyRecord('${escapeHtml(asText(d.metric_date))}')" title="Delete record">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+              </button>
+            </td>
+          </tr>`;
+        } catch (err: any) {
+          return `<tr><td colspan="12" class="py-2 px-4 bg-red-500/10 text-red-500 text-xs font-bold text-center">Row Error: ${escapeHtml(err.message)}</td></tr>`;
+        }
+      }).join('');
     }
     
     const pooledEr = totals.impressions ? totals.engagements / totals.impressions : 0;
@@ -250,34 +260,39 @@ async function renderS2() {
         <button onclick="document.getElementById('tab-pipe')?.click()" class="text-primary hover:underline font-semibold">Go to Pipeline & Automation to Sync</button>
       </td></tr>`;
     } else {
-      tbody.innerHTML = rows.map((p: any) => `
-        <tr class="hover:bg-muted/10 transition-colors">
-          <td class="py-3 px-4 text-center font-bold text-muted-foreground">#${p.rank_position}</td>
-          <td class="py-3 px-4">
-            <div class="flex items-center gap-3">
-              <div class="h-10 w-10 flex-shrink-0 overflow-hidden rounded-md border border-border bg-muted">
-                <img src="${p.image_url || FALLBACK_IMG}" alt="Pin" class="h-full w-full object-cover" loading="lazy" />
-              </div>
-              <div class="min-w-0 max-w-[200px]">
-                <a href="https://pinterest.com/pin/${p.pin_id}" target="_blank" rel="noopener noreferrer" class="block truncate font-semibold hover:text-primary transition-colors">
-                  ${escapeHtml(p.title) || 'Untitled Pin / No Link'}
-                </a>
-                <div class="flex items-center gap-2 text-[10px] text-muted-foreground mt-0.5">
-                  <span class="truncate font-mono">${p.pin_id}</span>
-                  ${p.destination_url ? `<a href="${p.destination_url}" target="_blank" rel="noopener noreferrer" class="hover:text-primary transition-colors">🔗 Link</a>` : ''}
+      tbody.innerHTML = rows.map((p: any) => {
+        try {
+          return `
+          <tr class="hover:bg-muted/10 transition-colors">
+            <td class="py-3 px-4 text-center font-bold text-muted-foreground">#${asNumber(p.rank_position)}</td>
+            <td class="py-3 px-4">
+              <div class="flex items-center gap-3">
+                <div class="h-10 w-10 flex-shrink-0 overflow-hidden rounded-md border border-border bg-muted">
+                  <img src="${escapeHtml(asText(p.image_url, FALLBACK_IMG))}" alt="Pin" class="h-full w-full object-cover" loading="lazy" />
+                </div>
+                <div class="min-w-0 max-w-[200px]">
+                  <a href="https://pinterest.com/pin/${escapeHtml(asText(p.pin_id))}" target="_blank" rel="noopener noreferrer" class="block truncate font-semibold hover:text-primary transition-colors">
+                    ${escapeHtml(asText(p.title)) || 'Untitled Pin / No Link'}
+                  </a>
+                  <div class="flex items-center gap-2 text-[10px] text-muted-foreground mt-0.5">
+                    <span class="truncate font-mono">${escapeHtml(asText(p.pin_id))}</span>
+                    ${p.destination_url ? `<a href="${escapeHtml(asText(p.destination_url))}" target="_blank" rel="noopener noreferrer" class="hover:text-primary transition-colors">🔗 Link</a>` : ''}
+                  </div>
                 </div>
               </div>
-            </div>
-          </td>
-          <td class="py-3 px-4 text-center">${getStatusBadge(p.data_status)}</td>
-          <td class="py-3 px-4 text-right font-medium">${formatNum(p.impressions)}</td>
-          <td class="py-3 px-4 text-right font-medium">${formatNum(p.engagement)}</td>
-          <td class="py-3 px-4 text-right font-medium">${formatPct(p.engagement_rate)}</td>
-          <td class="py-3 px-4 text-right font-medium">${formatNum(p.outbound_clicks)}</td>
-          <td class="py-3 px-4 text-right font-medium">${formatNum(p.pin_clicks)}</td>
-          <td class="py-3 px-4 text-right font-medium">${formatNum(p.saves)}</td>
-        </tr>
-      `).join('');
+            </td>
+            <td class="py-3 px-4 text-center">${getStatusBadge(p.data_status)}</td>
+            <td class="py-3 px-4 text-right font-medium">${formatNum(asNumber(p.impressions))}</td>
+            <td class="py-3 px-4 text-right font-medium">${formatNum(asNumber(p.engagement))}</td>
+            <td class="py-3 px-4 text-right font-medium">${formatPct(asNumber(p.engagement_rate))}</td>
+            <td class="py-3 px-4 text-right font-medium">${formatNum(asNumber(p.outbound_clicks))}</td>
+            <td class="py-3 px-4 text-right font-medium">${formatNum(asNumber(p.pin_clicks))}</td>
+            <td class="py-3 px-4 text-right font-medium">${formatNum(asNumber(p.saves))}</td>
+          </tr>`;
+        } catch (err: any) {
+          return `<tr><td colspan="9" class="py-2 px-4 bg-red-500/10 text-red-500 text-xs font-bold text-center">Row Error: ${escapeHtml(err.message)}</td></tr>`;
+        }
+      }).join('');
     }
     
     const btnDiv = document.getElementById('s2-page-buttons')!;

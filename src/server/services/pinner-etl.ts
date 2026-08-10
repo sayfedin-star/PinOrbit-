@@ -145,7 +145,7 @@ export interface ETLProcessingResult {
 function normalizeMetrics(raw: PinnerRawMetrics = {}) {
   const sanitizeNumber = (v: any): number => {
     if (v === undefined || v === null) return 0;
-    if (typeof v === 'number') return v;
+    if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
     let s = String(v).trim().toLowerCase();
     let multiplier = 1;
     if (s.endsWith('k')) { multiplier = 1000; s = s.slice(0, -1); }
@@ -153,22 +153,25 @@ function normalizeMetrics(raw: PinnerRawMetrics = {}) {
     else if (s.endsWith('b')) { multiplier = 1000000000; s = s.slice(0, -1); }
     s = s.replace(/[^0-9.-]/g, '');
     const n = Number(s);
-    return isNaN(n) ? 0 : n * multiplier;
+    return Number.isFinite(n) ? n * multiplier : 0;
   };
 
   const parseCount = (v: any): number => {
     const n = sanitizeNumber(v);
-    return n < 0 ? 0 : Math.floor(n);
+    const result = n < 0 ? 0 : Math.floor(n);
+    return Number.isFinite(result) ? result : 0;
   };
 
   const parseRate = (v: any): number => {
     const n = sanitizeNumber(v);
-    return parseFloat(n.toFixed(6));
+    const result = parseFloat(n.toFixed(6));
+    return Number.isFinite(result) ? result : 0;
   };
 
   const parseTiming = (v: any): number => {
     const n = sanitizeNumber(v);
-    return n < 0 ? 0.0 : parseFloat(n.toFixed(2));
+    const result = n < 0 ? 0.0 : parseFloat(n.toFixed(2));
+    return Number.isFinite(result) ? result : 0;
   };
 
   const impressions = parseCount(raw.IMPRESSION);
@@ -470,7 +473,7 @@ export const pinnerETL = {
                 metric_date: item.date,
                 window_start: item.window_start || item.date,
                 window_end: item.window_end || item.date,
-                data_status: item.data_status || 'READY',
+                data_status: (typeof item.data_status === 'string' && ['READY','PROCESSING'].includes(item.data_status.toUpperCase())) ? item.data_status.toUpperCase() : 'READY',
                 ...metrics,
                 raw_metrics: item.metrics || null,
                 recorded_at: nowIso,
@@ -613,7 +616,7 @@ export const pinnerETL = {
             save_rate: metrics.save_rate,
             video_avg_watch_time: metrics.video_avg_watch_time,
             video_v50_watch_time: metrics.video_v50_watch_time,
-            data_status: pin.data_status || 'READY',
+            data_status: (typeof pin.data_status === 'string' && ['READY','PROCESSING'].includes(pin.data_status.toUpperCase())) ? pin.data_status.toUpperCase() : 'READY',
             date_availability: dateAvailability,
             pin_metadata: pin.pin_metadata || null,
             raw_metrics: pin.metrics || null,

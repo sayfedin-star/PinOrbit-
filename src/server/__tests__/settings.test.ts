@@ -10,6 +10,7 @@ vi.mock('../db/analytics', () => ({
     upsertWorkspaceAnalyticsSettings: vi.fn(),
     getWorkspaceConnection: vi.fn(),
     updateWorkspaceConnection: vi.fn(),
+    getLatestFailedRun: vi.fn().mockResolvedValue(null),
     getConnectionHealth: vi.fn().mockResolvedValue({
       total_runs: 10,
       consecutive_failures: 0,
@@ -304,7 +305,7 @@ describe('Pinner Analytics Settings & Security Suite (V20.1 Per-Pipeline Date Of
       request: new Request('http://localhost', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fastcron_token: 'short_token' }),
+        body: JSON.stringify({ analytics_fastcron_token: 'short_token' }),
       }),
       locals,
     } as any);
@@ -334,6 +335,9 @@ describe('Pinner Analytics Settings & Security Suite (V20.1 Per-Pipeline Date Of
       params: { id: connectionId },
       locals,
     } as any);
+    if (getRes.status !== 200) {
+      console.log('GET 500 error:', await getRes.clone().text());
+    }
     expect(getRes.status).toBe(200);
     const getJson = await getRes.json();
     expect(getJson.success).toBe(true);
@@ -349,7 +353,7 @@ describe('Pinner Analytics Settings & Security Suite (V20.1 Per-Pipeline Date Of
       request: new Request('http://localhost', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fastcron_token: 'custom_conn_token_123456789' }),
+        body: JSON.stringify({ analytics_fastcron_token: 'custom_conn_token_123456789' }),
       }),
       locals,
     } as any);
@@ -357,7 +361,7 @@ describe('Pinner Analytics Settings & Security Suite (V20.1 Per-Pipeline Date Of
     expect(analyticsDb.updateWorkspaceConnection).toHaveBeenCalledWith(
       workspaceId,
       connectionId,
-      expect.objectContaining({ fastcron_token: expect.stringMatching(/^v1:/) })
+      expect.objectContaining({ analytics_fastcron_token: expect.stringMatching(/^v1:/) })
     );
   });
 

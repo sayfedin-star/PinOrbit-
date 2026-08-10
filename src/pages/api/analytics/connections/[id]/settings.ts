@@ -87,6 +87,8 @@ export const GET: APIRoute = async ({ params, locals }) => {
         'PIN_CLICK',
       ],
       has_fastcron_token: Boolean(connection.fastcron_token && connection.fastcron_token.trim().length >= 16),
+      has_analytics_fastcron_token: Boolean(connection.analytics_fastcron_token && connection.analytics_fastcron_token.trim().length >= 16),
+      has_top_pins_fastcron_token: Boolean(connection.top_pins_fastcron_token && connection.top_pins_fastcron_token.trim().length >= 16),
       token_fingerprint: connection.fastcron_token && connection.fastcron_token.trim().length >= 16 
         ? '••••' + connection.fastcron_token.trim().slice(-4) 
         : null,
@@ -494,6 +496,8 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
         'PIN_CLICK',
       ],
       has_fastcron_token: Boolean(updated.fastcron_token && updated.fastcron_token.trim().length >= 16),
+      has_analytics_fastcron_token: Boolean(updated.analytics_fastcron_token && updated.analytics_fastcron_token.trim().length >= 16),
+      has_top_pins_fastcron_token: Boolean(updated.top_pins_fastcron_token && updated.top_pins_fastcron_token.trim().length >= 16),
       token_fingerprint: updated.fastcron_token && updated.fastcron_token.trim().length >= 16 
         ? '••••' + updated.fastcron_token.trim().slice(-4) 
         : null,

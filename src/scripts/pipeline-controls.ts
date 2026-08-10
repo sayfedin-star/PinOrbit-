@@ -223,4 +223,13 @@ if (pipeConnId) {
   });
 
   loadPipelineSettings();
+
+  // Reload on tab activation
+  document.querySelectorAll('[role="tab"]').forEach(t => {
+    t.addEventListener('click', () => {
+      if (t.getAttribute('data-tab') === 'pipeline') {
+        loadPipelineSettings();
+      }
+    });
+  });
 }

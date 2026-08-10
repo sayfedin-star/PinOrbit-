@@ -147,54 +147,48 @@ export const fastcronService = {
   },
 
   /**
-   * Resolves the active FastCron token (Connection token → Workspace DB token → env FASTCRON_API_TOKEN → null).
-   * Hierarchy: F10 per-connection fastcron_token takes top priority.
-   * Supports both 3-arg (connToken, wsToken, env) and 2-arg (wsToken, env) call conventions.
+   * Resolves the active FastCron token (Connection channel token -> Legacy Connection token → Workspace DB token → env FASTCRON_API_TOKEN → null).
    */
   async resolveFastCronToken(
-    arg1: string | null | undefined,
-    arg2?: string | Record<string, any> | null,
-    arg3?: Record<string, any>
+    channelToken: string | null | undefined,
+    workspaceToken?: string | Record<string, any> | null,
+    runtimeEnvOrNull?: Record<string, any>
   ): Promise<string | null> {
-    let connectionToken: string | null | undefined;
-    let workspaceToken: string | null | undefined;
-    let runtimeEnv: Record<string, any> = {};
+    let wsTok: string | null = null;
+    let envObj: Record<string, any> = {};
 
-    if (arg3 !== undefined || (typeof arg2 === 'string' && arg2 !== null)) {
-      connectionToken = arg1;
-      workspaceToken = typeof arg2 === 'string' ? arg2 : null;
-      runtimeEnv = arg3 || (typeof arg2 === 'object' && arg2 !== null ? arg2 : {});
+    if (runtimeEnvOrNull !== undefined) {
+      wsTok = typeof workspaceToken === 'string' ? workspaceToken : null;
+      envObj = runtimeEnvOrNull || {};
     } else {
-      workspaceToken = arg1;
-      runtimeEnv = (arg2 as Record<string, any>) || {};
+      wsTok = typeof channelToken === 'string' ? channelToken : null; // If 2-arg, arg1 was workspaceToken
+      envObj = (workspaceToken as Record<string, any>) || {};
+      channelToken = null;
     }
 
-    const env = getServerEnv(runtimeEnv);
+    const env = getServerEnv(envObj);
 
-    if (connectionToken && typeof connectionToken === 'string' && connectionToken.trim().length >= 16) {
-      if (connectionToken.startsWith('v1:')) {
-        const dec = await decryptToken(connectionToken, env.TOKEN_KEK);
-        if (dec) return dec.trim();
-      } else {
-        return connectionToken.trim();
+    const checkToken = async (tok: string | null | undefined) => {
+      if (tok && typeof tok === 'string' && tok.trim().length >= 16) {
+        if (tok.startsWith('v1:')) {
+          const dec = await decryptToken(tok, env.TOKEN_KEK);
+          if (dec) return dec.trim();
+        } else {
+          return tok.trim();
+        }
       }
-    }
-    if (workspaceToken && typeof workspaceToken === 'string' && workspaceToken.trim().length >= 16) {
-      if (workspaceToken.startsWith('v1:')) {
-        const dec = await decryptToken(workspaceToken, env.TOKEN_KEK);
-        if (dec) return dec.trim();
-      } else {
-        return workspaceToken.trim();
-      }
-    }
-    if (env.FASTCRON_API_TOKEN && env.FASTCRON_API_TOKEN.trim().length >= 16) {
-      if (env.FASTCRON_API_TOKEN.startsWith('v1:')) {
-        const dec = await decryptToken(env.FASTCRON_API_TOKEN, env.TOKEN_KEK);
-        if (dec) return dec.trim();
-      } else {
-        return env.FASTCRON_API_TOKEN.trim();
-      }
-    }
+      return null;
+    };
+
+    const res1 = await checkToken(channelToken);
+    if (res1) return res1;
+
+    const res2 = await checkToken(wsTok);
+    if (res2) return res2;
+
+    const res3 = await checkToken(env.FASTCRON_API_TOKEN);
+    if (res3) return res3;
+
     return null;
   },
 
@@ -262,7 +256,9 @@ export const fastcronService = {
 
     // Resolve Token (Connection token → Workspace DB token → env FASTCRON_API_TOKEN → null)
     const settings = await analyticsDb.getWorkspaceAnalyticsSettings(workspaceId);
-    const token = await this.resolveFastCronToken(connection.fastcron_token, settings?.fastcron_token, runtimeEnv);
+    const channelToken = isAnalytics ? connection.analytics_fastcron_token : connection.top_pins_fastcron_token;
+    const effectiveConnToken = channelToken || connection.fastcron_token;
+    const token = await this.resolveFastCronToken(effectiveConnToken, settings?.fastcron_token, runtimeEnv);
     if (!token) {
       const statusField = isAnalytics ? 'analytics_schedule_status' : 'top_pins_schedule_status';
       await analyticsDb.updateWorkspaceConnection(workspaceId, connectionId, {
@@ -604,7 +600,8 @@ export const fastcronService = {
     if (!jobId) return true;
     const connection = connectionId ? await analyticsDb.getWorkspaceConnection(workspaceId, connectionId) : null;
     const settings = await analyticsDb.getWorkspaceAnalyticsSettings(workspaceId);
-    const token = await this.resolveFastCronToken(connection?.fastcron_token, settings?.fastcron_token, runtimeEnv);
+    const effectiveConnToken = connection ? (connection.analytics_fastcron_job_id === jobId ? connection.analytics_fastcron_token : connection.top_pins_fastcron_job_id === jobId ? connection.top_pins_fastcron_token : null) || connection.fastcron_token : null;
+    const token = await this.resolveFastCronToken(effectiveConnToken, settings?.fastcron_token, runtimeEnv);
     if (!token) return false;
 
     const res = await this.fastcronCall('cron_disable', { id: jobId }, token);
@@ -623,7 +620,8 @@ export const fastcronService = {
     if (!jobId) return true;
     const connection = connectionId ? await analyticsDb.getWorkspaceConnection(workspaceId, connectionId) : null;
     const settings = await analyticsDb.getWorkspaceAnalyticsSettings(workspaceId);
-    const token = await this.resolveFastCronToken(connection?.fastcron_token, settings?.fastcron_token, runtimeEnv);
+    const effectiveConnToken = connection ? (connection.analytics_fastcron_job_id === jobId ? connection.analytics_fastcron_token : connection.top_pins_fastcron_job_id === jobId ? connection.top_pins_fastcron_token : null) || connection.fastcron_token : null;
+    const token = await this.resolveFastCronToken(effectiveConnToken, settings?.fastcron_token, runtimeEnv);
     if (!token) return false;
 
     const res = await this.fastcronCall('cron_enable', { id: jobId }, token);
@@ -642,7 +640,8 @@ export const fastcronService = {
     if (!jobId) return true;
     const connection = connectionId ? await analyticsDb.getWorkspaceConnection(workspaceId, connectionId) : null;
     const settings = await analyticsDb.getWorkspaceAnalyticsSettings(workspaceId);
-    const token = await this.resolveFastCronToken(connection?.fastcron_token, settings?.fastcron_token, runtimeEnv);
+    const effectiveConnToken = connection ? (connection.analytics_fastcron_job_id === jobId ? connection.analytics_fastcron_token : connection.top_pins_fastcron_job_id === jobId ? connection.top_pins_fastcron_token : null) || connection.fastcron_token : null;
+    const token = await this.resolveFastCronToken(effectiveConnToken, settings?.fastcron_token, runtimeEnv);
     if (!token) return false;
 
     const res = await this.fastcronCall('cron_delete', { id: jobId }, token);
@@ -775,7 +774,9 @@ export const fastcronService = {
       : connection.top_pins_fastcron_job_id;
 
     const settings = await analyticsDb.getWorkspaceAnalyticsSettings(workspaceId);
-    const token = await this.resolveFastCronToken(connection.fastcron_token, settings?.fastcron_token, runtimeEnv);
+    const channelToken = isAnalytics ? connection.analytics_fastcron_token : connection.top_pins_fastcron_token;
+    const effectiveConnToken = channelToken || connection.fastcron_token;
+    const token = await this.resolveFastCronToken(effectiveConnToken, settings?.fastcron_token, runtimeEnv);
 
     const payloadObj = isAnalytics
       ? {

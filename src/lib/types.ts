@@ -593,6 +593,8 @@ export interface AnalyticsConnectionSettingsResponse {
   top_pins_num_of_pins?: number;
   top_pins_sort_modes?: string[];
   has_fastcron_token?: boolean;
+  has_analytics_fastcron_token?: boolean;
+  has_top_pins_fastcron_token?: boolean;
   fastcron_notify?: boolean;
   fastcron_timeout?: number;
   fastcron_instances?: number;
