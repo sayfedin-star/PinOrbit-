@@ -127,6 +127,9 @@ if (pipeConnId) {
       // Optional: show a banner at the top of the container
       const container = document.getElementById('pipeline-settings-container');
       if (container) showInlineError(container, e.message);
+      
+      const lastSyncEl = document.getElementById('connection-last-sync');
+      if (lastSyncEl) lastSyncEl.textContent = '—';
     }
   }
 
@@ -227,9 +230,7 @@ if (pipeConnId) {
   // Reload on tab activation
   document.querySelectorAll('[role="tab"]').forEach(t => {
     t.addEventListener('click', () => {
-      if (t.getAttribute('data-tab') === 'pipeline') {
-        loadPipelineSettings();
-      }
+      loadPipelineSettings();
     });
   });
 }

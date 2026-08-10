@@ -42,12 +42,14 @@ export const edgeCache = {
       sortBy = 'IMPRESSION',
       windowDays = 30,
       fromDate?: string,
-      toDate?: string
+      toDate?: string,
+      bypassCache = false
     ): string {
+      const bypassPart = bypassCache ? ':bypass' : '';
       if (fromDate && toDate) {
-        return `analytics:${workspaceId}:${connectionId}:top-pins:${fromDate}_${toDate}:${sortBy}`;
+        return `analytics:${workspaceId}:${connectionId}:top-pins:${fromDate}_${toDate}:${sortBy}${bypassPart}`;
       }
-      return `analytics:${workspaceId}:${connectionId}:top-pins:${windowDays}d:${sortBy}`;
+      return `analytics:${workspaceId}:${connectionId}:top-pins:${windowDays}d:${sortBy}${bypassPart}`;
     },
     timeseries(workspaceId: string, connectionId: string, windowDays = 30): string {
       return `analytics:${workspaceId}:${connectionId}:timeseries:${windowDays}d`;

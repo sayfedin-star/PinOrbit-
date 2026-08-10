@@ -125,7 +125,8 @@ export const pinnerAnalyticsService = {
       sortBy,
       30,
       fromDate,
-      toDate
+      toDate,
+      bypassCache
     );
     let cached: any = { status: 'MISS', data: null };
 
@@ -139,22 +140,14 @@ export const pinnerAnalyticsService = {
       }
     }
 
-    const snapshots =
-      fromDate && toDate
-        ? await analyticsDb.getRankedTopPinsWithDateRange(
-            workspaceId,
-            connectionId,
-            sortBy,
-            fromDate,
-            toDate,
-            limit
-          )
-        : await analyticsDb.getRankedTopPins(
-            workspaceId,
-            connectionId,
-            sortBy,
-            limit
-          );
+    const snapshots = await analyticsDb.getTopPinsPaginated(
+      workspaceId,
+      connectionId,
+      sortBy,
+      fromDate,
+      toDate,
+      limit
+    );
 
     // R10.1: NEVER cache empty results
     if (snapshots.length > 0) {

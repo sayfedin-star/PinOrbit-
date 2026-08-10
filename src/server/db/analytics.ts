@@ -862,7 +862,7 @@ export const analyticsDb = {
    * Retrieves ranked top pins with date range filtering.
    * R19 F3: Two-step window-pinned reader returning ONLY the newest window snapshot matching range.
    */
-  async getRankedTopPinsWithDateRange(
+  async getTopPinsPaginated(
     workspaceId: string,
     connectionId: string,
     sortBy: PinnerSortBy,

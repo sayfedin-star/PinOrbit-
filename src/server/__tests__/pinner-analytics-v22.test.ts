@@ -358,8 +358,8 @@ describe('Pinner Analytics R11 Contract & V22 Methods Test Suite', () => {
     expect(pins[1].pin_id).toBe('pin_102');
     expect(pins[1].rank_position).toBe(2);
 
-    // Test getRankedTopPinsWithDateRange
-    const rangePins = await analyticsDb.getRankedTopPinsWithDateRange(
+    // Test getTopPinsPaginated
+    const rangePins = await analyticsDb.getTopPinsPaginated(
       workspaceId,
       connectionId,
       'IMPRESSION',
