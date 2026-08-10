@@ -12,7 +12,7 @@ import type { Database } from '../../lib/database.types';
 export const prerender = false;
 
 const { id: connectionId } = Astro.params;
-const workspaceId = Astro.cookies.get('po_workspace_id')?.value || '';
+const workspaceId = Astro.locals.activeWorkspaceId || '';
 
 if (!workspaceId || !connectionId) {
   return Astro.redirect('/analytics');
