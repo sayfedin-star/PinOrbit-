@@ -11,6 +11,9 @@ import type {
   AnalyticsIngestionRun,
   PinLeaderboardItem,
   PinTrendPoint,
+  PurgePreviewCounts,
+  PurgeResultCounts,
+  PurgeTarget,
 } from '../../lib/types';
 
 export interface MetricSummary {
@@ -1399,4 +1402,130 @@ export const analyticsDb = {
       })
       .eq('id', connectionId);
   },
+
+  /**
+   * Previews the number of records that would be purged for a connection within a date range.
+   */
+  async previewPurge(
+    workspaceId: string,
+    connectionId: string,
+    fromDate: string,
+    toDate: string,
+    targets: PurgeTarget[]
+  ): Promise<PurgePreviewCounts> {
+    if (!workspaceId || !connectionId) {
+      throw new Error('Tenant Boundary Violation: workspaceId and connectionId are required.');
+    }
+
+    const analyticsClient = dbClients.getAnalytics();
+    const p_daily = targets.includes('daily');
+    const p_top_pins = targets.includes('top_pins');
+
+    const fromTs = `${fromDate}T00:00:00.000Z`;
+    const toDateObj = new Date(`${toDate}T00:00:00.000Z`);
+    const toExclDate = new Date(toDateObj.getTime() + 86400000).toISOString().split('T')[0];
+    const toExclTs = `${toExclDate}T00:00:00.000Z`;
+
+    let daily_count = 0;
+    let summaries_count = 0;
+    let top_pins_count = 0;
+    let url_perf_count = 0;
+    let affected_rollup_dates: string[] = [];
+
+    if (p_daily) {
+      const [dailyRes, sumRes, rollRes] = await Promise.all([
+        analyticsClient
+          .from('account_analytics_daily')
+          .select('*', { count: 'exact', head: true })
+          .eq('workspace_id', workspaceId)
+          .eq('connection_id', connectionId)
+          .gte('metric_date', fromDate)
+          .lte('metric_date', toDate),
+        analyticsClient
+          .from('account_analytics_summaries')
+          .select('*', { count: 'exact', head: true })
+          .eq('workspace_id', workspaceId)
+          .eq('connection_id', connectionId)
+          .gte('window_end', fromTs)
+          .lt('window_start', toExclTs),
+        analyticsClient
+          .from('daily_workspace_metrics')
+          .select('metric_date')
+          .eq('workspace_id', workspaceId)
+          .gte('metric_date', fromDate)
+          .lte('metric_date', toDate),
+      ]);
+
+      daily_count = dailyRes.count ?? 0;
+      summaries_count = sumRes.count ?? 0;
+      affected_rollup_dates = (rollRes.data || []).map((r: any) => r.metric_date);
+    }
+
+    if (p_top_pins) {
+      const [pinsRes, urlRes] = await Promise.all([
+        analyticsClient
+          .from('top_pins_snapshots')
+          .select('*', { count: 'exact', head: true })
+          .eq('workspace_id', workspaceId)
+          .eq('connection_id', connectionId)
+          .gte('window_end', fromTs)
+          .lt('window_start', toExclTs),
+        analyticsClient
+          .from('url_performance_history')
+          .select('*', { count: 'exact', head: true })
+          .eq('workspace_id', workspaceId)
+          .gte('period_date', fromDate)
+          .lte('period_date', toDate),
+      ]);
+
+      top_pins_count = pinsRes.count ?? 0;
+      url_perf_count = urlRes.count ?? 0;
+    }
+
+    const total_records = daily_count + summaries_count + top_pins_count + url_perf_count;
+
+    return {
+      daily_count,
+      summaries_count,
+      top_pins_count,
+      url_perf_count,
+      affected_rollup_dates,
+      total_records,
+    };
+  },
+
+  /**
+   * Executes atomic data purge via PostgreSQL RPC and returns audit log details.
+   */
+  async purgeAnalyticsData(
+    workspaceId: string,
+    connectionId: string,
+    fromDate: string,
+    toDate: string,
+    targets: PurgeTarget[],
+    performedBy: string
+  ): Promise<{ purge_log_id: string; counts: PurgeResultCounts }> {
+    if (!workspaceId || !connectionId) {
+      throw new Error('Tenant Boundary Violation: workspaceId and connectionId are required.');
+    }
+
+    const analyticsClient = dbClients.getAnalytics();
+    const { data, error } = await analyticsClient.rpc('purge_analytics_data', {
+      p_workspace: workspaceId,
+      p_connection: connectionId,
+      p_from: fromDate,
+      p_to: toDate,
+      p_daily: targets.includes('daily'),
+      p_top_pins: targets.includes('top_pins'),
+      p_performed_by: performedBy,
+    });
+
+    if (error) throw error;
+
+    return {
+      purge_log_id: data.purge_log_id,
+      counts: data.counts,
+    };
+  },
 };
+

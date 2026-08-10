@@ -43,7 +43,7 @@ const accountName = connection.display_name || 'Account';
 
 <Layout title={`${accountName} — Analytics`} description="Detailed daily snapshot logs and ranked top pins performance.">
   <!-- Back Link & Page Header -->
-  <div class="mb-6" data-connection-id={connectionId}>
+  <div class="mb-6" data-connection-id={connectionId} data-display-name={accountName}>
     <a
       href="/analytics"
       class="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors mb-3"
@@ -79,6 +79,8 @@ const accountName = connection.display_name || 'Account';
       data-tab="pipeline" class="rounded-lg px-4 py-1.5 text-xs font-semibold text-muted-foreground">⚙️ Pipeline & Automation</button>
     <button role="tab" id="tab-intel" aria-controls="panel-intel" aria-selected="false"
       data-tab="intelligence" class="rounded-lg px-4 py-1.5 text-xs font-semibold text-muted-foreground">📌 Pin Intelligence</button>
+    <button role="tab" id="tab-purge" aria-controls="panel-purge" aria-selected="false"
+      data-tab="purge" class="rounded-lg px-4 py-1.5 text-xs font-semibold text-muted-foreground">🧹 Data Purge</button>
   </div>
 
   <!-- PANEL 1: DATA & ANALYTICS -->
@@ -460,9 +462,134 @@ const accountName = connection.display_name || 'Account';
       </div>
     </div>
   </section>
+
+  <!-- PANEL 4: DATA PURGE (V27) -->
+  <section id="panel-purge" role="tabpanel" aria-labelledby="tab-purge" hidden class="space-y-6">
+    <!-- Warning Banner -->
+    <div class="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-600 dark:text-amber-400 flex items-start gap-3">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <div>
+        <h3 class="font-bold text-sm">Permanent Data Deletion & Audit Trail</h3>
+        <p class="mt-0.5 text-[11px] leading-relaxed">
+          Deletes are permanent and removed from the database. Ingestion run history is kept for audit. Rollups in <code class="font-mono bg-background/50 px-1 py-0.5 rounded">daily_workspace_metrics</code> will be atomically recalculated across any remaining connection data.
+        </p>
+      </div>
+    </div>
+
+    <!-- Status Message Banner -->
+    <div id="purge-status-msg" class="hidden"></div>
+
+    <!-- Main Purge Configuration Card -->
+    <div class="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-6">
+      <header>
+        <h3 class="text-sm font-bold text-foreground">Purge Analytics Data for {accountName}</h3>
+        <p class="text-xs text-muted-foreground mt-0.5">Select purge targets and date range to preview and delete records.</p>
+      </header>
+
+      <div class="grid md:grid-cols-2 gap-6">
+        <!-- Group 1: Targets -->
+        <div class="space-y-3 rounded-xl border border-border bg-muted/10 p-4">
+          <span class="text-xs font-bold uppercase tracking-wider text-muted-foreground block">1. Purge Targets</span>
+          <div class="space-y-2">
+            <label class="flex items-center gap-2.5 text-xs font-medium cursor-pointer">
+              <input type="checkbox" id="purge-target-daily" checked class="rounded border-border text-primary focus:ring-primary h-4 w-4" />
+              <span>Daily Account Metrics & Summaries (<code class="font-mono text-[11px]">account_analytics_daily</code>)</span>
+            </label>
+            <label class="flex items-center gap-2.5 text-xs font-medium cursor-pointer">
+              <input type="checkbox" id="purge-target-top-pins" checked class="rounded border-border text-primary focus:ring-primary h-4 w-4" />
+              <span>Ranked Top Pins & URL History (<code class="font-mono text-[11px]">top_pins_snapshots</code>)</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Group 2: Range -->
+        <div class="space-y-3 rounded-xl border border-border bg-muted/10 p-4">
+          <span class="text-xs font-bold uppercase tracking-wider text-muted-foreground block">2. Date Scope (Max 90 Days)</span>
+          <div class="flex items-center gap-4 text-xs font-medium">
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input type="radio" name="purge-mode" id="purge-mode-single" class="text-primary focus:ring-primary" />
+              <span>Single Day</span>
+            </label>
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input type="radio" name="purge-mode" id="purge-mode-range" checked class="text-primary focus:ring-primary" />
+              <span>Date Range</span>
+            </label>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3 pt-1">
+            <div>
+              <label for="purge-from" class="text-[11px] font-semibold text-muted-foreground block mb-1">From Date</label>
+              <input type="date" id="purge-from" class="w-full rounded-xl border border-border bg-background px-3 py-1.5 text-xs focus:border-primary focus:outline-none" />
+            </div>
+            <div id="purge-to-container">
+              <label for="purge-to" class="text-[11px] font-semibold text-muted-foreground block mb-1">To Date</label>
+              <input type="date" id="purge-to" class="w-full rounded-xl border border-border bg-background px-3 py-1.5 text-xs focus:border-primary focus:outline-none" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Group 3: Actions -->
+      <div class="pt-2">
+        <button id="purge-preview-btn" class="rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/90 shadow-sm transition-all">
+          Preview Purge
+        </button>
+      </div>
+
+      <!-- Preview Results Breakdown Card -->
+      <div id="purge-preview-card" class="hidden rounded-xl border border-border bg-muted/20 p-5 space-y-4">
+        <div class="flex items-center justify-between">
+          <h4 class="text-xs font-bold uppercase tracking-wider text-foreground">Purge Impact Preview</h4>
+          <span id="purge-preview-total" class="rounded-md bg-amber-500/10 px-2 py-0.5 text-xs font-bold text-amber-600 dark:text-amber-400"></span>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs text-left">
+            <thead class="border-b border-border text-[11px] uppercase tracking-wider text-muted-foreground">
+              <tr>
+                <th class="py-2 px-3">Affected Database Table</th>
+                <th class="py-2 px-3 text-right">Records to Delete</th>
+              </tr>
+            </thead>
+            <tbody id="purge-preview-tbody" class="divide-y divide-border"></tbody>
+          </table>
+        </div>
+
+        <div id="purge-preview-rollups" class="text-xs text-muted-foreground border-t border-border/50 pt-2.5"></div>
+      </div>
+
+      <!-- Danger Confirmation Section (Unlocked after Preview) -->
+      <div id="purge-confirm-section" class="hidden border-t border-destructive/20 pt-5 space-y-3">
+        <div class="flex items-center gap-2 text-destructive text-xs font-bold">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+          <span>Confirm Permanent Deletion</span>
+        </div>
+        <p class="text-xs text-muted-foreground">
+          To proceed, type the connection display name <strong class="text-foreground font-mono">"{accountName}"</strong> below.
+        </p>
+        <div class="flex flex-col sm:flex-row gap-3">
+          <input
+            type="text"
+            id="purge-confirm-name"
+            placeholder={`Type "${accountName}" to confirm`}
+            class="flex-1 rounded-xl border border-destructive/40 bg-background px-3 py-2 text-xs focus:border-destructive focus:outline-none"
+          />
+          <button
+            id="purge-delete-btn"
+            disabled
+            class="rounded-xl bg-destructive px-5 py-2 text-xs font-bold text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50 transition-all shrink-0"
+          >
+            Delete Permanently
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
 </Layout>
 
 <script src="../../scripts/tabs.ts"></script>
 <script src="../../scripts/analytics-tables.ts"></script>
 <script src="../../scripts/pipeline-controls.ts"></script>
 <script src="../../scripts/pin-intelligence.ts"></script>
+<script src="../../scripts/purge-controls.ts"></script>
+

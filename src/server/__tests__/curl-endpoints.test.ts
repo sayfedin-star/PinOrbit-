@@ -21,6 +21,8 @@ import { GET as getPinTrends } from '../../pages/api/analytics/connections/[id]/
 import { POST as postDailyDispatch } from '../../pages/api/internal/pinterest/daily-dispatch';
 import { POST as postIngest } from '../../pages/api/internal/pinterest/ingest';
 import { POST as postCleanupRetention } from '../../pages/api/internal/pinterest/cleanup-retention';
+import { GET as getPurgePreview } from '../../pages/api/analytics/connections/[id]/purge-preview';
+import { POST as postPurge } from '../../pages/api/analytics/connections/[id]/purge';
 
 vi.mock('../../server/auth/workspace-guard', () => ({
   assertWorkspaceAccess: vi.fn().mockResolvedValue({
@@ -63,6 +65,8 @@ vi.mock('../../server/db/analytics', () => ({
     getWorkspaceDailyMetrics: vi.fn().mockResolvedValue({ rows: [], totals: {} }),
     getPinLeaderboard: vi.fn().mockResolvedValue([]),
     getPinTrends: vi.fn().mockResolvedValue([]),
+    previewPurge: vi.fn().mockResolvedValue({ daily_count: 0, summaries_count: 0, top_pins_count: 0, url_perf_count: 0, affected_rollup_dates: [], total_records: 0 }),
+    purgeAnalyticsData: vi.fn().mockResolvedValue({ purge_log_id: 'mock-purge-id', counts: { daily_deleted: 0, summaries_deleted: 0, rollups_rebuilt: 0, top_pins_deleted: 0, url_perf_deleted: 0 } }),
     getDailyMetricsForConnection: vi.fn().mockResolvedValue({ rows: [], totals: {} }),
     getConnectionDailyMetrics: vi.fn().mockResolvedValue({ rows: [], totals: {} }),
     deleteDailySnapshotRecord: vi.fn().mockResolvedValue(undefined),
@@ -264,10 +268,18 @@ describe('R12/R15 Full 17-Endpoint Route Verification Suite', () => {
     const r26 = await postCleanupRetention({ request: new Request('http://localhost/api/internal/pinterest/cleanup-retention', { method: 'POST', headers: { 'x-ingest-secret': 'test_sec' } }), locals: { runtimeEnv: { INGEST_SECRET_KEY: 'test_sec' } } } as any);
     results.push({ endpoint: '/api/internal/pinterest/cleanup-retention', method: 'POST', status: r26.status, contentType: r26.headers.get('content-type') || '' });
 
+    // 27. GET /api/analytics/connections/[id]/purge-preview
+    const r27 = await getPurgePreview({ params: { id: connId }, request: new Request(`http://localhost/api/analytics/connections/${connId}/purge-preview?from=2026-08-01&to=2026-08-05&targets=daily`), locals } as any);
+    results.push({ endpoint: '/api/analytics/connections/[id]/purge-preview', method: 'GET', status: r27.status, contentType: r27.headers.get('content-type') || '' });
+
+    // 28. POST /api/analytics/connections/[id]/purge
+    const r28 = await postPurge({ params: { id: connId }, request: new Request(`http://localhost/api/analytics/connections/${connId}/purge`, { method: 'POST', body: JSON.stringify({ from_date: '2026-08-01', to_date: '2026-08-05', targets: ['daily'], confirm_name: 'hymumdotcom' }) }), locals } as any);
+    results.push({ endpoint: '/api/analytics/connections/[id]/purge', method: 'POST', status: r28.status, contentType: r28.headers.get('content-type') || '' });
+
     // Verify all returned application/json and NO text/html
-    console.log('\n--- 26-ROUTE VERIFICATION TABLE ---');
+    console.log('\n--- 28-ROUTE VERIFICATION TABLE ---');
     console.table(results);
-    expect(results.length).toBe(26);
+    expect(results.length).toBe(28);
     for (const res of results) {
       expect(res.contentType).toContain('application/json');
       expect(res.contentType).not.toContain('text/html');
