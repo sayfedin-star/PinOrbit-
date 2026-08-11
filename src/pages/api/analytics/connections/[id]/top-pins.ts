@@ -3,7 +3,7 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 import { pinnerAnalyticsService } from '../../../../../server/services/pinner-analytics-service';
 import type { PinnerSortBy } from '../../../../../lib/types';
-import { getAnalyticsKV } from '../../../../../server/lib/edge-kv';
+import { getAnalyticsKV } from '../../../../../lib/edge-kv';
 import { errorStatus } from '../../../../../server/lib/http-error';
 
 export const GET: APIRoute = async ({ params, request, locals }) => {
@@ -62,7 +62,7 @@ export const GET: APIRoute = async ({ params, request, locals }) => {
 
   try {
     const kvNamespace = getAnalyticsKV(locals);
-    const { data, cacheStatus } = await pinnerAnalyticsService.getTopPins(
+    const { data, cacheStatus } = await pinnerAnalyticsService.getTopPinsServerPaginated(
       schedulingClient,
       user.id,
       workspaceId,
@@ -78,16 +78,12 @@ export const GET: APIRoute = async ({ params, request, locals }) => {
       query
     );
 
-    const rows = (data as any)?.rows || (Array.isArray(data) ? data : []);
-    const total = (data as any)?.total ?? rows.length;
-    const window = (data as any)?.window || (rows.length > 0 && rows[0].window_start && rows[0].window_end ? { start: rows[0].window_start, end: rows[0].window_end } : null);
-
     return new Response(JSON.stringify({ 
       success: true, 
       data: {
-        rows,
-        total,
-        window
+        rows: data.rows,
+        total: data.total,
+        window: data.window,
       }
     }), {
       status: 200,

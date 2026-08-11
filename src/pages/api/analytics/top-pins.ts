@@ -3,7 +3,7 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 import { pinnerAnalyticsService } from '../../../server/services/pinner-analytics-service';
 import type { PinnerSortBy } from '../../../lib/types';
-import { getAnalyticsKV } from '../../../server/lib/edge-kv';
+import { getAnalyticsKV } from '../../../lib/edge-kv';
 import { errorStatus } from '../../../server/lib/http-error';
 
 export const GET: APIRoute = async ({ request, locals }) => {

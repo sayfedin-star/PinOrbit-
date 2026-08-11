@@ -124,6 +124,10 @@ vi.mock('../../server/services/pinner-analytics-service', () => ({
       data: [],
       cacheStatus: 'MISS',
     }),
+    getTopPinsServerPaginated: vi.fn().mockResolvedValue({
+      data: { rows: [], total: 0, window: null },
+      cacheStatus: 'MISS',
+    }),
     getAccountOverviewMetrics: vi.fn().mockResolvedValue({
       impressions: 48730,
       engagements: 1936,

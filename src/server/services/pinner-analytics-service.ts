@@ -115,10 +115,7 @@ export const pinnerAnalyticsService = {
     kvNamespace?: any,
     bypassCache = false,
     fromDate?: string,
-    toDate?: string,
-    page = 1,
-    pageSize = 25,
-    query?: string
+    toDate?: string
   ): Promise<ServiceResponse<TopPinSnapshot[]>> {
     await assertWorkspaceAccess(schedulingClient, workspaceId, userId);
 
@@ -143,7 +140,66 @@ export const pinnerAnalyticsService = {
       }
     }
 
-    const snapshots = await analyticsDb.getTopPinsPaginated(
+    const snapshots = await analyticsDb.getRankedTopPins(
+      workspaceId,
+      connectionId,
+      sortBy,
+      limit
+    );
+
+    // R10.1: NEVER cache empty results
+    if (snapshots.length > 0) {
+      await edgeCache.set(cacheKey, snapshots, kvNamespace);
+    }
+
+    return {
+      data: snapshots,
+      cacheStatus: bypassCache ? 'BYPASS' : cached.status === 'STALE' ? 'STALE' : 'MISS',
+    };
+  },
+
+  /**
+   * Retrieves server-paginated Top Pins snapshots for a given window (R-04 Layer A).
+   */
+  async getTopPinsServerPaginated(
+    schedulingClient: SupabaseClient,
+    userId: string,
+    workspaceId: string,
+    connectionId: string,
+    sortBy: PinnerSortBy = 'IMPRESSION',
+    limit = 50,
+    kvNamespace?: any,
+    bypassCache = false,
+    fromDate?: string,
+    toDate?: string,
+    page = 1,
+    pageSize = 25,
+    query?: string
+  ): Promise<ServiceResponse<{ rows: TopPinSnapshot[]; total: number; window: { start: string; end: string } | null }>> {
+    await assertWorkspaceAccess(schedulingClient, workspaceId, userId);
+
+    const cacheKey = edgeCache.keys.topPins(
+      workspaceId,
+      connectionId,
+      sortBy,
+      30,
+      fromDate,
+      toDate,
+      bypassCache
+    );
+    let cached: any = { status: 'MISS', data: null };
+
+    if (!bypassCache && !query && page === 1) {
+      cached = await edgeCache.get<{ rows: TopPinSnapshot[]; total: number; window: { start: string; end: string } | null }>(cacheKey, kvNamespace);
+      if (cached.status === 'HIT' && cached.data) {
+        return {
+          data: cached.data,
+          cacheStatus: 'HIT',
+        };
+      }
+    }
+
+    const res = await analyticsDb.getTopPinsPaginated(
       workspaceId,
       connectionId,
       sortBy,
@@ -155,13 +211,19 @@ export const pinnerAnalyticsService = {
       query
     );
 
+    const formatted = {
+      rows: res.rows || [],
+      total: res.total ?? (res.rows ? res.rows.length : 0),
+      window: res.window || null,
+    };
+
     // R10.1: NEVER cache empty results
-    if (snapshots.length > 0) {
-      await edgeCache.set(cacheKey, snapshots, kvNamespace);
+    if (formatted.rows.length > 0 && !query && page === 1) {
+      await edgeCache.set(cacheKey, formatted, kvNamespace);
     }
 
     return {
-      data: snapshots,
+      data: formatted,
       cacheStatus: bypassCache ? 'BYPASS' : cached.status === 'STALE' ? 'STALE' : 'MISS',
     };
   },

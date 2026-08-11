@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { analyticsDb } from '../db/analytics';
 import { dbClients } from '../db/clients';
 import { edgeCache } from '../services/edge-cache';
+import { pinnerAnalyticsService } from '../services/pinner-analytics-service';
 
 describe('Pinner Analytics R11 Contract & V22 Methods Test Suite', () => {
   const workspaceId = '9f08ca03-e79c-46fa-9518-6858216daf65';
@@ -381,5 +382,36 @@ describe('Pinner Analytics R11 Contract & V22 Methods Test Suite', () => {
     const pinIds = rangePins.map((p) => p.pin_id);
     expect(new Set(pinIds).size).toBe(rangePins.length);
     expect(rangePins.map((p) => p.rank_position)).toEqual([1, 2]);
+
+    // Test pinnerAnalyticsService.getTopPinsServerPaginated
+    const mockScheduling = {
+      from: vi.fn(() => ({
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({
+          data: { id: 'm1', workspace_id: workspaceId, user_id: 'u1', role: 'owner' },
+          error: null,
+        }),
+      })),
+    };
+
+    const paginatedRes = await pinnerAnalyticsService.getTopPinsServerPaginated(
+      mockScheduling as any,
+      'u1',
+      workspaceId,
+      connectionId,
+      'IMPRESSION',
+      50,
+      undefined,
+      true, // bypassCache
+      '2026-08-01',
+      '2026-08-08',
+      1,
+      25
+    );
+    expect(paginatedRes.data.rows.length).toBe(2);
+    expect(paginatedRes.data.total).toBe(2);
+    expect(paginatedRes.data.window).toEqual({ start: '2026-08-03', end: '2026-08-08' });
+    expect(paginatedRes.cacheStatus).toBe('BYPASS');
   });
 });

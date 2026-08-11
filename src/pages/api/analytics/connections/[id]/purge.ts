@@ -5,7 +5,7 @@ import { assertWorkspaceAccess } from '../../../../../server/auth/workspace-guar
 import { analyticsDb } from '../../../../../server/db/analytics';
 import { edgeCache } from '../../../../../server/services/edge-cache';
 import type { PurgeTarget } from '../../../../../lib/types';
-import { getAnalyticsKV } from '../../../../../server/lib/edge-kv';
+import { getAnalyticsKV } from '../../../../../lib/edge-kv';
 import { errorStatus } from '../../../../../server/lib/http-error';
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
