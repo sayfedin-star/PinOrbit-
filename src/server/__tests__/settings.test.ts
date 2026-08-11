@@ -87,7 +87,7 @@ describe('Pinner Analytics Settings & Security Suite (V20.1 Per-Pipeline Date Of
     expect(JSON.stringify(json)).not.toContain('secret_raw_token_super_confidential_123');
   });
 
-  it('V20.1: validates per-pipeline date offset bounds and ordering with 422 errors', async () => {
+  it('V20.2: validates per-pipeline date offset bounds and ordering (equal offsets allowed, inverted rejected with 422)', async () => {
     (analyticsDb.getWorkspaceConnection as any).mockResolvedValue({
       id: connectionId,
       workspace_id: workspaceId,
@@ -98,9 +98,16 @@ describe('Pinner Analytics Settings & Security Suite (V20.1 Per-Pipeline Date Of
       top_pins_end_offset_days: 2,
     });
 
+    (analyticsDb.updateWorkspaceConnection as any).mockResolvedValue({
+      id: connectionId,
+      display_name: 'hymumdotcom',
+      analytics_start_offset_days: 5,
+      analytics_end_offset_days: 5,
+    });
+
     const locals = { user: { id: 'u1' }, supabase: {}, activeWorkspaceId: workspaceId };
 
-    // 1. Violation: Pipeline A end offset >= start offset
+    // 1. Legal same-day range: Pipeline A end offset == start offset (5 == 5)
     const res1 = await postConnSettingsHandler({
       params: { id: connectionId },
       request: new Request('http://localhost', {
@@ -108,12 +115,12 @@ describe('Pinner Analytics Settings & Security Suite (V20.1 Per-Pipeline Date Of
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           analytics_start_offset_days: 5,
-          analytics_end_offset_days: 5, // equal -> invalid
+          analytics_end_offset_days: 5, // equal -> legal (same-day)
         }),
       }),
       locals,
     } as any);
-    expect(res1.status).toBe(422);
+    expect(res1.status).toBe(200);
 
     // 2. Violation: Pipeline A start offset > 90
     const res2 = await postConnSettingsHandler({
@@ -129,7 +136,7 @@ describe('Pinner Analytics Settings & Security Suite (V20.1 Per-Pipeline Date Of
     } as any);
     expect(res2.status).toBe(422);
 
-    // 3. Violation: Pipeline B end offset >= start offset
+    // 3. Violation: Pipeline B end offset > start offset (inverted range)
     const res3 = await postConnSettingsHandler({
       params: { id: connectionId },
       request: new Request('http://localhost', {

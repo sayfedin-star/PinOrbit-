@@ -237,7 +237,7 @@ describe('Manual Trigger & Test Ping Sync Suite (V20.1 Per-Pipeline Date Offsets
     fetchSpy.mockRestore();
   });
 
-  it('V20.1: rejects manual run override when start_date >= end_date with 422', async () => {
+  it('V20.2: rejects manual run override when start_date > end_date with 422', async () => {
     const locals = { user: { id: 'u1' }, supabase: {}, activeWorkspaceId: workspaceId };
 
     const req = new Request('http://localhost/api/analytics/trigger-sync', {
@@ -248,7 +248,7 @@ describe('Manual Trigger & Test Ping Sync Suite (V20.1 Per-Pipeline Date Offsets
         channel: 'analytics',
         mode: 'sync',
         from_date: '2026-08-10',
-        to_date: '2026-08-05', // start >= end -> invalid
+        to_date: '2026-08-05', // start > end -> invalid
       }),
     });
 
@@ -256,7 +256,49 @@ describe('Manual Trigger & Test Ping Sync Suite (V20.1 Per-Pipeline Date Offsets
     expect(res.status).toBe(422);
     const json = await res.json();
     expect(json.success).toBe(false);
-    expect(json.error).toContain('Start Date must be strictly before End Date');
+    expect(json.error).toContain('Start Date must be before End Date');
+  });
+
+  it('V20.2: allows manual run override with identical start_date and end_date (same-day range)', async () => {
+    (analyticsDb.getWorkspaceConnection as any).mockResolvedValue({
+      id: connectionId,
+      workspace_id: workspaceId,
+      display_name: 'hymumdotcom',
+      analytics_webhook_url: 'https://hook.make.com/pipeline-a',
+      analytics_fastcron_job_id: 8899,
+      analytics_start_offset_days: 7,
+      analytics_end_offset_days: 1,
+    });
+    (analyticsDb.getWorkspaceAnalyticsSettings as any).mockResolvedValue({
+      fastcron_token: 'db_token_1234567890',
+    });
+
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((async () => ({
+      status: 200,
+      ok: true,
+      json: async () => ({ status: 'OK' }),
+    })) as any);
+
+    const locals = { user: { id: 'u1' }, supabase: {}, activeWorkspaceId: workspaceId };
+
+    const req = new Request('http://localhost/api/analytics/trigger-sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        connection_id: connectionId,
+        channel: 'analytics',
+        mode: 'sync',
+        from_date: '2026-08-10',
+        to_date: '2026-08-10',
+      }),
+    });
+
+    const res = await triggerSyncHandler({ request: req, locals } as any);
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.success).toBe(true);
+
+    fetchSpy.mockRestore();
   });
 
   it('R2 / B6: Falls back gracefully to legacy direct POST with Content-Type: application/json and all mappable fields', async () => {

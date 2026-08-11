@@ -312,9 +312,9 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
           { status: 422, headers: { 'Content-Type': 'application/json' } }
         );
       }
-      if (analyticsEnd >= analyticsStart) {
+      if (analyticsEnd > analyticsStart) {
         return new Response(
-          JSON.stringify({ success: false, error: 'Pipeline A End Offset must be strictly less than Start Offset.' }),
+          JSON.stringify({ success: false, error: 'Pipeline A End Offset must be less than Start Offset (equal values allowed for same-day range).' }),
           { status: 422, headers: { 'Content-Type': 'application/json' } }
         );
       }
@@ -383,9 +383,9 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
           { status: 422, headers: { 'Content-Type': 'application/json' } }
         );
       }
-      if (topPinsEnd >= topPinsStart) {
+      if (topPinsEnd > topPinsStart) {
         return new Response(
-          JSON.stringify({ success: false, error: 'Pipeline B End Offset must be strictly less than Start Offset.' }),
+          JSON.stringify({ success: false, error: 'Pipeline B End Offset must be less than Start Offset (equal values allowed for same-day range).' }),
           { status: 422, headers: { 'Content-Type': 'application/json' } }
         );
       }

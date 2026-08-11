@@ -708,13 +708,13 @@ export const fastcronService = {
     let endDate: string;
 
     if (fromOverride && toOverride) {
-      if (fromOverride >= toOverride) {
+      if (fromOverride > toOverride) {
         return {
           success: false,
           connection_id: connectionId,
           channel,
-          mode,
-          error: 'Manual run override Start Date must be strictly before End Date.',
+          mode: 'sync',
+          error: 'Manual run override Start Date must be before End Date (identical dates allowed for same-day range).',
         };
       }
       startDate = fromOverride;
