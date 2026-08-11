@@ -11,28 +11,31 @@ export const onRequest = defineMiddleware(async (context, next) => {
   }
 
   // Initialize request-scoped Project 1 Scheduling / Auth client
-  const supabase = dbClients.getSchedulingSSR({
-    cookies: {
-      get(key: string) {
-        const c = context.cookies.get(key);
-        return c?.value;
-      },
-      set(key: string, value: string, options?: Record<string, unknown>) {
-        context.cookies.set(key, value, {
-          path: '/',
-          sameSite: 'lax',
-          secure: true,
-          ...options,
-        });
-      },
-      delete(key: string, options?: Record<string, unknown>) {
-        context.cookies.delete(key, {
-          path: '/',
-          ...options,
-        });
+  const supabase = dbClients.getSchedulingSSR(
+    {
+      cookies: {
+        get(key: string) {
+          const c = context.cookies.get(key);
+          return c?.value;
+        },
+        set(key: string, value: string, options?: Record<string, unknown>) {
+          context.cookies.set(key, value, {
+            path: '/',
+            sameSite: 'lax',
+            secure: true,
+            ...options,
+          });
+        },
+        delete(key: string, options?: Record<string, unknown>) {
+          context.cookies.delete(key, {
+            path: '/',
+            ...options,
+          });
+        },
       },
     },
-  });
+    runtimeEnv as Record<string, any>
+  );
 
   // Attach client and resolve identity server-side
   context.locals.supabase = supabase;
