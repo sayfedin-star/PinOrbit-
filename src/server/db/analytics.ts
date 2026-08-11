@@ -558,18 +558,20 @@ export const analyticsDb = {
     }
 
     const analyticsClient = dbClients.getAnalytics();
+    const cleanSearch = search && search.trim().length > 0 ? (search || '').trim().replace(/[\\%_]/g, '\\$&') : null;
     
-    // Call stored RPC get_pin_leaderboard
+    // Call stored SQL aggregation RPC get_pin_leaderboard
     const { data, error } = await analyticsClient.rpc('get_pin_leaderboard', {
+      p_workspace_id: workspaceId,
       p_connection_id: connectionId,
       p_sort_by: sortBy,
       p_days: days,
       p_limit: limit,
-      p_search: search && search.trim().length > 0 ? search.trim() : null,
+      p_search: cleanSearch,
     });
 
     if (error) {
-      console.warn('[AnalyticsDb] get_pin_leaderboard RPC error, falling back to query:', error.message);
+      console.warn('[AnalyticsDb] get_pin_leaderboard RPC error, falling back to SQL aggregation query:', error.message);
       const cutoff = new Date(Date.now() - days * 86400000).toISOString();
       let query = analyticsClient
         .from('top_pins_snapshots')
@@ -580,9 +582,8 @@ export const analyticsDb = {
         .gte('window_end', cutoff)
         .order('window_end', { ascending: false });
 
-      if (search && search.trim()) {
-        const term = search.trim();
-        query = query.or(`pin_id.ilike.%${term}%,title.ilike.%${term}%`);
+      if (cleanSearch) {
+        query = query.or(`pin_id.ilike.%${cleanSearch}%,title.ilike.%${cleanSearch}%`);
       }
 
       const { data: rawRows, error: rawError } = await query;
@@ -1132,7 +1133,7 @@ export const analyticsDb = {
       .eq('window_end', w1);
 
     if (q && q.trim()) {
-      const term = q.trim();
+      const term = (q || '').trim().replace(/[\\%_]/g, '\\$&');
       query = query.or(`pin_id.ilike.%${term}%,title.ilike.%${term}%`);
     }
 

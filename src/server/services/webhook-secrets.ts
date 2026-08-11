@@ -17,8 +17,10 @@ export interface IngestSecretStatus {
 /**
  * Resolves the effective ingest secret in strict immutable order:
  * 1. ingest_secret:ws:{wsId} (Workspace override)
- * 2. ingest_secret:global (Global secret)
- * 3. INGEST_SECRET_KEY env (Fallback)
+ * 2. ingest_secret:ws:{wsId}:prev (Workspace override grace period - 300s)
+ * 3. ingest_secret:global (Global secret)
+ * 4. ingest_secret:global:prev (Global secret grace period - 300s)
+ * 5. INGEST_SECRET_KEY env (Fallback)
  */
 export async function getEffectiveSecret(
   wsId: string,
@@ -29,9 +31,13 @@ export async function getEffectiveSecret(
     if (wsId) {
       const ws = await kv.get(wsKey(wsId));
       if (ws) return { value: ws, source: 'workspace' };
+      const wsPrev = await kv.get(`${wsKey(wsId)}:prev`);
+      if (wsPrev) return { value: wsPrev, source: 'workspace' };
     }
     const g = await kv.get(GLOBAL_KEY);
     if (g) return { value: g, source: 'global' };
+    const gPrev = await kv.get(`${GLOBAL_KEY}:prev`);
+    if (gPrev) return { value: gPrev, source: 'global' };
   }
 
   const serverConfig = getServerEnv(runtimeEnv);
@@ -59,7 +65,7 @@ export async function ensureGlobalSecret(
 }
 
 /**
- * Rotates secret immediately (no grace period) for global or workspace scope.
+ * Rotates secret with a 300s grace period (storing previous secret under ${key}:prev).
  */
 export async function regenerate(
   scope: 'global' | 'workspace',
@@ -76,6 +82,11 @@ export async function regenerate(
   }
 
   const key = scope === 'global' ? GLOBAL_KEY : wsKey(wsId!);
+  const current = await kv.get(key);
+  if (current) {
+    await kv.put(`${key}:prev`, current, { expirationTtl: 300 });
+  }
+
   const next = crypto.randomUUID();
   await kv.put(key, next);
   return next;

@@ -82,7 +82,7 @@ describe('PinOrbit v2 Multi-Project Server Architecture', () => {
     expect(session.user).toBeNull();
   });
 
-  it('F-07: getServerEnv logs error and uses safe fallback in production if TOKEN_KEK is missing or < 16 chars', () => {
+  it('N-1: getServerEnv throws in production if TOKEN_KEK is missing or < 16 chars', () => {
     const originalNodeEnv = process.env.NODE_ENV;
     const originalTokenKek = process.env.TOKEN_KEK;
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -91,13 +91,10 @@ describe('PinOrbit v2 Multi-Project Server Architecture', () => {
       process.env.NODE_ENV = 'production';
       delete process.env.TOKEN_KEK;
 
-      const envWithoutKey = getServerEnv({});
-      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('TOKEN_KEK is required in production'));
-      expect(envWithoutKey.TOKEN_KEK).toBe('pinorbit_prod_token_kek_00000000');
+      expect(() => getServerEnv({})).toThrow(/TOKEN_KEK is required in production/);
 
       // Short key (< 16 chars)
-      const envWithShortKey = getServerEnv({ TOKEN_KEK: 'short_key_123' });
-      expect(envWithShortKey.TOKEN_KEK).toBe('pinorbit_prod_token_kek_00000000');
+      expect(() => getServerEnv({ TOKEN_KEK: 'short_key_123' })).toThrow(/TOKEN_KEK is required in production/);
 
       // Valid key (>= 16 chars)
       const validEnv = getServerEnv({ TOKEN_KEK: 'valid_prod_token_kek_12345678' });

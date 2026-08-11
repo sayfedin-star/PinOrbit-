@@ -122,6 +122,54 @@ describe('Pin Intelligence & Retention Suite (V26.1)', () => {
         'decor'
       );
     });
+
+    it('N-3 & N-4: preserves PinLeaderboardItem response shape and tests wildcard queries', async () => {
+      const mockSnapshotItem: PinLeaderboardItem = {
+        pin_id: '1234567890123456',
+        title: 'Special 50% Off_Promo',
+        image_url: 'https://i.pinimg.com/736x/test.jpg',
+        destination_url: 'https://example.com/promo',
+        appearances: 5,
+        best_rank: 1,
+        total_impressions: 10500,
+        total_engagements: 890,
+        total_saves: 420,
+        total_outbound_clicks: 210,
+        total_pin_clicks: 680,
+        last_seen: '2026-08-11',
+        prev_rank: 2,
+        trend: '▲1',
+      };
+
+      (analyticsDb.getPinLeaderboard as any).mockResolvedValue([mockSnapshotItem]);
+
+      const locals = { user: { id: 'u1' }, supabase: {}, activeWorkspaceId: workspaceId };
+      const res = await getLeaderboardHandler({
+        params: { id: connectionId },
+        request: new Request('http://localhost/api/analytics/connections/conn-uuid-12345/pin-leaderboard?sort_by=IMPRESSION&days=30&limit=25&q=50%25_Promo'),
+        locals,
+      } as any);
+
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.success).toBe(true);
+      expect(json.data[0]).toMatchObject({
+        pin_id: '1234567890123456',
+        title: 'Special 50% Off_Promo',
+        image_url: 'https://i.pinimg.com/736x/test.jpg',
+        destination_url: 'https://example.com/promo',
+        appearances: 5,
+        best_rank: 1,
+        total_impressions: 10500,
+        total_engagements: 890,
+        total_saves: 420,
+        total_outbound_clicks: 210,
+        total_pin_clicks: 680,
+        last_seen: '2026-08-11',
+        prev_rank: 2,
+        trend: '▲1',
+      });
+    });
   });
 
   describe('GET /api/analytics/connections/[id]/pin-trends', () => {

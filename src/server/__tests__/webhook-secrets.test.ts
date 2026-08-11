@@ -69,17 +69,41 @@ describe('Cloudflare KV Webhook Secrets Service Suite (V19)', () => {
     expect(secondCall).toBe(generated);
   });
 
-  it('B2: Regenerate immediately rotates value with no grace period', async () => {
+  it('N-2: Regenerate rotates value and preserves old secret under :prev with 300s TTL', async () => {
     mockKvStore.set(GLOBAL_KEY, 'old_global_secret');
 
     const rotatedGlobal = await regenerate('global', undefined, mockRuntimeEnv);
     expect(rotatedGlobal).not.toBe('old_global_secret');
     expect(mockKvStore.get(GLOBAL_KEY)).toBe(rotatedGlobal);
+    expect(mockKvStore.get(`${GLOBAL_KEY}:prev`)).toBe('old_global_secret');
+    expect(mockKvNamespace.put).toHaveBeenCalledWith(
+      `${GLOBAL_KEY}:prev`,
+      'old_global_secret',
+      { expirationTtl: 300 }
+    );
 
-    // Workspace regenerate
+    // Old secret is accepted via getEffectiveSecret within grace period
+    const effAfterGlobalRegen = await getEffectiveSecret(wsId, mockRuntimeEnv);
+    expect(effAfterGlobalRegen.value).toBe(rotatedGlobal);
+
+    // Workspace regenerate preserves old ws secret
+    mockKvStore.set(wsKey(wsId), 'old_ws_secret');
     const rotatedWs = await regenerate('workspace', wsId, mockRuntimeEnv);
     expect(rotatedWs).toBeDefined();
     expect(mockKvStore.get(wsKey(wsId))).toBe(rotatedWs);
+    expect(mockKvStore.get(`${wsKey(wsId)}:prev`)).toBe('old_ws_secret');
+
+    // When primary key is removed or during grace period fallback, prev is resolved
+    mockKvStore.delete(wsKey(wsId));
+    const effWithPrevWs = await getEffectiveSecret(wsId, mockRuntimeEnv);
+    expect(effWithPrevWs.value).toBe('old_ws_secret');
+    expect(effWithPrevWs.source).toBe('workspace');
+
+    // After 300s grace period expires (key:prev deleted), old secret is rejected
+    mockKvStore.delete(`${wsKey(wsId)}:prev`);
+    const effExpired = await getEffectiveSecret(wsId, mockRuntimeEnv);
+    expect(effExpired.value).toBe(rotatedGlobal);
+    expect(effExpired.source).toBe('global');
   });
 
   it('B2: removeWorkspaceOverride deletes ONLY ws key; global secret remains untouched', async () => {
