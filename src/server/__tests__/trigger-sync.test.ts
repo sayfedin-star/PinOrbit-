@@ -256,7 +256,7 @@ describe('Manual Trigger & Test Ping Sync Suite (V20.1 Per-Pipeline Date Offsets
     expect(res.status).toBe(422);
     const json = await res.json();
     expect(json.success).toBe(false);
-    expect(json.error).toContain('Start Date must be before End Date');
+    expect(json.error).toContain('Validation Error: start_date must be before end_date (identical dates allowed for same-day pull).');
   });
 
   it('V20.2: allows manual run override with identical start_date and end_date (same-day range)', async () => {

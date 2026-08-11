@@ -714,7 +714,7 @@ export const fastcronService = {
           connection_id: connectionId,
           channel,
           mode: 'sync',
-          error: 'Manual run override Start Date must be before End Date (identical dates allowed for same-day range).',
+          error: 'Validation Error: start_date must be before end_date (identical dates allowed for same-day pull).',
         };
       }
       startDate = fromOverride;

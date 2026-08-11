@@ -78,7 +78,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return new Response(
       JSON.stringify({
         success: false,
-        error: 'Manual run override Start Date must be before End Date (identical dates allowed for same-day range).',
+        error: 'Validation Error: start_date must be before end_date (identical dates allowed for same-day pull).',
       }),
       {
         status: 422,

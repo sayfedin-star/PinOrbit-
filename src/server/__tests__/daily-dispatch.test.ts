@@ -271,6 +271,42 @@ describe('Daily Dispatch Endpoint Test Suite (F1, X4, X5, X6)', () => {
     expect(res.status).toBe(422);
     const json = await res.json();
     expect(json.success).toBe(false);
-    expect(json.error).toContain('start_date must be strictly before end_date');
+    expect(json.error).toContain('start_date must be before end_date (identical dates allowed for same-day pull)');
+  });
+
+  it('allows identical start_date and end_date for same-day pull', async () => {
+    let capturedPayload: any = null;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((async (_url: any, options: any) => {
+      if (options?.body) {
+        capturedPayload = JSON.parse(options.body);
+      }
+      return {
+        status: 200,
+        ok: true,
+        text: async () => JSON.stringify({ success: true, accepted: true }),
+      };
+    }) as any);
+
+    const req = new Request('https://pinorbit-v2.o-i.workers.dev/api/internal/pinterest/daily-dispatch', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-ingest-secret': mockSecret,
+      },
+      body: JSON.stringify({
+        connection_id: mockConnectionId,
+        channel: 'account_analytics',
+        start_date: '2026-08-01',
+        end_date: '2026-08-01', // identical same-day
+      }),
+    });
+
+    const res = await POST({ request: req, locals: {} } as any);
+
+    expect(res.status).toBe(200);
+    expect(capturedPayload.start_date).toBe('2026-08-01');
+    expect(capturedPayload.end_date).toBe('2026-08-01');
+
+    fetchSpy.mockRestore();
   });
 });

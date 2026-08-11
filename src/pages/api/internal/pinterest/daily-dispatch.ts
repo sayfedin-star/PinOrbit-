@@ -226,11 +226,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
       );
     }
 
-    if (sStr >= eStr) {
+    if (sStr > eStr) {
       return new Response(
         JSON.stringify({
           success: false,
-          error: 'Validation Error: start_date must be strictly before end_date.',
+          error: 'Validation Error: start_date must be before end_date (identical dates allowed for same-day pull).',
         }),
         {
           status: 422,
