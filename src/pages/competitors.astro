@@ -4,1155 +4,1124 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
 ---
 
 <Layout title="Competitor Intelligence" description="Track competitor Pinterest growth, reach, views, followers, and board creation strategy over time.">
-  <!-- Header & Primary Actions -->
+
+  <!-- ═══ Header & Primary Actions ═══ -->
   <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
     <SectionHeader
       title="Competitor Intelligence"
       description="Monitor competitor profile reach, follower velocity, and Pinterest board strategy timeline."
     />
-
     <div class="flex flex-wrap items-center gap-2.5 self-start sm:self-auto">
-      <button
-        id="open-paste-payload-modal"
-        class="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-xs font-semibold text-foreground shadow-sm hover:bg-muted hover:text-foreground transition-all"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
-          <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
-        </svg>
+      <button id="refresh-btn" title="Refresh data"
+        class="inline-flex items-center justify-center rounded-xl border border-border bg-card p-2.5 text-muted-foreground shadow-sm hover:bg-muted hover:text-foreground transition-all">
+        <svg id="refresh-icon" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg>
+      </button>
+      <button id="export-csv-btn"
+        class="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-xs font-semibold text-foreground shadow-sm hover:bg-muted transition-all">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span>Export CSV</span>
+      </button>
+      <button id="open-paste-payload-modal"
+        class="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-xs font-semibold text-foreground shadow-sm hover:bg-muted transition-all">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
         <span>Paste DevTools Payload</span>
       </button>
-
-      <button
-        id="open-add-competitor-modal"
-        class="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground shadow-md hover:bg-primary/90 transition-all"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-        </svg>
+      <button id="open-add-competitor-modal"
+        class="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground shadow-md hover:bg-primary/90 transition-all">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         <span>Track Profile</span>
       </button>
     </div>
   </div>
 
-  <!-- Global Success / Status Banner -->
-  <div id="competitor-status-banner" class="hidden mb-6 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-xs text-emerald-600 dark:text-emerald-400 flex items-center justify-between shadow-sm">
-    <div class="flex items-center gap-2.5">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
-      </svg>
-      <span id="competitor-status-text">Operation completed successfully.</span>
-    </div>
-    <button id="dismiss-status-banner" class="text-emerald-500 hover:text-emerald-400">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-    </button>
-  </div>
-
-  <!-- Summary KPI Card (Single) -->
-  <div class="mb-6">
-    <div class="rounded-xl border border-border bg-card p-5 shadow-sm inline-block min-w-[240px]">
-      <span class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Tracked Profiles</span>
-      <div class="text-2xl font-bold tracking-tight text-foreground mt-1 mb-2" id="kpi-total-competitors">-</div>
-      <div class="flex flex-col gap-1">
-        <div class="flex items-center gap-2 text-xs text-muted-foreground">
-          <span class="text-sm">👤</span>
-          <span>My Accounts:</span>
-          <span class="font-bold text-foreground" id="kpi-own-count">0</span>
-        </div>
-        <div class="flex items-center gap-2 text-xs text-muted-foreground">
-          <span class="text-sm">🎯</span>
-          <span>Competitors:</span>
-          <span class="font-bold text-foreground" id="kpi-competitor-count">0</span>
-        </div>
+  <!-- ═══ KPI Dashboard (4 cards) ═══ -->
+  <div class="mb-6 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+    <div class="rounded-xl border border-border bg-card p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Tracked Profiles</span>
+        <span class="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary"><svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
       </div>
+      <div class="text-2xl font-bold tracking-tight text-foreground mt-1" id="kpi-total">-</div>
+      <div class="mt-2 h-1 rounded-full bg-muted overflow-hidden flex" id="kpi-split-bar"><div class="bg-blue-500 h-full" style="width:0%"></div><div class="bg-purple-500 h-full" style="width:0%"></div></div>
+      <div class="mt-1.5 text-[11px] text-muted-foreground" id="kpi-split-label">0 own • 0 competitors</div>
+    </div>
+    <div class="rounded-xl border border-border bg-card p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Combined Reach</span>
+        <span class="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-500"><svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg></span>
+      </div>
+      <div class="text-2xl font-bold tracking-tight text-emerald-500 mt-1" id="kpi-reach">-</div>
+      <div class="mt-1.5 text-[11px] text-muted-foreground truncate" id="kpi-reach-sub">monthly profile reach</div>
+    </div>
+    <div class="rounded-xl border border-border bg-card p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Total Audience</span>
+        <span class="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-500/10 text-blue-500"><svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></span>
+      </div>
+      <div class="text-2xl font-bold tracking-tight text-foreground mt-1" id="kpi-followers">-</div>
+      <div class="mt-1.5 text-[11px] text-muted-foreground" id="kpi-followers-sub">avg — / profile</div>
+    </div>
+    <div class="rounded-xl border border-border bg-card p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Pins Tracked</span>
+        <span class="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/10 text-amber-500"><svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span>
+      </div>
+      <div class="text-2xl font-bold tracking-tight text-foreground mt-1" id="kpi-pins">-</div>
+      <div class="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground"><span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span><span id="kpi-active-sub">0 active this week</span></div>
     </div>
   </div>
 
-  <!-- Competitors Table Workspace -->
+  <!-- ═══ Table Workspace ═══ -->
   <div class="rounded-xl border border-border bg-card shadow-sm overflow-hidden mb-8">
-    <!-- Header Controls: Tabs, Tag Filters, Column Visibility -->
-    <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-border px-6 py-4 bg-muted/30">
-      <div class="flex items-center gap-4 flex-wrap">
-        <!-- Account Type Filter Tabs -->
+    <!-- Toolbar -->
+    <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between border-b border-border px-6 py-4 bg-muted/30">
+      <div class="flex items-center gap-3 flex-wrap">
         <div class="flex items-center gap-1 bg-muted/60 p-1 rounded-xl border border-border/60">
-          <button data-type-tab="all" class="account-type-tab-btn rounded-lg px-3.5 py-1.5 text-xs font-semibold bg-background text-foreground shadow-xs transition-all">
-            All Profiles
-          </button>
-          <button data-type-tab="own" class="account-type-tab-btn rounded-lg px-3.5 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all flex items-center gap-1">
-            <span>👤 My Accounts</span>
-          </button>
-          <button data-type-tab="competitor" class="account-type-tab-btn rounded-lg px-3.5 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all flex items-center gap-1">
-            <span>🎯 Competitors</span>
-          </button>
+          <button data-type-tab="all" class="account-type-tab-btn rounded-lg px-3.5 py-1.5 text-xs font-semibold bg-background text-foreground shadow-xs transition-all">All Profiles</button>
+          <button data-type-tab="own" class="account-type-tab-btn rounded-lg px-3.5 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all">👤 My Accounts</button>
+          <button data-type-tab="competitor" class="account-type-tab-btn rounded-lg px-3.5 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all">🎯 Competitors</button>
         </div>
-
-        <!-- Dynamic Tag Dropdown Filter -->
         <div class="flex items-center gap-1.5">
-          <label for="tag-filter-select" class="text-xs font-semibold text-muted-foreground flex items-center gap-1">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><circle cx="7" cy="7" r=".5" fill="currentColor"/></svg>
-            <span>Tag:</span>
-          </label>
+          <label for="tag-filter-select" class="text-xs font-semibold text-muted-foreground">Tag:</label>
           <select id="tag-filter-select" class="rounded-xl border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground focus:border-primary focus:outline-none">
             <option value="all">All Tags</option>
           </select>
         </div>
+        <div class="relative">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input id="competitor-search-input" type="text" placeholder="Search username, name, niche…"
+            class="w-56 rounded-xl border border-border bg-background py-1.5 pl-8 pr-8 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+          <kbd class="absolute right-2 top-1/2 -translate-y-1/2 rounded border border-border bg-muted px-1 text-[9px] font-bold text-muted-foreground">/</kbd>
+        </div>
       </div>
-
       <div class="flex items-center gap-2.5 flex-wrap">
-        <!-- Column Visibility Dropdown -->
+        <span class="text-[10px] text-muted-foreground" id="updated-at"></span>
         <div class="relative" id="col-visibility-wrapper">
-          <button
-            id="col-visibility-btn"
-            class="inline-flex items-center gap-1.5 rounded-xl border border-border bg-background px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted transition-all"
-          >
+          <button id="col-visibility-btn" class="inline-flex items-center gap-1.5 rounded-xl border border-border bg-background px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted transition-all">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
             <span>Columns</span>
             <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
           </button>
-          <div
-            id="col-visibility-menu"
-            class="hidden absolute right-0 top-full mt-1.5 z-30 w-48 rounded-xl border border-border bg-card shadow-lg p-2 space-y-0.5"
-          >
-            <!-- Populated by JS -->
-          </div>
+          <div id="col-visibility-menu" class="hidden absolute right-0 top-full mt-1.5 z-30 w-48 rounded-xl border border-border bg-card shadow-lg p-2 space-y-0.5"></div>
         </div>
-
-        <span class="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary" id="competitor-badge-count">
-          0 Profiles
-        </span>
+        <span class="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary" id="competitor-badge-count">0 Profiles</span>
       </div>
     </div>
 
-    <div class="overflow-x-auto">
+    <!-- Selection action bar -->
+    <div id="selection-bar" class="hidden items-center justify-between gap-3 border-b border-border bg-primary/5 px-6 py-2.5">
+      <span class="text-xs font-semibold text-primary" id="selection-count">0 selected</span>
+      <div class="flex items-center gap-2">
+        <button id="open-compare-btn" disabled class="rounded-lg bg-primary px-3 py-1.5 text-[11px] font-bold text-primary-foreground shadow-sm hover:bg-primary/90 transition-all disabled:opacity-40 disabled:cursor-not-allowed">⚖ Compare</button>
+        <button id="export-selected-btn" class="rounded-lg border border-border bg-background px-3 py-1.5 text-[11px] font-semibold text-foreground hover:bg-muted transition-all">Export selected</button>
+        <button id="clear-selection-btn" class="rounded-lg px-3 py-1.5 text-[11px] font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-all">Clear</button>
+      </div>
+    </div>
+
+    <div class="overflow-auto max-h-[600px]">
       <table class="w-full text-left text-xs text-muted-foreground" id="competitors-table">
-        <thead class="border-b border-border bg-muted/40 text-foreground font-semibold" id="competitors-thead">
-          <!-- Populated by JS to support dynamic columns -->
-        </thead>
-        <tbody id="competitors-table-body" class="divide-y divide-border">
-          <tr>
-            <td colspan="9" class="py-12 text-center text-xs text-muted-foreground animate-pulse">
-              Loading competitor intelligence workspace...
-            </td>
-          </tr>
-        </tbody>
-        <tfoot id="competitors-tfoot" class="hidden border-t-2 border-border bg-muted/50">
-          <!-- Populated by JS -->
-        </tfoot>
+        <thead class="sticky top-0 z-10 border-b border-border bg-muted text-foreground font-semibold" id="competitors-thead"></thead>
+        <tbody id="competitors-table-body" class="divide-y divide-border bg-card"></tbody>
+        <tfoot id="competitors-tfoot" class="hidden border-t-2 border-border bg-muted/50"></tfoot>
       </table>
+    </div>
+
+    <!-- Pagination -->
+    <div id="pagination-bar" class="flex flex-wrap items-center justify-between gap-3 border-t border-border px-6 py-3 bg-muted/30">
+      <span class="text-[11px] text-muted-foreground" id="page-info">—</span>
+      <div class="flex items-center gap-2">
+        <label class="text-[11px] text-muted-foreground" for="rows-per-page">Rows:</label>
+        <select id="rows-per-page" class="rounded-lg border border-border bg-background px-2 py-1 text-[11px] text-foreground focus:outline-none">
+          <option>10</option><option>25</option><option>50</option>
+        </select>
+        <button id="page-prev" class="rounded-lg border border-border bg-background px-2.5 py-1 text-[11px] font-semibold text-foreground hover:bg-muted disabled:opacity-40 transition-all" disabled>← Prev</button>
+        <button id="page-next" class="rounded-lg border border-border bg-background px-2.5 py-1 text-[11px] font-semibold text-foreground hover:bg-muted disabled:opacity-40 transition-all" disabled>Next →</button>
+      </div>
     </div>
   </div>
 
-  <!-- MODAL 1: Track Profile Modal -->
-  <div id="add-competitor-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" aria-modal="true" role="dialog">
-    <div id="add-competitor-backdrop" class="fixed inset-0"></div>
+  <!-- ═══ Details Drawer (slide-over) ═══ -->
+  <div id="drawer-backdrop" class="fixed inset-0 z-40 bg-black/50 opacity-0 pointer-events-none transition-opacity duration-300"></div>
+  <aside id="competitor-drawer" aria-label="Competitor details"
+    class="fixed inset-y-0 right-0 z-50 w-full max-w-md transform translate-x-full transition-transform duration-300 bg-card border-l border-border shadow-2xl flex flex-col">
+    <div class="flex items-center justify-between border-b border-border px-5 py-4">
+      <span class="text-sm font-bold text-foreground">Profile Deep-Dive</span>
+      <button id="drawer-close" class="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div id="drawer-body" class="flex-1 overflow-y-auto p-5 space-y-5"></div>
+  </aside>
+
+  <!-- ═══ MODAL: Track Profile ═══ -->
+  <div id="add-competitor-modal" class="overlay-root fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" aria-modal="true" role="dialog">
+    <div class="fixed inset-0" data-close></div>
     <div class="relative w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-5 z-10">
       <div class="flex items-center justify-between border-b border-border pb-4">
         <div class="flex items-center gap-2.5">
-          <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
-            </svg>
-          </div>
+          <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>
           <h3 class="text-base font-bold text-foreground">Track Pinterest Profile</h3>
         </div>
-        <button id="close-add-competitor-modal" class="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
+        <button data-close class="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
-
       <div id="add-competitor-error" class="hidden rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-500"></div>
-
       <form id="add-competitor-form" class="space-y-4">
-        <!-- Account Classification Switch -->
         <div class="space-y-1.5">
           <label class="block text-xs font-semibold text-foreground">Profile Classification *</label>
           <div class="grid grid-cols-2 gap-3">
             <label class="flex items-center justify-between rounded-xl border border-border bg-background p-3 cursor-pointer hover:border-primary has-[:checked]:border-primary has-[:checked]:bg-primary/5 transition-all">
-              <div class="flex items-center gap-2">
-                <span class="text-sm">🎯</span>
-                <div>
-                  <div class="text-xs font-bold text-foreground">Competitor</div>
-                  <div class="text-[10px] text-muted-foreground">External target profile</div>
-                </div>
-              </div>
+              <div class="flex items-center gap-2"><span class="text-sm">🎯</span><div><div class="text-xs font-bold text-foreground">Competitor</div><div class="text-[10px] text-muted-foreground">External target profile</div></div></div>
               <input type="radio" name="account_type_radio" value="competitor" checked class="text-primary focus:ring-primary" />
             </label>
-
             <label class="flex items-center justify-between rounded-xl border border-border bg-background p-3 cursor-pointer hover:border-primary has-[:checked]:border-primary has-[:checked]:bg-primary/5 transition-all">
-              <div class="flex items-center gap-2">
-                <span class="text-sm">👤</span>
-                <div>
-                  <div class="text-xs font-bold text-foreground">My Account</div>
-                  <div class="text-[10px] text-muted-foreground">Internal brand account</div>
-                </div>
-              </div>
+              <div class="flex items-center gap-2"><span class="text-sm">👤</span><div><div class="text-xs font-bold text-foreground">My Account</div><div class="text-[10px] text-muted-foreground">Internal brand account</div></div></div>
               <input type="radio" name="account_type_radio" value="own" class="text-primary focus:ring-primary" />
             </label>
           </div>
         </div>
-
         <div class="space-y-1.5">
           <label for="competitor-username-input" class="block text-xs font-semibold text-foreground">Pinterest Username *</label>
           <div class="relative">
             <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-xs font-semibold text-muted-foreground">@</span>
-            <input
-              id="competitor-username-input"
-              type="text"
-              required
-              placeholder="e.g. tastyrecipes"
-              class="w-full rounded-xl border border-border bg-background py-2.5 pl-8 pr-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-            />
+            <input id="competitor-username-input" type="text" required placeholder="e.g. tastyrecipes"
+              class="w-full rounded-xl border border-border bg-background py-2.5 pl-8 pr-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
           </div>
         </div>
-
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div class="space-y-1.5">
             <label for="competitor-niche-input" class="block text-xs font-semibold text-foreground">Niche / Category</label>
-            <input
-              id="competitor-niche-input"
-              type="text"
-              placeholder="e.g. Food & Cooking"
-              class="w-full rounded-xl border border-border bg-background py-2.5 px-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-            />
+            <input id="competitor-niche-input" type="text" placeholder="e.g. Food & Cooking" class="w-full rounded-xl border border-border bg-background py-2.5 px-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
           </div>
-
           <div class="space-y-1.5">
             <label for="competitor-tags-input" class="block text-xs font-semibold text-foreground">Tags (Comma-Separated)</label>
-            <input
-              id="competitor-tags-input"
-              type="text"
-              placeholder="e.g. Main, E-com, Priority"
-              class="w-full rounded-xl border border-border bg-background py-2.5 px-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-            />
+            <input id="competitor-tags-input" type="text" placeholder="e.g. Main, E-com, Priority" class="w-full rounded-xl border border-border bg-background py-2.5 px-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
           </div>
         </div>
-
         <div class="space-y-1.5">
           <label for="competitor-notes-input" class="block text-xs font-semibold text-foreground">Internal Strategy Notes</label>
-          <textarea
-            id="competitor-notes-input"
-            rows="3"
-            placeholder="e.g. Focuses on 30-minute quick dinners and keto meal prep infographics..."
-            class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-          ></textarea>
+          <textarea id="competitor-notes-input" rows="3" placeholder="e.g. Focuses on 30-minute quick dinners and keto meal prep infographics..." class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"></textarea>
         </div>
-
         <div class="flex items-center justify-end gap-3 border-t border-border pt-4">
-          <button
-            type="button"
-            id="cancel-add-competitor-modal"
-            class="rounded-xl border border-border px-4 py-2.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            id="submit-add-competitor-modal"
-            class="rounded-xl bg-primary px-5 py-2.5 text-xs font-semibold text-primary-foreground shadow-md hover:bg-primary/90 transition-all"
-          >
-            Start Tracking
-          </button>
+          <button type="button" data-close class="rounded-xl border border-border px-4 py-2.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground">Cancel</button>
+          <button type="submit" class="rounded-xl bg-primary px-5 py-2.5 text-xs font-semibold text-primary-foreground shadow-md hover:bg-primary/90 transition-all">Start Tracking</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- MODAL 2: DevTools JSON Payload Parser Modal -->
-  <div id="paste-payload-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" aria-modal="true" role="dialog">
-    <div id="paste-payload-backdrop" class="fixed inset-0"></div>
+  <!-- ═══ MODAL: Paste DevTools Payload ═══ -->
+  <div id="paste-payload-modal" class="overlay-root fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" aria-modal="true" role="dialog">
+    <div class="fixed inset-0" data-close></div>
     <div class="relative w-full max-w-2xl rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-5 z-10">
       <div class="flex items-center justify-between border-b border-border pb-4">
         <div class="flex items-center gap-2.5">
-          <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-500">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
-              <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
-            </svg>
-          </div>
-          <div>
-            <h3 class="text-base font-bold text-foreground">Paste Pinterest DevTools JSON Payload</h3>
-            <p class="text-[11px] text-muted-foreground">Bypass rate limits by pasting raw Network tab JSON responses.</p>
-          </div>
+          <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-500"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg></div>
+          <h3 class="text-base font-bold text-foreground">Ingest DevTools Payload</h3>
         </div>
-        <button id="close-paste-payload-modal" class="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
+        <button data-close class="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
-
       <div id="paste-payload-error" class="hidden rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-500"></div>
-
       <form id="paste-payload-form" class="space-y-4">
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div class="space-y-1.5">
-            <label for="payload-target-competitor-select" class="block text-xs font-semibold text-foreground">Target Profile *</label>
-            <select
-              id="payload-target-competitor-select"
-              required
-              class="w-full rounded-xl border border-border bg-background py-2.5 px-3 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-            >
-              <option value="" disabled selected>Select profile...</option>
-            </select>
-          </div>
-
-          <div class="space-y-1.5">
-            <label class="block text-xs font-semibold text-foreground">Payload Auto-Detection</label>
-            <div id="payload-detection-badge" class="flex h-10 items-center justify-between rounded-xl border border-border bg-muted/40 px-3 text-xs font-medium text-muted-foreground">
-              <span>Detected Type:</span>
-              <span id="detected-payload-type" class="rounded bg-muted px-2 py-0.5 text-[10px] font-semibold text-foreground">Waiting for paste...</span>
-            </div>
-          </div>
-        </div>
-
         <div class="space-y-1.5">
-          <label for="raw-payload-textarea" class="block text-xs font-semibold text-foreground">Raw Pinterest DevTools JSON Response *</label>
-          <textarea
-            id="raw-payload-textarea"
-            rows="8"
-            required
-            placeholder='Paste response JSON here from UserResource or BoardsResource network requests...'
-            class="w-full rounded-xl border border-border bg-background py-2.5 px-3 font-mono text-[11px] text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-          ></textarea>
+          <label for="payload-target-competitor-select" class="block text-xs font-semibold text-foreground">Target Profile *</label>
+          <select id="payload-target-competitor-select" class="w-full rounded-xl border border-border bg-background py-2.5 px-3 text-xs text-foreground focus:border-primary focus:outline-none"></select>
         </div>
-
-        <div class="flex items-center justify-between border-t border-border pt-4">
-          <span class="text-[11px] text-muted-foreground">Supports <code class="font-mono text-primary">UserResource</code> & <code class="font-mono text-primary">BoardsResource</code></span>
-          <div class="flex items-center gap-3">
-            <button
-              type="button"
-              id="cancel-paste-payload-modal"
-              class="rounded-xl border border-border px-4 py-2.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              id="submit-paste-payload-modal"
-              class="rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-semibold text-white shadow-md hover:bg-emerald-500 transition-all"
-            >
-              Parse & Ingest Payload
-            </button>
+        <div class="space-y-1.5">
+          <div class="flex items-center justify-between">
+            <label for="raw-payload-textarea" class="text-xs font-semibold text-foreground">Raw JSON (UserResource / BoardsResource)</label>
+            <span id="detected-payload-type" class="rounded bg-muted px-2 py-0.5 text-[10px] font-semibold text-foreground">Waiting for paste...</span>
           </div>
+          <textarea id="raw-payload-textarea" rows="10" placeholder='Paste the JSON response copied from Pinterest DevTools network tab…'
+            class="w-full rounded-xl border border-border bg-background py-2 px-3 font-mono text-[11px] text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"></textarea>
+        </div>
+        <div class="flex items-center justify-end gap-3 border-t border-border pt-4">
+          <button type="button" data-close class="rounded-xl border border-border px-4 py-2.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground">Cancel</button>
+          <button type="submit" class="rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-semibold text-white shadow-md hover:bg-emerald-500 transition-all">Ingest Payload</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- MODAL 3: Edit Profile Modal -->
-  <div id="edit-competitor-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" aria-modal="true" role="dialog">
-    <div id="edit-competitor-backdrop" class="fixed inset-0"></div>
+  <!-- ═══ MODAL: Edit Profile ═══ -->
+  <div id="edit-competitor-modal" class="overlay-root fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" aria-modal="true" role="dialog">
+    <div class="fixed inset-0" data-close></div>
     <div class="relative w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-5 z-10">
       <div class="flex items-center justify-between border-b border-border pb-4">
-        <div class="flex items-center gap-2.5">
-          <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/10 text-amber-500">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-            </svg>
-          </div>
-          <h3 class="text-base font-bold text-foreground">Edit Profile</h3>
-        </div>
-        <button id="close-edit-competitor-modal" class="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
+        <h3 class="text-base font-bold text-foreground">Edit Profile</h3>
+        <button data-close class="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
-
       <div id="edit-competitor-error" class="hidden rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-500"></div>
-
       <form id="edit-competitor-form" class="space-y-4">
         <input type="hidden" id="edit-competitor-id" />
-
-        <!-- Account Classification -->
-        <div class="space-y-1.5">
-          <label class="block text-xs font-semibold text-foreground">Profile Classification *</label>
-          <div class="grid grid-cols-2 gap-3">
-            <label class="flex items-center justify-between rounded-xl border border-border bg-background p-3 cursor-pointer hover:border-primary has-[:checked]:border-primary has-[:checked]:bg-primary/5 transition-all">
-              <div class="flex items-center gap-2">
-                <span class="text-sm">🎯</span>
-                <div>
-                  <div class="text-xs font-bold text-foreground">Competitor</div>
-                  <div class="text-[10px] text-muted-foreground">External target profile</div>
-                </div>
-              </div>
-              <input type="radio" name="edit_account_type_radio" value="competitor" class="text-primary focus:ring-primary" />
-            </label>
-
-            <label class="flex items-center justify-between rounded-xl border border-border bg-background p-3 cursor-pointer hover:border-primary has-[:checked]:border-primary has-[:checked]:bg-primary/5 transition-all">
-              <div class="flex items-center gap-2">
-                <span class="text-sm">👤</span>
-                <div>
-                  <div class="text-xs font-bold text-foreground">My Account</div>
-                  <div class="text-[10px] text-muted-foreground">Internal brand account</div>
-                </div>
-              </div>
-              <input type="radio" name="edit_account_type_radio" value="own" class="text-primary focus:ring-primary" />
-            </label>
-          </div>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="flex items-center justify-between rounded-xl border border-border bg-background p-3 cursor-pointer has-[:checked]:border-primary has-[:checked]:bg-primary/5 transition-all">
+            <span class="text-xs font-bold text-foreground">🎯 Competitor</span>
+            <input type="radio" name="edit_account_type_radio" value="competitor" checked />
+          </label>
+          <label class="flex items-center justify-between rounded-xl border border-border bg-background p-3 cursor-pointer has-[:checked]:border-primary has-[:checked]:bg-primary/5 transition-all">
+            <span class="text-xs font-bold text-foreground">👤 My Account</span>
+            <input type="radio" name="edit_account_type_radio" value="own" />
+          </label>
         </div>
-
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div class="space-y-1.5">
             <label for="edit-fullname-input" class="block text-xs font-semibold text-foreground">Display Name</label>
-            <input
-              id="edit-fullname-input"
-              type="text"
-              placeholder="e.g. Tasty Recipes"
-              class="w-full rounded-xl border border-border bg-background py-2.5 px-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-            />
+            <input id="edit-fullname-input" type="text" class="w-full rounded-xl border border-border bg-background py-2.5 px-3 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
           </div>
-
           <div class="space-y-1.5">
-            <label for="edit-username-input" class="block text-xs font-semibold text-foreground">Pinterest Username</label>
+            <label for="edit-username-input" class="block text-xs font-semibold text-foreground">Username</label>
             <div class="relative">
               <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-xs font-semibold text-muted-foreground">@</span>
-              <input
-                id="edit-username-input"
-                type="text"
-                class="w-full rounded-xl border border-border bg-background py-2.5 pl-8 pr-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-              />
+              <input id="edit-username-input" type="text" class="w-full rounded-xl border border-border bg-background py-2.5 pl-8 pr-3 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
             </div>
           </div>
-        </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div class="space-y-1.5">
-            <label for="edit-niche-input" class="block text-xs font-semibold text-foreground">Niche / Category</label>
-            <input
-              id="edit-niche-input"
-              type="text"
-              placeholder="e.g. Food & Cooking"
-              class="w-full rounded-xl border border-border bg-background py-2.5 px-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-            />
+            <label for="edit-niche-input" class="block text-xs font-semibold text-foreground">Niche</label>
+            <input id="edit-niche-input" type="text" class="w-full rounded-xl border border-border bg-background py-2.5 px-3 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
           </div>
-
           <div class="space-y-1.5">
             <label for="edit-tags-input" class="block text-xs font-semibold text-foreground">Tags (Comma-Separated)</label>
-            <input
-              id="edit-tags-input"
-              type="text"
-              placeholder="e.g. Main, E-com, Priority"
-              class="w-full rounded-xl border border-border bg-background py-2.5 px-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-            />
+            <input id="edit-tags-input" type="text" class="w-full rounded-xl border border-border bg-background py-2.5 px-3 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
           </div>
         </div>
-
         <div class="flex items-center justify-end gap-3 border-t border-border pt-4">
-          <button
-            type="button"
-            id="cancel-edit-competitor-modal"
-            class="rounded-xl border border-border px-4 py-2.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            id="submit-edit-competitor-modal"
-            class="rounded-xl bg-amber-500 px-5 py-2.5 text-xs font-semibold text-white shadow-md hover:bg-amber-400 transition-all"
-          >
-            Save Changes
-          </button>
+          <button type="button" data-close class="rounded-xl border border-border px-4 py-2.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground">Cancel</button>
+          <button type="submit" id="submit-edit-competitor-modal" class="rounded-xl bg-amber-500 px-5 py-2.5 text-xs font-semibold text-white shadow-md hover:bg-amber-400 transition-all">Save Changes</button>
         </div>
       </form>
     </div>
   </div>
+
+  <!-- ═══ MODAL: Compare ═══ -->
+  <div id="compare-modal" class="overlay-root fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" aria-modal="true" role="dialog">
+    <div class="fixed inset-0" data-close></div>
+    <div class="relative w-full max-w-3xl rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-5 z-10">
+      <div class="flex items-center justify-between border-b border-border pb-4">
+        <h3 class="text-base font-bold text-foreground">⚖ Side-by-Side Comparison</h3>
+        <button data-close class="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      </div>
+      <div id="compare-body" class="overflow-x-auto"></div>
+    </div>
+  </div>
+
+  <!-- ═══ MODAL: Confirm ═══ -->
+  <div id="confirm-modal" class="overlay-root fixed inset-0 z-[60] hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" aria-modal="true" role="alertdialog">
+    <div class="fixed inset-0" data-close></div>
+    <div class="relative w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-4 z-10">
+      <div class="flex items-center gap-3">
+        <div class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-rose-500/10 text-rose-500"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+        <h3 id="confirm-title" class="text-sm font-bold text-foreground">Are you sure?</h3>
+      </div>
+      <p id="confirm-message" class="text-xs text-muted-foreground"></p>
+      <div class="flex justify-end gap-3 pt-1">
+        <button id="confirm-cancel" class="rounded-xl border border-border px-4 py-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground">Cancel</button>
+        <button id="confirm-ok" class="rounded-xl bg-rose-600 px-4 py-2 text-xs font-semibold text-white shadow-md hover:bg-rose-500 transition-all">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toasts -->
+  <div id="toast-root" aria-live="polite" class="fixed bottom-4 right-4 z-[70] flex flex-col gap-2 w-80 max-w-[calc(100vw-2rem)]"></div>
 </Layout>
+
+<style is:global>
+  @keyframes po-shimmer { 100% { transform: translateX(100%); } }
+  .skeleton { position: relative; overflow: hidden; background: rgb(128 128 128 / 0.15); border-radius: 0.5rem; }
+  .skeleton::after { content: ''; position: absolute; inset: 0; transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.25), transparent);
+    animation: po-shimmer 1.4s infinite; }
+</style>
 
 <script>
   import {
-    getCompetitors,
-    addCompetitor,
-    deleteCompetitor,
-    updateCompetitor,
-    parsePinterestPayload,
-    ingestDevToolsPayload,
+    getCompetitors, addCompetitor, deleteCompetitor, updateCompetitor,
+    parsePinterestPayload, ingestDevToolsPayload, getCompetitorDetails,
   } from '../lib/competitors';
   import { getActiveWorkspaceId } from '../lib/workspaces';
-  import type { Competitor } from '../lib/types';
+  import type { Competitor, CompetitorDeltaStats } from '../lib/types';
 
   // ─── State ────────────────────────────────────────────────────────────────
   let competitorsList: Competitor[] = [];
+  let filteredCache: Competitor[] = [];
+  const selectedIds = new Set<string>();
   let selectedCompetitorIdForPayload: string | null = null;
 
-  // Filter state
   let activeTypeTab: 'all' | 'own' | 'competitor' = 'all';
   let selectedTag = 'all';
-
-  // Sort state (single-column; structured for easy multi-sort extension later)
-  type SortKey = 'profile_reach' | 'profile_views' | 'follower_count' | 'pin_count' | 'boards_count' | 'last_pin_at';
-  let sortKey: SortKey | null = null;
+  let searchQuery = '';
+  let sortKey: string | null = null;
   let sortDir: 'asc' | 'desc' = 'desc';
+  let page = 1;
+  let rowsPerPage = Number(localStorage.getItem('po_comp_rows') || 10);
 
-  // Column visibility state
   interface ColDef { key: string; label: string; defaultVisible: boolean; locked?: boolean; }
   const COLUMN_DEFS: ColDef[] = [
-    { key: 'profile',       label: 'Profile',        defaultVisible: true,  locked: true },
-    { key: 'type',          label: 'Type',           defaultVisible: true },
-    { key: 'niche',         label: 'Niche',          defaultVisible: false },
-    { key: 'reach',         label: 'Monthly Reach',  defaultVisible: true },
-    { key: 'views',         label: 'Profile Views',  defaultVisible: true },
-    { key: 'followers',     label: 'Followers',      defaultVisible: false },
-    { key: 'pins',          label: 'Total Pins',     defaultVisible: true },
-    { key: 'boards_count',  label: 'Boards Count',   defaultVisible: true },
-    { key: 'last_pin',      label: 'Last Pin',       defaultVisible: true },
-    { key: 'strategy_age',  label: 'Strategy Age',   defaultVisible: false },
-    { key: 'actions',       label: 'Actions',        defaultVisible: true,  locked: true },
+    { key: 'select',       label: '',               defaultVisible: true, locked: true },
+    { key: 'profile',      label: 'Profile',        defaultVisible: true, locked: true },
+    { key: 'type',         label: 'Type',           defaultVisible: true },
+    { key: 'niche',        label: 'Niche',          defaultVisible: false },
+    { key: 'reach',        label: 'Monthly Reach',  defaultVisible: true },
+    { key: 'views',        label: 'Profile Views',  defaultVisible: true },
+    { key: 'followers',    label: 'Followers',      defaultVisible: false },
+    { key: 'pins',         label: 'Total Pins',     defaultVisible: true },
+    { key: 'boards_count', label: 'Boards Count',   defaultVisible: true },
+    { key: 'last_pin',     label: 'Last Pin',       defaultVisible: true },
+    { key: 'strategy_age', label: 'Strategy Age',   defaultVisible: false },
+    { key: 'actions',      label: 'Actions',        defaultVisible: true, locked: true },
   ];
-  // In-memory visibility map
   const colVisible: Record<string, boolean> = {};
-  COLUMN_DEFS.forEach(c => { colVisible[c.key] = c.defaultVisible; });
+  try {
+    const saved = JSON.parse(localStorage.getItem('po_comp_cols') || '{}');
+    COLUMN_DEFS.forEach(c => { colVisible[c.key] = (c.key in saved) ? !!saved[c.key] : c.defaultVisible; });
+  } catch { COLUMN_DEFS.forEach(c => { colVisible[c.key] = c.defaultVisible; }); }
 
-  // ─── DOM Elements ─────────────────────────────────────────────────────────
-  const competitorsTableBody  = document.getElementById('competitors-table-body') as HTMLElement;
-  const competitorsThead      = document.getElementById('competitors-thead') as HTMLElement;
-  const competitorsTfoot      = document.getElementById('competitors-tfoot') as HTMLElement;
-  const competitorBadgeCount  = document.getElementById('competitor-badge-count') as HTMLElement;
-  const statusBanner          = document.getElementById('competitor-status-banner') as HTMLElement;
-  const statusText            = document.getElementById('competitor-status-text') as HTMLElement;
-  const dismissStatusBannerBtn = document.getElementById('dismiss-status-banner') as HTMLElement;
+  // ─── DOM refs ─────────────────────────────────────────────────────────────
+  const $ = (id: string) => document.getElementById(id) as HTMLElement;
+  const tbody = $('competitors-table-body'), thead = $('competitors-thead'), tfoot = $('competitors-tfoot');
+  const badge = $('competitor-badge-count'), pageInfo = $('page-info');
+  const prevBtn = $('page-prev') as HTMLButtonElement, nextBtn = $('page-next') as HTMLButtonElement;
+  const rowsSelect = $('rows-per-page') as HTMLSelectElement;
+  const selectionBar = $('selection-bar'), selectionCount = $('selection-count');
+  const compareBtn = $('open-compare-btn') as HTMLButtonElement;
+  const tagFilterSelect = $('tag-filter-select') as HTMLSelectElement;
+  const searchInput = $('competitor-search-input') as HTMLInputElement;
+  const drawer = $('competitor-drawer'), drawerBackdrop = $('drawer-backdrop'), drawerBody = $('drawer-body');
 
-  const kpiTotalCompetitors = document.getElementById('kpi-total-competitors') as HTMLElement;
-  const kpiOwnCount         = document.getElementById('kpi-own-count') as HTMLElement;
-  const kpiCompetitorCount  = document.getElementById('kpi-competitor-count') as HTMLElement;
-
-  const typeTabBtns    = document.querySelectorAll<HTMLButtonElement>('.account-type-tab-btn');
-  const tagFilterSelect = document.getElementById('tag-filter-select') as HTMLSelectElement;
-
-  const colVisibilityBtn  = document.getElementById('col-visibility-btn') as HTMLButtonElement;
-  const colVisibilityMenu = document.getElementById('col-visibility-menu') as HTMLElement;
-
-  // ─── Utilities ────────────────────────────────────────────────────────────
-  function formatNumber(num: number | null | undefined): string {
-    if (num === null || num === undefined || isNaN(num)) return '0';
-    return num.toLocaleString('en-US');
+  // ─── Formatting helpers ───────────────────────────────────────────────────
+  const escHtml = (s: any) => String(s ?? '').replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m] as string));
+  const fmtFull = (n: number | null | undefined) => (n ?? 0).toLocaleString('en-US');
+  const fmtCompact = (n: number | null | undefined) => new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(n ?? 0);
+  function timeAgo(iso?: string | null): string {
+    if (!iso) return '—';
+    const ms = Date.now() - new Date(iso).getTime();
+    if (isNaN(ms) || ms < 0) return '—';
+    const m = Math.floor(ms / 60000);
+    if (m < 1) return 'just now';
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    const d = Math.floor(h / 24);
+    if (d < 30) return `${d}d ago`;
+    const mo = Math.floor(d / 30);
+    if (mo < 12) return `${mo}mo ago`;
+    return `${Math.floor(mo / 12)}y ago`;
+  }
+  function activityOf(c: Competitor): { label: string; dot: string; text: string } {
+    if (!c.last_pin_at) return { label: 'Unknown', dot: 'bg-muted-foreground/40', text: 'text-muted-foreground' };
+    const d = (Date.now() - new Date(c.last_pin_at).getTime()) / 86400000;
+    if (d <= 7) return { label: 'Active', dot: 'bg-emerald-500', text: 'text-emerald-500' };
+    if (d <= 30) return { label: 'Cooling', dot: 'bg-amber-500', text: 'text-amber-500' };
+    return { label: 'Stale', dot: 'bg-rose-500', text: 'text-rose-500' };
+  }
+  function deltaChip(change: number, percent: number): string {
+    if (!change && !percent) return '<span class="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">—</span>';
+    const up = change > 0;
+    return `<span class="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${up ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}">${up ? '↑' : '↓'} ${Math.abs(percent).toFixed(1)}%</span>`;
+  }
+  function sparkline(values: number[], cls: string): string {
+    if (values.length < 2) return '<div class="text-[10px] text-muted-foreground py-2">Not enough history yet — ingest more snapshots.</div>';
+    const w = 280, h = 48, pad = 3;
+    const min = Math.min(...values), max = Math.max(...values);
+    const range = max - min || 1;
+    const pts = values.map((v, i) => {
+      const x = pad + (i * (w - pad * 2)) / (values.length - 1);
+      const y = h - pad - ((v - min) / range) * (h - pad * 2);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    });
+    const last = pts[pts.length - 1].split(',');
+    return `<svg viewBox="0 0 ${w} ${h}" class="w-full ${cls}" preserveAspectRatio="none">
+      <polyline points="${pts.join(' ')}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="${last[0]}" cy="${last[1]}" r="3" fill="currentColor"/></svg>`;
   }
 
-  function formatDate(isoStr?: string | null): string {
-    if (!isoStr) return '—';
-    const d = new Date(isoStr);
-    if (isNaN(d.getTime())) return '—';
-    return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  // ─── Toasts ───────────────────────────────────────────────────────────────
+  function toast(message: string, type: 'success' | 'error' | 'info' = 'success') {
+    const colors = { success: 'border-emerald-500/40 text-emerald-600 dark:text-emerald-400', error: 'border-rose-500/40 text-rose-600 dark:text-rose-400', info: 'border-primary/40 text-primary' };
+    const icons = { success: '✓', error: '✕', info: 'ℹ' };
+    const el = document.createElement('div');
+    el.className = `flex items-start gap-2.5 rounded-xl border bg-card p-3 text-xs font-semibold shadow-lg ${colors[type]}`;
+    el.innerHTML = `<span class="flex-shrink-0">${icons[type]}</span><span class="flex-1 text-foreground">${escHtml(message)}</span>
+      <button class="text-muted-foreground hover:text-foreground" aria-label="Dismiss">✕</button>`;
+    el.querySelector('button')!.addEventListener('click', () => el.remove());
+    $('toast-root').appendChild(el);
+    setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity .3s'; setTimeout(() => el.remove(), 300); }, 4200);
   }
 
-  function showStatus(message: string, isError = false) {
-    if (!statusBanner || !statusText) return;
-    statusText.textContent = message;
-    statusBanner.classList.remove('hidden');
-    if (isError) {
-      statusBanner.className = 'mb-6 rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-xs text-rose-600 dark:text-rose-400 flex items-center justify-between shadow-sm';
-    } else {
-      statusBanner.className = 'mb-6 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-xs text-emerald-600 dark:text-emerald-400 flex items-center justify-between shadow-sm';
-    }
+  // ─── Overlays (generic show/hide + focus + Esc) ───────────────────────────
+  const lastFocusMap = new Map<HTMLElement, Element | null>();
+  function showOverlay(el: HTMLElement) {
+    lastFocusMap.set(el, document.activeElement);
+    el.classList.remove('hidden'); el.classList.add('flex');
+    const f = el.querySelector<HTMLElement>('input:not([type=hidden]), select, textarea');
+    (f || el.querySelector<HTMLElement>('button[data-close]'))?.focus();
   }
-
-  if (dismissStatusBannerBtn) {
-    dismissStatusBannerBtn.addEventListener('click', () => statusBanner.classList.add('hidden'));
+  function hideOverlay(el: HTMLElement) {
+    el.classList.add('hidden'); el.classList.remove('flex');
+    const prev = lastFocusMap.get(el) as HTMLElement | null;
+    prev?.focus?.();
   }
+  document.querySelectorAll('.overlay-root').forEach(root => {
+    root.querySelectorAll('[data-close]').forEach(btn => btn.addEventListener('click', () => hideOverlay(root as HTMLElement)));
+  });
 
-  // ─── Sort helpers ─────────────────────────────────────────────────────────
-  function sortIndicator(key: SortKey): string {
-    if (sortKey !== key) return '<span class="text-border ml-1 opacity-40">↕</span>';
-    return sortDir === 'asc'
-      ? '<span class="text-primary ml-1">↑</span>'
-      : '<span class="text-primary ml-1">↓</span>';
+  let confirmResolver: ((ok: boolean) => void) | null = null;
+  function askConfirm(title: string, message: string): Promise<boolean> {
+    $('confirm-title').textContent = title;
+    $('confirm-message').textContent = message;
+    showOverlay($('confirm-modal'));
+    return new Promise(res => { confirmResolver = res; });
   }
+  $('confirm-ok').addEventListener('click', () => { hideOverlay($('confirm-modal')); confirmResolver?.(true); confirmResolver = null; });
+  $('confirm-cancel').addEventListener('click', () => { hideOverlay($('confirm-modal')); confirmResolver?.(false); confirmResolver = null; });
 
+  // ─── Filtering / sorting ──────────────────────────────────────────────────
   function applySortAndFilter(): Competitor[] {
     let filtered = competitorsList.filter(c => {
       if (activeTypeTab === 'own') return c.account_type === 'own';
       if (activeTypeTab === 'competitor') return c.account_type !== 'own';
       return true;
     });
-
-    if (selectedTag !== 'all') {
-      filtered = filtered.filter(c => Array.isArray(c.tags) && c.tags.includes(selectedTag));
+    if (selectedTag !== 'all') filtered = filtered.filter(c => Array.isArray(c.tags) && c.tags.includes(selectedTag));
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      filtered = filtered.filter(c =>
+        (c.username || '').toLowerCase().includes(q) ||
+        (c.full_name || '').toLowerCase().includes(q) ||
+        (c.niche || '').toLowerCase().includes(q));
     }
-
     if (sortKey) {
       filtered = [...filtered].sort((a, b) => {
-        let av: any;
-        let bv: any;
-        if (sortKey === 'last_pin_at') {
-          av = a.last_pin_at ? new Date(a.last_pin_at).getTime() : 0;
-          bv = b.last_pin_at ? new Date(b.last_pin_at).getTime() : 0;
-        } else {
-          av = (a as any)[sortKey as string] ?? 0;
-          bv = (b as any)[sortKey as string] ?? 0;
-        }
+        let av: any, bv: any;
+        if (sortKey === 'last_pin_at') { av = a.last_pin_at ? +new Date(a.last_pin_at) : 0; bv = b.last_pin_at ? +new Date(b.last_pin_at) : 0; }
+        else { av = (a as any)[sortKey] ?? 0; bv = (b as any)[sortKey] ?? 0; }
         return sortDir === 'asc' ? av - bv : bv - av;
       });
     }
-
     return filtered;
   }
 
-  function handleSortClick(key: SortKey) {
-    if (sortKey === key) {
-      sortDir = sortDir === 'asc' ? 'desc' : 'asc';
-    } else {
-      sortKey = key;
-      sortDir = 'desc';
-    }
-    renderTable();
+  // ─── KPIs ─────────────────────────────────────────────────────────────────
+  function renderKPIs() {
+    const total = competitorsList.length;
+    const own = competitorsList.filter(c => c.account_type === 'own').length;
+    const comp = total - own;
+    const reach = competitorsList.reduce((s, c) => s + (c.profile_reach || 0), 0);
+    const followers = competitorsList.reduce((s, c) => s + (c.follower_count || 0), 0);
+    const pins = competitorsList.reduce((s, c) => s + (c.pin_count || 0), 0);
+    const activeWeek = competitorsList.filter(c => c.last_pin_at && (Date.now() - +new Date(c.last_pin_at)) < 7 * 86400000).length;
+    const top = [...competitorsList].sort((a, b) => (b.profile_reach || 0) - (a.profile_reach || 0))[0];
+
+    $('kpi-total').textContent = String(total);
+    $('kpi-split-label').textContent = `${own} own • ${comp} competitors`;
+    const bar = $('kpi-split-bar').children as HTMLCollectionOf<HTMLElement>;
+    bar[0].style.width = total ? `${(own / total) * 100}%` : '0%';
+    bar[1].style.width = total ? `${(comp / total) * 100}%` : '0%';
+    $('kpi-reach').textContent = fmtCompact(reach);
+    $('kpi-reach-sub').textContent = top ? `top: @${top.username}` : 'monthly profile reach';
+    $('kpi-followers').textContent = fmtCompact(followers);
+    $('kpi-followers-sub').textContent = total ? `avg ${fmtCompact(Math.round(followers / total))} / profile` : 'avg — / profile';
+    $('kpi-pins').textContent = fmtCompact(pins);
+    $('kpi-active-sub').textContent = `${activeWeek} active this week`;
   }
 
-  // ─── Column Visibility Menu ───────────────────────────────────────────────
-  function buildColVisibilityMenu() {
-    if (!colVisibilityMenu) return;
-    colVisibilityMenu.innerHTML = COLUMN_DEFS
-      .filter(c => !c.locked)
-      .map(c => `
-        <label class="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-muted/60 transition-colors text-xs font-medium text-foreground">
-          <input
-            type="checkbox"
-            class="col-visibility-checkbox rounded accent-primary"
-            data-col-key="${c.key}"
-            ${colVisible[c.key] ? 'checked' : ''}
-          />
-          <span>${c.label}</span>
-        </label>
-      `).join('');
+  // ─── Table rendering ──────────────────────────────────────────────────────
+  const SORTABLE: Record<string, string> = {
+    reach: 'profile_reach', views: 'profile_views', followers: 'follower_count',
+    pins: 'pin_count', boards_count: 'boards_count', last_pin: 'last_pin_at',
+  };
+  const visibleCols = () => COLUMN_DEFS.filter(c => colVisible[c.key] || c.locked);
 
-    colVisibilityMenu.querySelectorAll<HTMLInputElement>('.col-visibility-checkbox').forEach(cb => {
+  function renderTableHeader() {
+    const cols = visibleCols();
+    thead.innerHTML = `<tr>${cols.map(c => {
+      const sk = SORTABLE[c.key];
+      const sortable = !!sk;
+      const arrow = sk ? (sortKey === sk ? (sortDir === 'asc' ? '<span class="text-primary ml-1">↑</span>' : '<span class="text-primary ml-1">↓</span>') : '<span class="ml-1 opacity-30">↕</span>') : '';
+      const ariaSort = sk && sortKey === sk ? `aria-sort="${sortDir === 'asc' ? 'ascending' : 'descending'}"` : '';
+      if (c.key === 'select') return `<th scope="col" class="py-3 px-4 w-8"><input type="checkbox" id="select-all-cb" class="rounded accent-primary" title="Select all filtered"/></th>`;
+      const align = c.key === 'actions' ? 'text-right' : '';
+      return `<th scope="col" ${ariaSort} class="py-3 px-4 ${align} ${sortable ? 'cursor-pointer select-none hover:text-primary' : ''}" ${sortable ? `data-sort-col="${c.key}"` : ''}>${c.label}${arrow}</th>`;
+    }).join('')}</tr>`;
+    thead.querySelectorAll<HTMLElement>('[data-sort-col]').forEach(th => {
+      th.addEventListener('click', () => {
+        const sk = SORTABLE[th.dataset.sortCol!];
+        if (sortKey === sk) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+        else { sortKey = sk; sortDir = 'desc'; }
+        renderTable();
+      });
+    });
+    $('select-all-cb')?.addEventListener('change', (e) => {
+      const checked = (e.target as HTMLInputElement).checked;
+      filteredCache.forEach(c => checked ? selectedIds.add(c.id) : selectedIds.delete(c.id));
+      renderTable();
+    });
+  }
+
+  function renderSkeleton() {
+    const n = visibleCols().length;
+    tbody.innerHTML = Array.from({ length: 5 }, () =>
+      `<tr>${Array.from({ length: n }, (_, i) => `<td class="py-4 ${i === 0 ? 'px-4' : 'px-4'}"><div class="skeleton h-4 ${i === 1 ? 'w-32' : 'w-16'}"></div></td>`).join('')}</tr>`).join('');
+  }
+
+  function renderTable() {
+    renderTableHeader();
+    filteredCache = applySortAndFilter();
+    badge.textContent = `${filteredCache.length} ${filteredCache.length === 1 ? 'Profile' : 'Profiles'}`;
+
+    const totalPages = Math.max(1, Math.ceil(filteredCache.length / rowsPerPage));
+    if (page > totalPages) page = totalPages;
+    const start = (page - 1) * rowsPerPage;
+    const pageRows = filteredCache.slice(start, start + rowsPerPage);
+
+    pageInfo.textContent = filteredCache.length
+      ? `Showing ${start + 1}–${Math.min(start + rowsPerPage, filteredCache.length)} of ${filteredCache.length}`
+      : 'No rows';
+    prevBtn.disabled = page <= 1;
+    nextBtn.disabled = page >= totalPages;
+
+    updateSelectionBar();
+
+    if (filteredCache.length === 0) {
+      tfoot.classList.add('hidden');
+      const isEmptyWorkspace = competitorsList.length === 0;
+      tbody.innerHTML = `<tr><td colspan="99" class="py-16 text-center">
+        <div class="flex flex-col items-center gap-3 px-6">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-muted-foreground/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+          ${isEmptyWorkspace ? `
+            <div class="text-sm font-bold text-foreground">No profiles tracked yet</div>
+            <p class="max-w-sm text-xs text-muted-foreground">Start monitoring competitor reach, follower velocity and board strategy. Data syncs automatically daily at 02:00 UTC, or instantly via DevTools payloads.</p>
+            <div class="flex gap-2.5">
+              <button id="empty-track-btn" class="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-md hover:bg-primary/90">+ Track Profile</button>
+              <button id="empty-paste-btn" class="rounded-xl border border-border bg-card px-4 py-2 text-xs font-semibold text-foreground hover:bg-muted">Paste Payload</button>
+            </div>` : `
+            <div class="text-sm font-bold text-foreground">No matches for your filters</div>
+            <button id="clear-filters-btn" class="rounded-xl border border-border bg-card px-4 py-2 text-xs font-semibold text-foreground hover:bg-muted">Clear filters</button>`}
+        </div></td></tr>`;
+      $('empty-track-btn')?.addEventListener('click', () => showOverlay($('add-competitor-modal')));
+      $('empty-paste-btn')?.addEventListener('click', () => openPasteModal());
+      $('clear-filters-btn')?.addEventListener('click', () => {
+        searchQuery = ''; searchInput.value = ''; selectedTag = 'all'; tagFilterSelect.value = 'all';
+        activeTypeTab = 'all'; syncTabClasses(); page = 1; renderTable();
+      });
+      return;
+    }
+
+    // tfoot totals
+    const totR = filteredCache.reduce((s, c) => s + (c.profile_reach || 0), 0);
+    const totV = filteredCache.reduce((s, c) => s + (c.profile_views || 0), 0);
+    const totP = filteredCache.reduce((s, c) => s + (c.pin_count || 0), 0);
+    tfoot.innerHTML = `<tr>${visibleCols().map(c => {
+      if (c.key === 'profile') return `<td class="py-3 px-4 font-bold text-xs text-foreground">∑ Totals (${filteredCache.length})</td>`;
+      if (c.key === 'reach') return `<td class="py-3 px-4 font-bold text-xs text-emerald-500">${fmtFull(totR)}</td>`;
+      if (c.key === 'views') return `<td class="py-3 px-4 font-bold text-xs text-foreground">${fmtFull(totV)}</td>`;
+      if (c.key === 'pins') return `<td class="py-3 px-4 font-bold text-xs text-foreground">${fmtFull(totP)}</td>`;
+      return `<td class="py-3 px-4"></td>`;
+    }).join('')}</tr>`;
+    tfoot.classList.remove('hidden');
+
+    // tbody
+    tbody.innerHTML = pageRows.map(c => {
+      const avatar = c.avatar_url || `https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&h=200&q=80`;
+      const isOwn = c.account_type === 'own';
+      const act = activityOf(c);
+      const isSel = selectedIds.has(c.id);
+
+      const tagsHtml = (Array.isArray(c.tags) && c.tags.length > 0)
+        ? `<div class="flex flex-wrap items-center gap-1 pt-1">${c.tags.map(t => `<button data-click-tag="${escHtml(t)}" class="rounded bg-muted px-1.5 py-0.5 text-[9.5px] font-semibold text-muted-foreground border border-border/50 hover:border-primary hover:text-foreground">#${escHtml(t)}</button>`).join('')}</div>` : '';
+
+      const cellMap: Record<string, string> = {
+        select: `<td class="py-4 px-4"><input type="checkbox" data-row-select="${c.id}" ${isSel ? 'checked' : ''} class="rounded accent-primary" /></td>`,
+        profile: `<td class="py-4 px-4">
+          <div class="flex items-center gap-3">
+            <img src="${avatar}" alt="${escHtml(c.username)}" loading="lazy" class="h-10 w-10 rounded-full object-cover border border-border shadow-sm flex-shrink-0" />
+            <div class="flex flex-col min-w-0">
+              <div class="flex items-center gap-1.5">
+                <button data-drawer-id="${c.id}" class="text-xs font-bold text-foreground hover:text-primary transition-colors truncate text-left">${escHtml(c.full_name || c.username)}</button>
+                <a href="https://www.pinterest.com/${escHtml(c.username)}/" target="_blank" rel="noopener noreferrer" class="text-muted-foreground/60 hover:text-primary" title="Open Pinterest">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                </a>
+              </div>
+              <span class="text-[11px] text-muted-foreground">@${escHtml(c.username)}</span>
+              ${tagsHtml}
+            </div>
+          </div></td>`,
+        type: `<td class="py-4 px-4"><span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold border ${isOwn ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' : 'bg-purple-500/10 text-purple-500 border-purple-500/20'}">${isOwn ? '👤 My Account' : '🎯 Competitor'}</span></td>`,
+        niche: `<td class="py-4 px-4"><span class="inline-flex items-center rounded-md bg-muted px-2 py-1 text-[11px] font-medium text-foreground">${escHtml(c.niche || 'General')}</span></td>`,
+        reach: `<td class="py-4 px-4 font-bold text-emerald-500" title="${fmtFull(c.profile_reach)}">${fmtCompact(c.profile_reach)}</td>`,
+        views: `<td class="py-4 px-4 font-semibold text-foreground" title="${fmtFull(c.profile_views)}">${fmtCompact(c.profile_views)}</td>`,
+        followers: `<td class="py-4 px-4 font-semibold text-foreground" title="${fmtFull(c.follower_count)}">${fmtCompact(c.follower_count)}</td>`,
+        pins: `<td class="py-4 px-4 text-foreground" title="${fmtFull(c.pin_count)}">${fmtCompact(c.pin_count)}</td>`,
+        boards_count: `<td class="py-4 px-4"><span class="inline-flex items-center rounded-md bg-muted/60 px-2 py-1 text-[11px] font-semibold text-foreground">${c.boards_count ?? 0}</span></td>`,
+        last_pin: `<td class="py-4 px-4 text-[11px]"><span class="inline-flex items-center gap-1.5 ${act.text}"><span class="h-1.5 w-1.5 rounded-full ${act.dot}"></span><span>${timeAgo(c.last_pin_at)}</span></span></td>`,
+        strategy_age: `<td class="py-4 px-4"><span class="rounded bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">${c.strategy_age_days ? `${c.strategy_age_days}d active` : 'Unknown'}</span></td>`,
+        actions: `<td class="py-4 px-4 text-right">
+          <div class="flex items-center justify-end gap-1.5">
+            <button data-drawer-id="${c.id}" class="rounded-lg border border-border p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground" title="Quick preview"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+            <button data-edit-id="${c.id}" class="rounded-lg border border-border p-1.5 text-muted-foreground hover:bg-amber-500/10 hover:text-amber-500" title="Edit"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+            <button data-paste-id="${c.id}" class="rounded-lg border border-border p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground" title="Paste DevTools Payload"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg></button>
+            <a href="/competitors/details?id=${c.id}" class="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2.5 py-1.5 text-[11px] font-semibold text-foreground hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all shadow-sm">
+              <span>Deep-Dive</span>
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </a>
+            <button data-delete-id="${c.id}" data-username="${escHtml(c.username)}" class="rounded-lg p-1.5 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500" title="Delete"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button>
+          </div></td>`,
+      };
+
+      const cells = visibleCols().map(col => cellMap[col.key] || `<td class="py-4 px-4"></td>`).join('');
+      return `<tr class="${isSel ? 'bg-primary/5' : 'hover:bg-muted/30'} transition-colors">${cells}</tr>`;
+    }).join('');
+
+    // Attach row events
+    tbody.querySelectorAll<HTMLInputElement>('[data-row-select]').forEach(cb => {
       cb.addEventListener('change', () => {
-        const key = cb.dataset.colKey!;
-        colVisible[key] = cb.checked;
+        const id = cb.dataset.rowSelect!;
+        if (cb.checked) selectedIds.add(id); else selectedIds.delete(id);
+        renderTable();
+      });
+    });
+    tbody.querySelectorAll<HTMLElement>('[data-click-tag]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        selectedTag = btn.dataset.clickTag!;
+        tagFilterSelect.value = selectedTag;
+        page = 1;
+        renderTable();
+      });
+    });
+    tbody.querySelectorAll<HTMLElement>('[data-drawer-id]').forEach(btn => {
+      btn.addEventListener('click', () => openDrawer(btn.dataset.drawerId!));
+    });
+    tbody.querySelectorAll<HTMLElement>('[data-edit-id]').forEach(btn => {
+      btn.addEventListener('click', () => openEditModal(btn.dataset.editId!));
+    });
+    tbody.querySelectorAll<HTMLElement>('[data-paste-id]').forEach(btn => {
+      btn.addEventListener('click', () => openPasteModal(btn.dataset.pasteId!));
+    });
+    tbody.querySelectorAll<HTMLElement>('[data-delete-id]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.deleteId!, u = btn.dataset.username || 'this profile';
+        const ok = await askConfirm('Remove Profile', `Are you sure you want to stop tracking @${u}? Historical snapshots will be retained.`);
+        if (!ok) return;
+        try {
+          await deleteCompetitor(id);
+          selectedIds.delete(id);
+          toast(`Removed @${u}`);
+          await loadWorkspaceData();
+        } catch (err: any) {
+          toast(err.message || 'Failed to delete', 'error');
+        }
+      });
+    });
+  }
+
+  // ─── Selection bar ────────────────────────────────────────────────────────
+  function updateSelectionBar() {
+    if (selectedIds.size > 0) {
+      selectionBar.classList.remove('hidden'); selectionBar.classList.add('flex');
+      selectionCount.textContent = `${selectedIds.size} selected`;
+      compareBtn.disabled = selectedIds.size < 2 || selectedIds.size > 4;
+      compareBtn.title = selectedIds.size < 2 ? 'Select at least 2 profiles to compare' : (selectedIds.size > 4 ? 'Select up to 4 profiles' : 'Compare selected profiles');
+    } else {
+      selectionBar.classList.add('hidden'); selectionBar.classList.remove('flex');
+    }
+  }
+
+  $('clear-selection-btn').addEventListener('click', () => { selectedIds.clear(); renderTable(); });
+  $('export-selected-btn').addEventListener('click', () => exportCSV(Array.from(selectedIds)));
+
+  // ─── Column visibility menu ───────────────────────────────────────────────
+  const colMenu = $('col-visibility-menu');
+  function buildColVisibilityMenu() {
+    colMenu.innerHTML = COLUMN_DEFS.filter(c => !c.locked).map(c => `
+      <label class="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-muted/60 transition-colors text-xs font-medium text-foreground">
+        <input type="checkbox" class="rounded accent-primary" data-col-key="${c.key}" ${colVisible[c.key] ? 'checked' : ''} />
+        <span>${c.label}</span>
+      </label>`).join('');
+    colMenu.querySelectorAll<HTMLInputElement>('input[data-col-key]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        colVisible[cb.dataset.colKey!] = cb.checked;
+        localStorage.setItem('po_comp_cols', JSON.stringify(colVisible));
         renderTable();
       });
     });
   }
-
-  // Toggle menu open/close
-  if (colVisibilityBtn) {
-    colVisibilityBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      colVisibilityMenu.classList.toggle('hidden');
-    });
-  }
+  $('col-visibility-btn').addEventListener('click', (e) => { e.stopPropagation(); colMenu.classList.toggle('hidden'); });
   document.addEventListener('click', (e) => {
-    const wrapper = document.getElementById('col-visibility-wrapper');
-    if (wrapper && !wrapper.contains(e.target as Node)) {
-      colVisibilityMenu?.classList.add('hidden');
-    }
+    const w = $('col-visibility-wrapper');
+    if (w && !w.contains(e.target as Node)) colMenu.classList.add('hidden');
   });
 
-  // ─── Header Rendering ─────────────────────────────────────────────────────
-  function renderTableHeader() {
-    if (!competitorsThead) return;
-
-    const sortableCols: Record<string, SortKey> = {
-      reach:        'profile_reach',
-      views:        'profile_views',
-      followers:    'follower_count',
-      pins:         'pin_count',
-      boards_count: 'boards_count',
-      last_pin:     'last_pin_at',
-    };
-
-    const visibleCols = COLUMN_DEFS.filter(c => colVisible[c.key] || c.locked);
-
-    competitorsThead.innerHTML = `
-      <tr>
-        ${visibleCols.map(c => {
-          const sk = sortableCols[c.key];
-          const isRight = c.key === 'actions';
-          const sortable = !!sk;
-          const cursor = sortable ? 'cursor-pointer select-none hover:text-primary' : '';
-          const align = isRight ? 'text-right' : '';
-          const padding = (c.key === 'profile' || c.key === 'actions') ? 'py-3.5 px-6' : 'py-3.5 px-4';
-          return `
-            <th scope="col" class="${padding} ${align} ${cursor}" ${sortable ? `data-sort-col="${c.key}"` : ''}>
-              <span class="inline-flex items-center gap-0.5">
-                ${c.label}
-                ${sk ? sortIndicator(sk) : ''}
-              </span>
-            </th>
-          `;
-        }).join('')}
-      </tr>
-    `;
-
-    // Attach sort listeners
-    competitorsThead.querySelectorAll<HTMLElement>('[data-sort-col]').forEach(th => {
-      th.addEventListener('click', () => {
-        const colKey = th.dataset.sortCol!;
-        const sk = sortableCols[colKey];
-        if (sk) handleSortClick(sk);
-      });
-    });
-  }
-
-  // ─── Summary Row (tfoot) ─────────────────────────────────────────────────
-  function renderSummaryRow(filtered: Competitor[]) {
-    if (!competitorsTfoot) return;
-
-    if (filtered.length === 0) {
-      competitorsTfoot.classList.add('hidden');
-      return;
-    }
-
-    const totalReach = filtered.reduce((s, c) => s + (c.profile_reach || 0), 0);
-    const totalViews = filtered.reduce((s, c) => s + (c.profile_views || 0), 0);
-    const totalPins  = filtered.reduce((s, c) => s + (c.pin_count || 0), 0);
-
-    const visibleCols = COLUMN_DEFS.filter(c => colVisible[c.key] || c.locked);
-
-    const cells = visibleCols.map(c => {
-      if (c.key === 'profile') {
-        return `<td class="py-3 px-6 font-bold text-xs text-foreground">∑ Totals (${filtered.length} rows)</td>`;
-      }
-      if (c.key === 'reach') return `<td class="py-3 px-4 font-bold text-xs text-emerald-500">${formatNumber(totalReach)}</td>`;
-      if (c.key === 'views') return `<td class="py-3 px-4 font-bold text-xs text-foreground">${formatNumber(totalViews)}</td>`;
-      if (c.key === 'pins')  return `<td class="py-3 px-4 font-bold text-xs text-foreground">${formatNumber(totalPins)}</td>`;
-      return `<td class="py-3 px-4"></td>`;
-    }).join('');
-
-    competitorsTfoot.innerHTML = `<tr class="bg-muted/40">${cells}</tr>`;
-    competitorsTfoot.classList.remove('hidden');
-  }
-
-  // ─── Main Table Renderer ──────────────────────────────────────────────────
-  function renderTable() {
-    if (!competitorsTableBody) return;
-
-    renderTableHeader();
-
-    const filtered = applySortAndFilter();
-
-    if (competitorBadgeCount) {
-      competitorBadgeCount.textContent = `${filtered.length} ${filtered.length === 1 ? 'Profile' : 'Profiles'}`;
-    }
-
-    if (filtered.length === 0) {
-      competitorsTableBody.innerHTML = `
-        <tr>
-          <td colspan="99" class="py-12 text-center text-xs text-muted-foreground">
-            No profile records match your selected filters. Click <span class="font-semibold text-foreground">Track Profile</span> to add profiles!
-          </td>
-        </tr>
-      `;
-      renderSummaryRow([]);
-      return;
-    }
-
-    const visibleCols = COLUMN_DEFS.filter(c => colVisible[c.key] || c.locked);
-
-    competitorsTableBody.innerHTML = filtered.map((c) => {
-      const avatar         = c.avatar_url || `https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&h=200&q=80`;
-      const strategyAge    = c.strategy_age_days ? `${c.strategy_age_days}d active` : 'Unknown';
-      const isOwn          = c.account_type === 'own';
-      const typePill       = isOwn
-        ? `<span class="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-bold text-blue-500 border border-blue-500/20">👤 My Account</span>`
-        : `<span class="inline-flex items-center gap-1 rounded-full bg-purple-500/10 px-2 py-0.5 text-[10px] font-bold text-purple-500 border border-purple-500/20">🎯 Competitor</span>`;
-
-      const tagsHtml = (Array.isArray(c.tags) && c.tags.length > 0)
-        ? `<div class="flex flex-wrap items-center gap-1 pt-1">${c.tags.map(t => `<span class="rounded bg-muted px-1.5 py-0.5 text-[9.5px] font-semibold text-muted-foreground border border-border/50">#${t}</span>`).join('')}</div>`
-        : '';
-
-      const cellMap: Record<string, string> = {
-        profile: `
-          <td class="py-4 px-6">
-            <div class="flex items-center gap-3">
-              <img src="${avatar}" alt="${c.username}" class="h-10 w-10 rounded-full object-cover border border-border shadow-sm flex-shrink-0" />
-              <div class="flex flex-col min-w-0">
-                <a href="/competitors/details?id=${c.id}" class="text-xs font-bold text-foreground hover:text-primary transition-colors truncate">
-                  ${c.full_name || c.username}
-                </a>
-                <div class="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                  <span>@${c.username}</span>
-                  <a href="https://www.pinterest.com/${c.username}/" target="_blank" rel="noopener noreferrer" class="text-muted-foreground/70 hover:text-primary" title="View Pinterest Profile">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-                  </a>
-                </div>
-                ${tagsHtml}
-              </div>
-            </div>
-          </td>`,
-
-        type: `<td class="py-4 px-4">${typePill}</td>`,
-
-        niche: `
-          <td class="py-4 px-4">
-            <span class="inline-flex items-center rounded-md bg-muted px-2 py-1 text-[11px] font-medium text-foreground">
-              ${c.niche || 'General'}
-            </span>
-          </td>`,
-
-        reach:    `<td class="py-4 px-4 font-bold text-emerald-500">${formatNumber(c.profile_reach || 0)}</td>`,
-        views:    `<td class="py-4 px-4 font-semibold text-foreground">${formatNumber(c.profile_views || 0)}</td>`,
-        followers:`<td class="py-4 px-4 font-semibold text-foreground">${formatNumber(c.follower_count || 0)}</td>`,
-        pins:     `<td class="py-4 px-4 text-foreground">${formatNumber(c.pin_count || 0)}</td>`,
-
-        boards_count: `
-          <td class="py-4 px-4">
-            <span class="inline-flex items-center rounded-md bg-muted/60 px-2 py-1 text-[11px] font-semibold text-foreground">
-              ${c.boards_count ?? 0}
-            </span>
-          </td>`,
-
-        last_pin: `<td class="py-4 px-4 text-[11px] text-muted-foreground">${formatDate(c.last_pin_at)}</td>`,
-
-        strategy_age: `
-          <td class="py-4 px-4">
-            <span class="rounded bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
-              ${strategyAge}
-            </span>
-          </td>`,
-
-        actions: `
-          <td class="py-4 px-6 text-right">
-            <div class="flex items-center justify-end gap-2">
-              <button
-                data-edit-id="${c.id}"
-                class="edit-competitor-btn rounded-lg border border-border p-1.5 text-muted-foreground hover:bg-amber-500/10 hover:text-amber-500 transition-colors"
-                title="Edit profile"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-              </button>
-
-              <button
-                data-paste-id="${c.id}"
-                class="paste-payload-btn rounded-lg border border-border p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                title="Paste DevTools Payload for this profile"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
-              </button>
-
-              <a
-                href="/competitors/details?id=${c.id}"
-                class="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2.5 py-1.5 text-[11px] font-semibold text-foreground hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all shadow-sm"
-              >
-                <span>Deep-Dive</span>
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-              </a>
-
-              <button
-                data-delete-id="${c.id}"
-                class="delete-competitor-btn rounded-lg p-1.5 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors"
-                title="Delete profile"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-              </button>
-            </div>
-          </td>`,
-      };
-
-      const cells = visibleCols.map(col => cellMap[col.key] || `<td class="py-4 px-4"></td>`).join('');
-      return `<tr class="hover:bg-muted/30 transition-colors">${cells}</tr>`;
-    }).join('');
-
-    // Attach row button listeners
-    competitorsTableBody.querySelectorAll<HTMLElement>('.edit-competitor-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const id = btn.dataset.editId!;
-        openEditModal(id);
-      });
-    });
-
-    competitorsTableBody.querySelectorAll<HTMLElement>('.paste-payload-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const id = btn.dataset.pasteId;
-        if (id) openPasteModal(id);
-      });
-    });
-
-    competitorsTableBody.querySelectorAll<HTMLElement>('.delete-competitor-btn').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const id = btn.dataset.deleteId;
-        if (id && confirm('Are you sure you want to remove this profile from tracking?')) {
-          try {
-            await deleteCompetitor(id);
-            showStatus('Profile removed successfully.');
-            await loadWorkspaceData();
-          } catch (err: any) {
-            showStatus(`Failed to delete: ${err.message}`, true);
-          }
-        }
-      });
-    });
-
-    renderSummaryRow(filtered);
-  }
-
-  // ─── KPI Rendering ────────────────────────────────────────────────────────
-  function renderKPIs() {
-    const total      = competitorsList.length;
-    const ownCount   = competitorsList.filter(c => c.account_type === 'own').length;
-    const compCount  = competitorsList.filter(c => c.account_type !== 'own').length;
-
-    if (kpiTotalCompetitors) kpiTotalCompetitors.textContent = String(total);
-    if (kpiOwnCount)         kpiOwnCount.textContent = String(ownCount);
-    if (kpiCompetitorCount)  kpiCompetitorCount.textContent = String(compCount);
-  }
-
-  // ─── Tag Dropdown ─────────────────────────────────────────────────────────
+  // ─── Tags dropdown ────────────────────────────────────────────────────────
   function populateTagDropdown() {
-    if (!tagFilterSelect) return;
-    const tagsSet = new Set<string>();
-    competitorsList.forEach(c => {
-      if (Array.isArray(c.tags)) c.tags.forEach(t => tagsSet.add(t));
-    });
-
-    const tagsArr = Array.from(tagsSet).sort();
+    const s = new Set<string>();
+    competitorsList.forEach(c => Array.isArray(c.tags) && c.tags.forEach(t => s.add(t)));
+    const arr = Array.from(s).sort();
     tagFilterSelect.innerHTML = `<option value="all">All Tags</option>` +
-      tagsArr.map(t => `<option value="${t}" ${selectedTag === t ? 'selected' : ''}>#${t}</option>`).join('');
+      arr.map(t => `<option value="${escHtml(t)}" ${selectedTag === t ? 'selected' : ''}>#${escHtml(t)}</option>`).join('');
   }
 
-  // ─── Payload select ───────────────────────────────────────────────────────
-  const payloadTargetSelect    = document.getElementById('payload-target-competitor-select') as HTMLSelectElement;
-  const rawPayloadTextarea     = document.getElementById('raw-payload-textarea') as HTMLTextAreaElement;
-  const detectedPayloadTypeSpan = document.getElementById('detected-payload-type') as HTMLElement;
-
-  function populatePayloadSelect() {
-    if (!payloadTargetSelect) return;
-    payloadTargetSelect.innerHTML = `
-      <option value="" disabled selected>Select profile...</option>
-      ${competitorsList
-        .map(c => `<option value="${c.id}" ${selectedCompetitorIdForPayload === c.id ? 'selected' : ''}>${c.full_name || c.username} (@${c.username})</option>`)
-        .join('')}
-    `;
-  }
-
-  // ─── Load data ────────────────────────────────────────────────────────────
-  async function loadWorkspaceData() {
-    const activeWsId = getActiveWorkspaceId();
-    competitorsList = await getCompetitors(activeWsId);
-    populateTagDropdown();
-    renderKPIs();
+  // ─── Pagination & rows per page ───────────────────────────────────────────
+  rowsSelect.value = String(rowsPerPage);
+  rowsSelect.addEventListener('change', () => {
+    rowsPerPage = Number(rowsSelect.value);
+    localStorage.setItem('po_comp_rows', String(rowsPerPage));
+    page = 1;
     renderTable();
-    populatePayloadSelect();
-    buildColVisibilityMenu();
-  }
+  });
+  prevBtn.addEventListener('click', () => { if (page > 1) { page--; renderTable(); } });
+  nextBtn.addEventListener('click', () => { page++; renderTable(); });
 
-  // ─── Filters ─────────────────────────────────────────────────────────────
+  // ─── Filter tabs & search ─────────────────────────────────────────────────
+  const typeTabBtns = document.querySelectorAll<HTMLButtonElement>('.account-type-tab-btn');
+  function syncTabClasses() {
+    typeTabBtns.forEach(b => {
+      const active = (b.dataset.typeTab || 'all') === activeTypeTab;
+      b.className = active
+        ? 'account-type-tab-btn rounded-lg px-3.5 py-1.5 text-xs font-semibold bg-background text-foreground shadow-xs transition-all'
+        : 'account-type-tab-btn rounded-lg px-3.5 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all';
+    });
+  }
   typeTabBtns.forEach(btn => {
     btn.addEventListener('click', () => {
-      typeTabBtns.forEach(b => {
-        b.className = 'account-type-tab-btn rounded-lg px-3.5 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all flex items-center gap-1';
-      });
-      btn.className = 'account-type-tab-btn rounded-lg px-3.5 py-1.5 text-xs font-semibold bg-background text-foreground shadow-xs transition-all flex items-center gap-1';
       activeTypeTab = (btn.dataset.typeTab as any) || 'all';
+      syncTabClasses();
+      page = 1;
       renderTable();
     });
   });
 
-  if (tagFilterSelect) {
-    tagFilterSelect.addEventListener('change', () => {
-      selectedTag = tagFilterSelect.value;
-      renderTable();
-    });
+  tagFilterSelect.addEventListener('change', () => { selectedTag = tagFilterSelect.value; page = 1; renderTable(); });
+
+  let searchDebounce: any;
+  searchInput.addEventListener('input', () => {
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(() => { searchQuery = searchInput.value.trim(); page = 1; renderTable(); }, 180);
+  });
+
+  // ─── CSV Export ───────────────────────────────────────────────────────────
+  function exportCSV(idFilter?: string[]) {
+    const list = idFilter && idFilter.length
+      ? competitorsList.filter(c => idFilter.includes(c.id))
+      : applySortAndFilter();
+    if (!list.length) { toast('No profiles to export', 'info'); return; }
+
+    const headers = ['Username', 'Full Name', 'Account Type', 'Niche', 'Monthly Reach', 'Profile Views', 'Followers', 'Pins', 'Boards', 'Last Pin At', 'Tags'];
+    const rows = list.map(c => [
+      c.username,
+      c.full_name || '',
+      c.account_type || 'competitor',
+      c.niche || '',
+      c.profile_reach ?? '',
+      c.profile_views ?? '',
+      c.follower_count ?? '',
+      c.pin_count ?? '',
+      c.boards_count ?? '',
+      c.last_pin_at || '',
+      Array.isArray(c.tags) ? c.tags.join(';') : '',
+    ]);
+
+    const csv = [headers, ...rows]
+      .map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','))
+      .join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `pinorbit-competitors-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast(`Exported ${list.length} profiles to CSV`);
   }
+  $('export-csv-btn').addEventListener('click', () => exportCSV());
 
-  // ─── Add Competitor Modal ─────────────────────────────────────────────────
-  const addCompetitorModal    = document.getElementById('add-competitor-modal') as HTMLElement;
-  const openAddCompetitorBtn  = document.getElementById('open-add-competitor-modal') as HTMLElement;
-  const closeAddCompetitorBtn = document.getElementById('close-add-competitor-modal') as HTMLElement;
-  const cancelAddCompetitorBtn = document.getElementById('cancel-add-competitor-modal') as HTMLElement;
-  const addCompetitorForm     = document.getElementById('add-competitor-form') as HTMLFormElement;
-  const addCompetitorError    = document.getElementById('add-competitor-error') as HTMLElement;
+  // ─── Side Drawer ──────────────────────────────────────────────────────────
+  function openDrawer(id: string) {
+    const c = competitorsList.find(x => x.id === id);
+    if (!c) return;
 
-  function openAddModal() {
-    if (addCompetitorError) addCompetitorError.classList.add('hidden');
-    if (addCompetitorForm) addCompetitorForm.reset();
-    addCompetitorModal?.classList.remove('hidden');
-    addCompetitorModal?.classList.add('flex');
-  }
-  function closeAddModal() {
-    addCompetitorModal?.classList.add('hidden');
-    addCompetitorModal?.classList.remove('flex');
-  }
+    drawerBody.innerHTML = `
+      <div class="flex items-center gap-3 pb-3 border-b border-border">
+        <img src="${c.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&h=200&q=80'}" class="h-12 w-12 rounded-full object-cover border border-border" />
+        <div class="min-w-0 flex-1">
+          <div class="text-sm font-bold text-foreground truncate">${escHtml(c.full_name || c.username)}</div>
+          <div class="text-xs text-muted-foreground">@${escHtml(c.username)}</div>
+        </div>
+        <a href="/competitors/details?id=${c.id}" class="rounded-xl bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-sm hover:bg-primary/90">Full Deep-Dive →</a>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div class="rounded-xl border border-border bg-background p-3">
+          <div class="text-[10px] text-muted-foreground uppercase font-semibold">Monthly Reach</div>
+          <div class="text-lg font-bold text-emerald-500 mt-0.5">${fmtCompact(c.profile_reach)}</div>
+        </div>
+        <div class="rounded-xl border border-border bg-background p-3">
+          <div class="text-[10px] text-muted-foreground uppercase font-semibold">Profile Views</div>
+          <div class="text-lg font-bold text-foreground mt-0.5">${fmtCompact(c.profile_views)}</div>
+        </div>
+        <div class="rounded-xl border border-border bg-background p-3">
+          <div class="text-[10px] text-muted-foreground uppercase font-semibold">Followers</div>
+          <div class="text-lg font-bold text-foreground mt-0.5">${fmtCompact(c.follower_count)}</div>
+        </div>
+        <div class="rounded-xl border border-border bg-background p-3">
+          <div class="text-[10px] text-muted-foreground uppercase font-semibold">Pins</div>
+          <div class="text-lg font-bold text-foreground mt-0.5">${fmtCompact(c.pin_count)}</div>
+        </div>
+      </div>
+      <div class="space-y-2">
+        <div class="text-xs font-bold text-foreground">Reach History (Last 14d)</div>
+        <div id="drawer-sparkline" class="rounded-xl border border-border bg-background p-3">
+          <div class="text-xs text-muted-foreground animate-pulse">Loading history…</div>
+        </div>
+      </div>
+      <div class="space-y-2">
+        <div class="text-xs font-bold text-foreground">Strategy Notes</div>
+        <div class="rounded-xl border border-border bg-background p-3 text-xs text-muted-foreground whitespace-pre-wrap">${escHtml(c.notes || 'No internal notes set yet.')}</div>
+      </div>`;
 
-  if (openAddCompetitorBtn)  openAddCompetitorBtn.addEventListener('click', openAddModal);
-  if (closeAddCompetitorBtn) closeAddCompetitorBtn.addEventListener('click', closeAddModal);
-  if (cancelAddCompetitorBtn) cancelAddCompetitorBtn.addEventListener('click', closeAddModal);
-  document.getElementById('add-competitor-backdrop')?.addEventListener('click', closeAddModal);
+    drawer.classList.remove('translate-x-full');
+    drawerBackdrop.classList.remove('pointer-events-none');
+    drawerBackdrop.classList.remove('opacity-0');
+    drawerBackdrop.classList.add('opacity-100');
 
-  if (addCompetitorForm) {
-    addCompetitorForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const typeRadio    = document.querySelector<HTMLInputElement>('input[name="account_type_radio"]:checked');
-      const accountTypeVal = typeRadio?.value || 'competitor';
-      const usernameInput = (document.getElementById('competitor-username-input') as HTMLInputElement).value;
-      const nicheInput    = (document.getElementById('competitor-niche-input') as HTMLInputElement).value;
-      const tagsInput     = (document.getElementById('competitor-tags-input') as HTMLInputElement).value;
-      const notesInput    = (document.getElementById('competitor-notes-input') as HTMLTextAreaElement).value;
-
-      try {
-        const activeWsId = getActiveWorkspaceId();
-        await addCompetitor({ username: usernameInput, niche: nicheInput, notes: notesInput, account_type: accountTypeVal as 'own' | 'competitor', tags: tagsInput, workspace_id: activeWsId });
-        closeAddModal();
-        showStatus(`Profile @${usernameInput.replace(/^@/, '')} added to workspace!`);
-        await loadWorkspaceData();
-      } catch (err: any) {
-        if (addCompetitorError) {
-          addCompetitorError.textContent = err.message || 'Failed to add profile.';
-          addCompetitorError.classList.remove('hidden');
-        }
+    // Async load details for sparkline
+    getCompetitorDetails(c.id).then(det => {
+      const el = $('drawer-sparkline');
+      if (!el) return;
+      if (!det || !det.snapshots || det.snapshots.length < 2) {
+        el.innerHTML = '<div class="text-[11px] text-muted-foreground">Not enough snapshot history yet. Ingest DevTools payloads to build timeline.</div>';
+        return;
       }
+      const vals = det.snapshots.map(s => s.profile_reach || 0);
+      el.innerHTML = sparkline(vals, 'text-emerald-500');
+    }).catch(() => {
+      const el = $('drawer-sparkline');
+      if (el) el.innerHTML = '<div class="text-[11px] text-muted-foreground">Could not load sparkline.</div>';
     });
   }
 
-  // ─── Edit Competitor Modal ────────────────────────────────────────────────
-  const editCompetitorModal    = document.getElementById('edit-competitor-modal') as HTMLElement;
-  const closeEditCompetitorBtn = document.getElementById('close-edit-competitor-modal') as HTMLElement;
-  const cancelEditCompetitorBtn = document.getElementById('cancel-edit-competitor-modal') as HTMLElement;
-  const editCompetitorForm     = document.getElementById('edit-competitor-form') as HTMLFormElement;
-  const editCompetitorError    = document.getElementById('edit-competitor-error') as HTMLElement;
-  const editIdInput            = document.getElementById('edit-competitor-id') as HTMLInputElement;
-  const editFullnameInput      = document.getElementById('edit-fullname-input') as HTMLInputElement;
-  const editUsernameInput      = document.getElementById('edit-username-input') as HTMLInputElement;
-  const editNicheInput         = document.getElementById('edit-niche-input') as HTMLInputElement;
-  const editTagsInput          = document.getElementById('edit-tags-input') as HTMLInputElement;
-
-  function openEditModal(id: string) {
-    const competitor = competitorsList.find(c => c.id === id);
-    if (!competitor) return;
-
-    if (editCompetitorError) editCompetitorError.classList.add('hidden');
-    if (editIdInput)       editIdInput.value = id;
-    if (editFullnameInput) editFullnameInput.value = competitor.full_name || '';
-    if (editUsernameInput) editUsernameInput.value = competitor.username || '';
-    if (editNicheInput)    editNicheInput.value = competitor.niche || '';
-    if (editTagsInput)     editTagsInput.value = Array.isArray(competitor.tags) ? competitor.tags.join(', ') : '';
-
-    // Set radio
-    const currentType = competitor.account_type === 'own' ? 'own' : 'competitor';
-    const radios = document.querySelectorAll<HTMLInputElement>('input[name="edit_account_type_radio"]');
-    radios.forEach(r => { r.checked = r.value === currentType; });
-
-    editCompetitorModal?.classList.remove('hidden');
-    editCompetitorModal?.classList.add('flex');
+  function closeDrawer() {
+    drawer.classList.add('translate-x-full');
+    drawerBackdrop.classList.add('opacity-0');
+    drawerBackdrop.classList.remove('opacity-100');
+    drawerBackdrop.classList.add('pointer-events-none');
   }
+  $('drawer-close').addEventListener('click', closeDrawer);
+  drawerBackdrop.addEventListener('click', closeDrawer);
 
-  function closeEditModal() {
-    editCompetitorModal?.classList.add('hidden');
-    editCompetitorModal?.classList.remove('flex');
-  }
+  // ─── Compare modal ────────────────────────────────────────────────────────
+  compareBtn.addEventListener('click', async () => {
+    const list = competitorsList.filter(c => selectedIds.has(c.id));
+    if (list.length < 2) return;
 
-  if (closeEditCompetitorBtn) closeEditCompetitorBtn.addEventListener('click', closeEditModal);
-  if (cancelEditCompetitorBtn) cancelEditCompetitorBtn.addEventListener('click', closeEditModal);
-  document.getElementById('edit-competitor-backdrop')?.addEventListener('click', closeEditModal);
+    // Load deltas in parallel
+    const details = await Promise.all(list.map(c => getCompetitorDetails(c.id).catch(() => null)));
 
-  if (editCompetitorForm) {
-    editCompetitorForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const id = editIdInput?.value;
-      if (!id) return;
+    const body = $('compare-body');
+    body.innerHTML = `
+      <table class="w-full text-left text-xs border border-border">
+        <thead>
+          <tr class="bg-muted border-b border-border">
+            <th class="py-3 px-4 text-muted-foreground font-semibold">Metric</th>
+            ${list.map(c => `
+              <th class="py-3 px-4 font-bold text-foreground">
+                <div class="flex items-center gap-2">
+                  <img src="${c.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&h=200&q=80'}" class="h-6 w-6 rounded-full" />
+                  <span>@${escHtml(c.username)}</span>
+                </div>
+              </th>`).join('')}
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-border bg-card">
+          <tr><td class="py-2.5 px-4 font-semibold text-muted-foreground">Type</td>${list.map(c => `<td class="py-2.5 px-4">${c.account_type === 'own' ? '👤 My Account' : '🎯 Competitor'}</td>`).join('')}</tr>
+          <tr><td class="py-2.5 px-4 font-semibold text-muted-foreground">Niche</td>${list.map(c => `<td class="py-2.5 px-4">${escHtml(c.niche || '—')}</td>`).join('')}</tr>
+          <tr><td class="py-2.5 px-4 font-semibold text-muted-foreground">Monthly Reach</td>${list.map((c, i) => {
+            const d = details[i]?.deltas?.reach;
+            return `<td class="py-2.5 px-4 font-bold text-emerald-500">${fmtCompact(c.profile_reach)} ${d ? deltaChip(d.change, d.percent) : ''}</td>`;
+          }).join('')}</tr>
+          <tr><td class="py-2.5 px-4 font-semibold text-muted-foreground">Profile Views</td>${list.map((c, i) => {
+            const d = details[i]?.deltas?.views;
+            return `<td class="py-2.5 px-4 font-semibold text-foreground">${fmtCompact(c.profile_views)} ${d ? deltaChip(d.change, d.percent) : ''}</td>`;
+          }).join('')}</tr>
+          <tr><td class="py-2.5 px-4 font-semibold text-muted-foreground">Followers</td>${list.map((c, i) => {
+            const d = details[i]?.deltas?.followers;
+            return `<td class="py-2.5 px-4 font-semibold text-foreground">${fmtCompact(c.follower_count)} ${d ? deltaChip(d.change, d.percent) : ''}</td>`;
+          }).join('')}</tr>
+          <tr><td class="py-2.5 px-4 font-semibold text-muted-foreground">Pins</td>${list.map(c => `<td class="py-2.5 px-4 text-foreground">${fmtCompact(c.pin_count)}</td>`).join('')}</tr>
+          <tr><td class="py-2.5 px-4 font-semibold text-muted-foreground">Boards</td>${list.map(c => `<td class="py-2.5 px-4 text-foreground">${c.boards_count ?? 0}</td>`).join('')}</tr>
+          <tr><td class="py-2.5 px-4 font-semibold text-muted-foreground">Last Pin</td>${list.map(c => `<td class="py-2.5 px-4 text-muted-foreground">${timeAgo(c.last_pin_at)}</td>`).join('')}</tr>
+          <tr><td class="py-2.5 px-4 font-semibold text-muted-foreground">Actions</td>${list.map(c => `<td class="py-2.5 px-4"><a href="/competitors/details?id=${c.id}" class="text-primary font-bold hover:underline">Deep-Dive →</a></td>`).join('')}</tr>
+        </tbody>
+      </table>`;
+    showOverlay($('compare-modal'));
+  });
 
-      const typeRadio = document.querySelector<HTMLInputElement>('input[name="edit_account_type_radio"]:checked');
-      const rawTags = editTagsInput?.value || '';
-      const tagsArr = rawTags.split(',').map(t => t.trim()).filter(Boolean);
+  // ─── Add profile modal ────────────────────────────────────────────────────
+  $('open-add-competitor-modal').addEventListener('click', () => {
+    $('add-competitor-error').classList.add('hidden');
+    ($('add-competitor-form') as HTMLFormElement).reset();
+    showOverlay($('add-competitor-modal'));
+  });
+  $('add-competitor-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const typeRadio = document.querySelector<HTMLInputElement>('input[name="account_type_radio"]:checked');
+    const u = ($('competitor-username-input') as HTMLInputElement).value.trim();
+    const niche = ($('competitor-niche-input') as HTMLInputElement).value.trim();
+    const tags = ($('competitor-tags-input') as HTMLInputElement).value.trim();
+    const notes = ($('competitor-notes-input') as HTMLTextAreaElement).value.trim();
 
-      const submitBtn = document.getElementById('submit-edit-competitor-modal') as HTMLButtonElement;
-      if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Saving…'; }
-
-      try {
-        await updateCompetitor(id, {
-          full_name:    editFullnameInput?.value || undefined,
-          username:     editUsernameInput?.value || undefined,
-          account_type: typeRadio?.value || 'competitor',
-          niche:        editNicheInput?.value || undefined,
-          tags:         tagsArr,
-        });
-
-        closeEditModal();
-        showStatus('Profile updated successfully.');
-        await loadWorkspaceData();
-      } catch (err: any) {
-        if (editCompetitorError) {
-          editCompetitorError.textContent = err.message || 'Failed to update profile.';
-          editCompetitorError.classList.remove('hidden');
-        }
-      } finally {
-        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Save Changes'; }
-      }
-    });
-  }
-
-  // ─── Paste Payload Modal ──────────────────────────────────────────────────
-  const pastePayloadModal    = document.getElementById('paste-payload-modal') as HTMLElement;
-  const openPastePayloadBtn  = document.getElementById('open-paste-payload-modal') as HTMLElement;
-  const closePastePayloadBtn = document.getElementById('close-paste-payload-modal') as HTMLElement;
-  const cancelPastePayloadBtn = document.getElementById('cancel-paste-payload-modal') as HTMLElement;
-  const pastePayloadForm     = document.getElementById('paste-payload-form') as HTMLFormElement;
-  const pastePayloadError    = document.getElementById('paste-payload-error') as HTMLElement;
-
-  function openPasteModal(competitorId?: string) {
-    selectedCompetitorIdForPayload = competitorId || null;
-    populatePayloadSelect();
-    if (pastePayloadError) pastePayloadError.classList.add('hidden');
-    if (pastePayloadForm) pastePayloadForm.reset();
-    if (detectedPayloadTypeSpan) {
-      detectedPayloadTypeSpan.textContent = 'Waiting for paste...';
-      detectedPayloadTypeSpan.className = 'rounded bg-muted px-2 py-0.5 text-[10px] font-semibold text-foreground';
+    try {
+      await addCompetitor({
+        username: u, niche, notes, tags,
+        account_type: (typeRadio?.value as any) || 'competitor',
+        workspace_id: getActiveWorkspaceId(),
+      });
+      hideOverlay($('add-competitor-modal'));
+      toast(`Started tracking @${u.replace(/^@/, '')}`);
+      await loadWorkspaceData();
+    } catch (err: any) {
+      const er = $('add-competitor-error');
+      er.textContent = err.message || 'Failed to add profile';
+      er.classList.remove('hidden');
     }
-    pastePayloadModal?.classList.remove('hidden');
-    pastePayloadModal?.classList.add('flex');
-  }
+  });
 
-  function closePasteModal() {
-    pastePayloadModal?.classList.add('hidden');
-    pastePayloadModal?.classList.remove('flex');
-  }
-
-  if (openPastePayloadBtn)   openPastePayloadBtn.addEventListener('click', () => openPasteModal());
-  if (closePastePayloadBtn)  closePastePayloadBtn.addEventListener('click', closePasteModal);
-  if (cancelPastePayloadBtn) cancelPastePayloadBtn.addEventListener('click', closePasteModal);
-  document.getElementById('paste-payload-backdrop')?.addEventListener('click', closePasteModal);
-
-  if (rawPayloadTextarea) {
-    rawPayloadTextarea.addEventListener('input', () => {
-      const text = rawPayloadTextarea.value.trim();
-      if (!text) {
-        if (detectedPayloadTypeSpan) {
-          detectedPayloadTypeSpan.textContent = 'Waiting for paste...';
-          detectedPayloadTypeSpan.className = 'rounded bg-muted px-2 py-0.5 text-[10px] font-semibold text-foreground';
-        }
-        return;
-      }
-      const parsed = parsePinterestPayload(text);
-      if (parsed.type === 'user_profile') {
-        if (detectedPayloadTypeSpan) {
-          detectedPayloadTypeSpan.textContent = '✓ User Profile (UserResource)';
-          detectedPayloadTypeSpan.className = 'rounded bg-emerald-500/20 text-emerald-500 px-2 py-0.5 text-[10px] font-bold';
-        }
-      } else if (parsed.type === 'user_boards') {
-        if (detectedPayloadTypeSpan) {
-          detectedPayloadTypeSpan.textContent = '✓ User Boards (BoardsResource)';
-          detectedPayloadTypeSpan.className = 'rounded bg-primary/20 text-primary px-2 py-0.5 text-[10px] font-bold';
-        }
-      } else {
-        if (detectedPayloadTypeSpan) {
-          detectedPayloadTypeSpan.textContent = '✕ Unknown Payload';
-          detectedPayloadTypeSpan.className = 'rounded bg-rose-500/20 text-rose-500 px-2 py-0.5 text-[10px] font-bold';
-        }
-      }
+  // ─── Edit profile modal ───────────────────────────────────────────────────
+  function openEditModal(id: string) {
+    const c = competitorsList.find(x => x.id === id);
+    if (!c) return;
+    $('edit-competitor-error').classList.add('hidden');
+    ($('edit-competitor-id') as HTMLInputElement).value = id;
+    ($('edit-fullname-input') as HTMLInputElement).value = c.full_name || '';
+    ($('edit-username-input') as HTMLInputElement).value = c.username || '';
+    ($('edit-niche-input') as HTMLInputElement).value = c.niche || '';
+    ($('edit-tags-input') as HTMLInputElement).value = Array.isArray(c.tags) ? c.tags.join(', ') : '';
+    document.querySelectorAll<HTMLInputElement>('input[name="edit_account_type_radio"]').forEach(r => {
+      r.checked = r.value === (c.account_type === 'own' ? 'own' : 'competitor');
     });
+    showOverlay($('edit-competitor-modal'));
   }
+  $('edit-competitor-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const id = ($('edit-competitor-id') as HTMLInputElement).value;
+    const typeRadio = document.querySelector<HTMLInputElement>('input[name="edit_account_type_radio"]:checked');
+    const rawTags = ($('edit-tags-input') as HTMLInputElement).value;
+    const tagsArr = rawTags.split(',').map(t => t.trim()).filter(Boolean);
+    const btn = $('submit-edit-competitor-modal') as HTMLButtonElement;
+    btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+      await updateCompetitor(id, {
+        full_name: ($('edit-fullname-input') as HTMLInputElement).value || undefined,
+        username: ($('edit-username-input') as HTMLInputElement).value || undefined,
+        account_type: (typeRadio?.value as any) || 'competitor',
+        niche: ($('edit-niche-input') as HTMLInputElement).value || undefined,
+        tags: tagsArr,
+      });
+      hideOverlay($('edit-competitor-modal'));
+      toast('Profile updated');
+      await loadWorkspaceData();
+    } catch (err: any) {
+      const er = $('edit-competitor-error');
+      er.textContent = err.message || 'Failed to update';
+      er.classList.remove('hidden');
+    } finally {
+      btn.disabled = false; btn.textContent = 'Save Changes';
+    }
+  });
 
-  if (pastePayloadForm) {
-    pastePayloadForm.addEventListener('submit', async (e) => {
+  // ─── Paste payload modal ──────────────────────────────────────────────────
+  function openPasteModal(id?: string) {
+    selectedCompetitorIdForPayload = id || null;
+    const sel = $('payload-target-competitor-select') as HTMLSelectElement;
+    sel.innerHTML = `<option value="" disabled ${!id ? 'selected' : ''}>Select profile…</option>` +
+      competitorsList.map(c => `<option value="${c.id}" ${c.id === id ? 'selected' : ''}>${escHtml(c.full_name || c.username)} (@${escHtml(c.username)})</option>`).join('');
+    $('paste-payload-error').classList.add('hidden');
+    ($('paste-payload-form') as HTMLFormElement).reset();
+    $('detected-payload-type').textContent = 'Waiting for paste...';
+    $('detected-payload-type').className = 'rounded bg-muted px-2 py-0.5 text-[10px] font-semibold text-foreground';
+    showOverlay($('paste-payload-modal'));
+  }
+  $('open-paste-payload-modal').addEventListener('click', () => openPasteModal());
+
+  const rawPayloadTextarea = $('raw-payload-textarea') as HTMLTextAreaElement;
+  rawPayloadTextarea.addEventListener('input', () => {
+    const text = rawPayloadTextarea.value.trim();
+    const tag = $('detected-payload-type');
+    if (!text) { tag.textContent = 'Waiting for paste...'; tag.className = 'rounded bg-muted px-2 py-0.5 text-[10px] font-semibold text-foreground'; return; }
+    const p = parsePinterestPayload(text);
+    if (p.type === 'user_profile') {
+      tag.textContent = '✓ User Profile (UserResource)';
+      tag.className = 'rounded bg-emerald-500/20 text-emerald-500 px-2 py-0.5 text-[10px] font-bold';
+    } else if (p.type === 'user_boards') {
+      tag.textContent = '✓ User Boards (BoardsResource)';
+      tag.className = 'rounded bg-primary/20 text-primary px-2 py-0.5 text-[10px] font-bold';
+    } else {
+      tag.textContent = '✕ Unknown Payload';
+      tag.className = 'rounded bg-rose-500/20 text-rose-500 px-2 py-0.5 text-[10px] font-bold';
+    }
+  });
+
+  $('paste-payload-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const sel = $('payload-target-competitor-select') as HTMLSelectElement;
+    const targetId = sel.value;
+    const text = rawPayloadTextarea.value.trim();
+    if (!targetId) {
+      const er = $('paste-payload-error');
+      er.textContent = 'Please select a target profile';
+      er.classList.remove('hidden');
+      return;
+    }
+    const res = await ingestDevToolsPayload(targetId, text);
+    if (res.success) {
+      hideOverlay($('paste-payload-modal'));
+      toast(res.message);
+      await loadWorkspaceData();
+    } else {
+      const er = $('paste-payload-error');
+      er.textContent = res.message;
+      er.classList.remove('hidden');
+    }
+  });
+
+  // ─── Refresh button ───────────────────────────────────────────────────────
+  $('refresh-btn').addEventListener('click', async () => {
+    const icon = $('refresh-icon');
+    icon.classList.add('animate-spin');
+    try {
+      await loadWorkspaceData();
+      toast('Competitor data refreshed');
+    } finally {
+      setTimeout(() => icon.classList.remove('animate-spin'), 400);
+    }
+  });
+
+  // ─── Keyboard shortcuts ───────────────────────────────────────────────────
+  document.addEventListener('keydown', (e) => {
+    if (e.key === '/' && document.activeElement !== searchInput && !(document.activeElement instanceof HTMLInputElement) && !(document.activeElement instanceof HTMLTextAreaElement)) {
       e.preventDefault();
-      const targetId   = payloadTargetSelect?.value;
-      const payloadText = rawPayloadTextarea?.value.trim();
+      searchInput.focus();
+      searchInput.select();
+    } else if (e.key === 'Escape') {
+      if (!drawer.classList.contains('translate-x-full')) closeDrawer();
+      document.querySelectorAll<HTMLElement>('.overlay-root').forEach(m => {
+        if (!m.classList.contains('hidden')) hideOverlay(m);
+      });
+    }
+  });
 
-      if (!targetId) {
-        if (pastePayloadError) {
-          pastePayloadError.textContent = 'Please select a target profile.';
-          pastePayloadError.classList.remove('hidden');
-        }
-        return;
-      }
-
-      const res = await ingestDevToolsPayload(targetId, payloadText);
-      if (res.success) {
-        closePasteModal();
-        showStatus(res.message);
-        await loadWorkspaceData();
-      } else {
-        if (pastePayloadError) {
-          pastePayloadError.textContent = res.message;
-          pastePayloadError.classList.remove('hidden');
-        }
-      }
-    });
+  // ─── Data loader ──────────────────────────────────────────────────────────
+  async function loadWorkspaceData() {
+    renderSkeleton();
+    try {
+      const wsId = getActiveWorkspaceId();
+      competitorsList = await getCompetitors(wsId);
+      populateTagDropdown();
+      renderKPIs();
+      renderTable();
+      buildColVisibilityMenu();
+      $('updated-at').textContent = `Updated ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    } catch (err: any) {
+      toast(`Failed to load data: ${err.message}`, 'error');
+    }
   }
 
   // ─── Boot ─────────────────────────────────────────────────────────────────

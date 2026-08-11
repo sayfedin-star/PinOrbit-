@@ -429,8 +429,8 @@ export async function getCompetitors(workspaceId?: string): Promise<Competitor[]
 
     const { data: competitors, error } = await query;
 
-    if (error || !competitors) {
-      console.warn('Supabase competitors query failed, falling back to mock state:', error);
+    if (error || !competitors || competitors.length === 0) {
+      if (error) console.warn('Supabase competitors query failed, falling back to mock state:', error);
       return workspaceId
         ? mockCompetitors.filter((c) => matchesWorkspace(c.workspace_id, workspaceId))
         : [...mockCompetitors];
