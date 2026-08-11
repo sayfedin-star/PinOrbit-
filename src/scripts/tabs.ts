@@ -5,7 +5,7 @@ const hash = window.location.hash;
 tabs.forEach(tab => {
   tab.addEventListener('click', () => {
     const target = tab.getAttribute('aria-controls');
-    panels.forEach(p => p.hidden = p.id !== target);
+    panels.forEach(p => (p as HTMLElement).hidden = p.id !== target);
     tabs.forEach(t => {
       const selected = t === tab;
       t.setAttribute('aria-selected', String(selected));

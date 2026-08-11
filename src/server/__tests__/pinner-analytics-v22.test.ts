@@ -212,6 +212,9 @@ describe('Pinner Analytics R11 Contract & V22 Methods Test Suite', () => {
         top_pins_schedule_status: 'pending',
         created_at: '2026-08-01T00:00:00Z',
         updated_at: '2026-08-01T00:00:00Z',
+        fastcron_notify: false,
+        fastcron_timeout: 30,
+        fastcron_instances: 1,
       },
       {
         id: 'c2',
@@ -226,6 +229,9 @@ describe('Pinner Analytics R11 Contract & V22 Methods Test Suite', () => {
         top_pins_schedule_status: 'synced',
         created_at: '2026-08-01T00:00:00Z',
         updated_at: '2026-08-01T00:00:00Z',
+        fastcron_notify: false,
+        fastcron_timeout: 30,
+        fastcron_instances: 1,
       },
     ]);
 

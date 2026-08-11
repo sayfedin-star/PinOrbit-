@@ -1,6 +1,6 @@
 const enc = new TextEncoder();
 const dec = new TextDecoder();
-const b64 = (b: ArrayBuffer) => btoa(String.fromCharCode(...new Uint8Array(b)));
+const b64 = (b: ArrayBuffer | Uint8Array) => btoa(String.fromCharCode(...(b instanceof Uint8Array ? b : new Uint8Array(b))));
 const ub64 = (s: string) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 
 async function key(kek: string): Promise<CryptoKey> {

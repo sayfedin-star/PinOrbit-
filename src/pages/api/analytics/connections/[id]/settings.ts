@@ -110,10 +110,10 @@ export const GET: APIRoute = async ({ params, locals }) => {
     const hasAnalyticsToken = Boolean(connection.analytics_fastcron_token && connection.analytics_fastcron_token.trim().length >= 16);
     const hasTopPinsToken = Boolean(connection.top_pins_fastcron_token && connection.top_pins_fastcron_token.trim().length >= 16);
     const analyticsFingerprint = hasAnalyticsToken
-      ? '••••' + connection.analytics_fastcron_token.trim().slice(-4)
+      ? '••••' + (connection.analytics_fastcron_token ?? '').trim().slice(-4)
       : null;
     const topPinsFingerprint = hasTopPinsToken
-      ? '••••' + connection.top_pins_fastcron_token.trim().slice(-4)
+      ? '••••' + (connection.top_pins_fastcron_token ?? '').trim().slice(-4)
       : null;
 
     const responseData: AnalyticsConnectionSettingsResponse = {
@@ -544,10 +544,10 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
     const hasAnalyticsToken = Boolean(updated.analytics_fastcron_token && updated.analytics_fastcron_token.trim().length >= 16);
     const hasTopPinsToken = Boolean(updated.top_pins_fastcron_token && updated.top_pins_fastcron_token.trim().length >= 16);
     const analyticsFingerprint = hasAnalyticsToken
-      ? '••••' + updated.analytics_fastcron_token.trim().slice(-4)
+      ? '••••' + (updated.analytics_fastcron_token ?? '').trim().slice(-4)
       : null;
     const topPinsFingerprint = hasTopPinsToken
-      ? '••••' + updated.top_pins_fastcron_token.trim().slice(-4)
+      ? '••••' + (updated.top_pins_fastcron_token ?? '').trim().slice(-4)
       : null;
 
     const responseData: AnalyticsConnectionSettingsResponse = {

@@ -447,10 +447,15 @@ export interface DailyWorkspaceMetric {
 }
 
 export interface PinnerMakeRequestContext {
-  start_date: string;
-  end_date: string;
+  start_date?: string;
+  end_date?: string;
+  start_offset_days?: number;
+  end_offset_days?: number;
   sort_modes?: string[] | string;
+  sort_by?: string;
   job_type?: string;
+  raw_headers?: Record<string, any>;
+  [key: string]: any;
 }
 
 export interface PinnerErrorDetails {
@@ -471,8 +476,11 @@ export interface PinnerIngestPayload {
   top_pins_analytics?: ({
     [key in PinnerSortBy]?: any;
   } & Record<string, any>) | null;
+  pins?: any[];
+  date_availability?: any;
   raw_headers?: Record<string, any>;
   error_details?: PinnerErrorDetails;
+  [key: string]: any;
 }
 
 export interface PinnerOverviewKPIs {
@@ -648,6 +656,11 @@ export interface TriggerSyncResponse {
   fastcron_job_id?: number | null;
   mode?: 'ping' | 'sync';
   error?: string;
+  connection_id?: string;
+  channel?: 'analytics' | 'top_pins';
+  webhookResponseStatus?: number;
+  startDate?: string;
+  endDate?: string;
 }
 
 export interface PinLeaderboardItem {

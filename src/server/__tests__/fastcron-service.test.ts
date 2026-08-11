@@ -120,7 +120,7 @@ describe('FastCron Full Service Suite (R6 Reconcile Idempotency & Orphan Cleanup
     });
 
     // Simulated FastCron server job table
-    let fastcronJobs: Array<{ id: number; name: string; url: string; expression: string }> = [];
+    let fastcronJobs: Array<{ id: number; name: string; url: string; expression: string; postData?: string }> = [];
     let nextJobId = 1001;
 
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((async (url: string, init?: any) => {

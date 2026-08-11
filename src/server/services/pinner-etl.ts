@@ -674,7 +674,7 @@ export const pinnerETL = {
       // -------------------------------------------------------------------------
       // Derive Workspace Rollups (daily_workspace_metrics)
       // -------------------------------------------------------------------------
-      const workspaceDailyMap = new Map<string, DailyWorkspaceMetric>();
+      const workspaceDailyMap = new Map<string, any>();
 
       for (const daily of dailyRows) {
         const dateKey = daily.metric_date;
