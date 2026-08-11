@@ -5,7 +5,7 @@ import { ACTIVE_WORKSPACE_COOKIE } from './lib/workspaces';
 
 export const onRequest = defineMiddleware(async (context, next) => {
   // Merge Cloudflare Worker runtime secrets into process.env if available
-  const runtimeEnv = (context.locals as any)?.runtime?.env;
+  const runtimeEnv = (context.locals as { runtime?: { env?: Record<string, unknown> } })?.runtime?.env;
   if (runtimeEnv && typeof process !== 'undefined' && process.env) {
     Object.assign(process.env, runtimeEnv);
   }
@@ -57,7 +57,9 @@ export const onRequest = defineMiddleware(async (context, next) => {
   const isPublicRoute =
     pathname === '/login' ||
     pathname.startsWith('/api/admin/bootstrap') ||
-    pathname.startsWith('/api/internal/') ||
+    pathname === '/api/internal/pinterest/ingest' ||
+    pathname === '/api/internal/pinterest/daily-dispatch' ||
+    pathname === '/api/internal/pinterest/cleanup-retention' ||
     pathname.startsWith('/api/auth') ||
     pathname.startsWith('/_astro') ||
     pathname === '/favicon.svg';

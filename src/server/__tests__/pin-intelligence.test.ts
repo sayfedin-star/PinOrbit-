@@ -31,6 +31,9 @@ vi.mock('../db/clients', () => ({
     getAnalytics: vi.fn().mockReturnValue({
       from: vi.fn().mockReturnValue({
         delete: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            lt: vi.fn().mockResolvedValue({ count: 15, error: null }),
+          }),
           lt: vi.fn().mockResolvedValue({ count: 15, error: null }),
         }),
       }),
@@ -197,11 +200,43 @@ describe('Pin Intelligence & Retention Suite (V26.1)', () => {
   });
 
   describe('POST /api/internal/pinterest/cleanup-retention', () => {
+    it('returns 400 when workspace_id is missing', async () => {
+      const res = await postRetentionHandler({
+        request: new Request('http://localhost/api/internal/pinterest/cleanup-retention', {
+          method: 'POST',
+          headers: { 'x-ingest-secret': 'valid_test_secret_123' },
+        }),
+        locals: {},
+      } as any);
+
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.error).toContain('workspace_id is required');
+    });
+
+    it('returns 400 when JSON body is malformed', async () => {
+      const res = await postRetentionHandler({
+        request: new Request('http://localhost/api/internal/pinterest/cleanup-retention', {
+          method: 'POST',
+          headers: { 'x-ingest-secret': 'valid_test_secret_123' },
+          body: '{ invalid-json }',
+        }),
+        locals: {},
+      } as any);
+
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.error).toContain('Malformed JSON payload');
+    });
+
     it('returns 401 when x-ingest-secret is missing or mismatched', async () => {
       const res = await postRetentionHandler({
         request: new Request('http://localhost/api/internal/pinterest/cleanup-retention', {
           method: 'POST',
-          headers: { 'x-ingest-secret': 'wrong_secret' },
+          headers: {
+            'x-ingest-secret': 'wrong_secret',
+            'x-workspace-id': '9f08ca03-e79c-46fa-9518-6858216daf65',
+          },
         }),
         locals: {},
       } as any);
@@ -211,11 +246,14 @@ describe('Pin Intelligence & Retention Suite (V26.1)', () => {
       expect(json.error).toContain('Unauthorized');
     });
 
-    it('authenticates with x-ingest-secret and returns deleted_count', async () => {
+    it('authenticates with x-ingest-secret and returns deleted_count with x-workspace-id header', async () => {
       const res = await postRetentionHandler({
         request: new Request('http://localhost/api/internal/pinterest/cleanup-retention', {
           method: 'POST',
-          headers: { 'x-ingest-secret': 'valid_test_secret_123' },
+          headers: {
+            'x-ingest-secret': 'valid_test_secret_123',
+            'x-workspace-id': '9f08ca03-e79c-46fa-9518-6858216daf65',
+          },
         }),
         locals: {},
       } as any);

@@ -269,7 +269,7 @@ describe('R12/R15 Full 17-Endpoint Route Verification Suite', () => {
     results.push({ endpoint: '/api/analytics/connections/[id]/pin-trends', method: 'GET', status: r25.status, contentType: r25.headers.get('content-type') || '' });
 
     // 26. POST /api/internal/pinterest/cleanup-retention
-    const r26 = await postCleanupRetention({ request: new Request('http://localhost/api/internal/pinterest/cleanup-retention', { method: 'POST', headers: { 'x-ingest-secret': 'test_sec' } }), locals: { runtimeEnv: { INGEST_SECRET_KEY: 'test_sec' } } } as any);
+    const r26 = await postCleanupRetention({ request: new Request('http://localhost/api/internal/pinterest/cleanup-retention', { method: 'POST', headers: { 'x-ingest-secret': 'test_sec', 'x-workspace-id': wsId } }), locals: { runtimeEnv: { INGEST_SECRET_KEY: 'test_sec' } } } as any);
     results.push({ endpoint: '/api/internal/pinterest/cleanup-retention', method: 'POST', status: r26.status, contentType: r26.headers.get('content-type') || '' });
 
     // 27. GET /api/analytics/connections/[id]/purge-preview

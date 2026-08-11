@@ -5,18 +5,49 @@ import { dbClients } from '../../../../server/db/clients';
 import { getEffectiveSecret } from '../../../../server/services/webhook-secrets';
 
 export const POST: APIRoute = async ({ request, locals }) => {
-  const secret = request.headers.get('x-ingest-secret') || request.headers.get('x-dispatch-secret');
-  const runtimeEnv = (locals as any)?.runtime?.env || (locals as any)?.runtimeEnv || {};
+  const runtimeEnv = (locals as { runtime?: { env?: Record<string, any> }; runtimeEnv?: Record<string, any> })?.runtime?.env || (locals as { runtimeEnv?: Record<string, any> })?.runtimeEnv || {};
 
-  let workspaceId: string | undefined = undefined;
-  try {
-    const text = await request.clone().text();
-    if (text) {
-      const body = JSON.parse(text);
-      if (body.workspace_id) workspaceId = body.workspace_id;
+  // 1. Extract and validate workspace_id from header or JSON body
+  let workspaceId = request.headers.get('x-workspace-id')?.trim();
+
+  const text = await request.text();
+  if (text && text.trim().length > 0) {
+    let body: Record<string, any>;
+    try {
+      body = JSON.parse(text);
+    } catch (err: any) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Malformed JSON payload: ' + err.message,
+        }),
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
     }
-  } catch {}
 
+    if (body && typeof body.workspace_id === 'string' && body.workspace_id.trim().length > 0) {
+      workspaceId = body.workspace_id.trim();
+    }
+  }
+
+  if (!workspaceId) {
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: 'workspace_id is required in JSON body or x-workspace-id header.',
+      }),
+      {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
+  }
+
+  // 2. Authenticate
+  const secret = request.headers.get('x-ingest-secret') || request.headers.get('x-dispatch-secret');
   const expected = await getEffectiveSecret(workspaceId, runtimeEnv);
 
   if (!secret || !expected.value || secret !== expected.value) {
@@ -29,20 +60,16 @@ export const POST: APIRoute = async ({ request, locals }) => {
     );
   }
 
+  // 3. Delete snapshots older than 180 days with strict tenant isolation
   try {
     const cutoff = new Date(Date.now() - 180 * 86400000).toISOString().split('T')[0];
     const client = dbClients.getAnalytics(runtimeEnv);
 
-    let query = client
+    const { count, error } = await client
       .from('top_pins_snapshots')
       .delete()
+      .eq('workspace_id', workspaceId)
       .lt('window_end', cutoff);
-
-    if (workspaceId) {
-      query = query.eq('workspace_id', workspaceId);
-    }
-
-    const { count, error } = await query;
 
     if (error) {
       throw error;

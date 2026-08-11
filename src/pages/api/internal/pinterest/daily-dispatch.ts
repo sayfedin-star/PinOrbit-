@@ -13,7 +13,7 @@ import { SORT_MODES } from '../../../../server/services/fastcron-service';
  * normalized payload directly to the configured Make.com channel webhook.
  */
 export const POST: APIRoute = async ({ request, locals }) => {
-  const runtimeEnv = (locals as any)?.runtime?.env || (locals as any)?.runtimeEnv || {};
+  const runtimeEnv = (locals as { runtime?: { env?: Record<string, any> }; runtimeEnv?: Record<string, any> })?.runtime?.env || (locals as { runtimeEnv?: Record<string, any> })?.runtimeEnv || {};
 
   // 1. Parse JSON body
   let body: Record<string, any>;
@@ -168,8 +168,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
   );
   const expectedSecret = effectiveSecretResult?.value;
 
-  // 7. Authenticate: accept header x-dispatch-secret OR x-ingest-secret equal to expectedSecret
-  const providedSecret = request.headers.get('x-ingest-secret') || request.headers.get('x-dispatch-secret');
+  // 7. Authenticate: accept header x-ingest-secret (or legacy x-dispatch-secret) equal to expectedSecret
+  const ingestSecret = request.headers.get('x-ingest-secret');
+  const legacyDispatchSecret = request.headers.get('x-dispatch-secret');
+  if (legacyDispatchSecret && !ingestSecret) {
+    console.warn('[DailyDispatch] Deprecation warning: Header x-dispatch-secret is deprecated. Use x-ingest-secret instead.');
+  }
+  const providedSecret = ingestSecret || legacyDispatchSecret;
   if (!providedSecret || !expectedSecret || providedSecret !== expectedSecret) {
     return new Response(
       JSON.stringify({
