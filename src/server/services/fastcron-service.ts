@@ -923,4 +923,76 @@ export const fastcronService = {
 
     return { success: true, logs: Array.isArray(logs) ? logs : [] };
   },
+
+  /**
+   * Pauses a FastCron job for a specified duration (e.g. "1 hour", "15 minutes").
+   */
+  async pauseJob(
+    id: number,
+    forExpr: string,
+    token: string
+  ): Promise<{ success: boolean; data?: any; error?: string }> {
+    return this.fastcronCall('cron_pause', { id, for: forExpr }, token);
+  },
+
+  /**
+   * Fetches upcoming execution times for a FastCron job.
+   */
+  async nextRuns(
+    id: number,
+    token: string
+  ): Promise<{ success: boolean; data?: any; error?: string }> {
+    return this.fastcronCall('cron_next', { id }, token);
+  },
+
+  /**
+   * Fetches failure history logs for a FastCron job.
+   */
+  async getFailures(
+    id: number,
+    token: string
+  ): Promise<{ success: boolean; data?: any; error?: string }> {
+    return this.fastcronCall('cron_failures', { id }, token);
+  },
+
+  /**
+   * Edits an existing FastCron job parameters.
+   */
+  async editJob(
+    id: number,
+    params: Record<string, any>,
+    token: string
+  ): Promise<{ success: boolean; data?: any; error?: string }> {
+    return this.fastcronCall('cron_edit', { id, ...params }, token);
+  },
+
+  /**
+   * Lists FastCron jobs matching keyword.
+   */
+  async listJobs(
+    token: string,
+    keyword = 'PinOrbit'
+  ): Promise<{ success: boolean; data?: any; error?: string }> {
+    return this.fastcronCall('cron_list', { keyword }, token);
+  },
+
+  /**
+   * Deletes multiple FastCron jobs in a single batch call.
+   */
+  async batchDelete(
+    ids: number[],
+    token: string
+  ): Promise<{ success: boolean; data?: any; error?: string }> {
+    return this.fastcronCall('cron_batch_delete', { ids, id: ids, data: ids }, token);
+  },
+
+  /**
+   * Adds multiple FastCron jobs in a single batch call.
+   */
+  async batchAdd(
+    items: any[],
+    token: string
+  ): Promise<{ success: boolean; data?: any; error?: string }> {
+    return this.fastcronCall('cron_batch_add', { data: items, jobs: items }, token);
+  },
 };

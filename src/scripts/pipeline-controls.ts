@@ -214,6 +214,115 @@ if (pipeConnId) {
     }
   }
 
+  // Update bulk actions bar state
+  function getSelectedJobIds(): number[] {
+    const checked = document.querySelectorAll('.cron-job-checkbox:checked') as NodeListOf<HTMLInputElement>;
+    const ids: number[] = [];
+    checked.forEach((c) => {
+      const id = Number(c.getAttribute('data-job-id'));
+      if (!isNaN(id) && id > 0) ids.push(id);
+    });
+    return ids;
+  }
+
+  function updateBulkBar() {
+    const bulkBar = document.getElementById('cron-bulk-bar');
+    const countEl = document.getElementById('cron-selected-count');
+    const selectAll = document.getElementById('cron-select-all') as HTMLInputElement;
+    const allBoxes = document.querySelectorAll('.cron-job-checkbox') as NodeListOf<HTMLInputElement>;
+    const checkedBoxes = document.querySelectorAll('.cron-job-checkbox:checked') as NodeListOf<HTMLInputElement>;
+
+    const count = checkedBoxes.length;
+    if (countEl) countEl.textContent = String(count);
+
+    if (bulkBar) {
+      if (count > 0) {
+        bulkBar.classList.remove('hidden');
+      } else {
+        bulkBar.classList.add('hidden');
+      }
+    }
+
+    if (selectAll && allBoxes.length > 0) {
+      if (count === 0) {
+        selectAll.checked = false;
+        selectAll.indeterminate = false;
+      } else if (count === allBoxes.length) {
+        selectAll.checked = true;
+        selectAll.indeterminate = false;
+      } else {
+        selectAll.checked = false;
+        selectAll.indeterminate = true;
+      }
+    }
+  }
+
+  // Generic Cron Action Modal helpers
+  function showCronModal(options: {
+    title: string;
+    bodyNode: HTMLElement;
+    confirmLabel?: string;
+    confirmClass?: string;
+    showCancel?: boolean;
+    onConfirm?: () => Promise<void>;
+  }) {
+    const backdrop = document.getElementById('cron-modal-backdrop');
+    const titleEl = document.getElementById('cron-modal-title');
+    const bodyEl = document.getElementById('cron-modal-body');
+    const submitBtn = document.getElementById('cron-modal-submit') as HTMLButtonElement;
+    const cancelBtn = document.getElementById('cron-modal-cancel') as HTMLButtonElement;
+    if (!backdrop || !titleEl || !bodyEl || !submitBtn) return;
+
+    titleEl.textContent = options.title;
+    bodyEl.innerHTML = '';
+    bodyEl.appendChild(options.bodyNode);
+
+    submitBtn.textContent = options.confirmLabel || 'Confirm';
+    submitBtn.className = options.confirmClass || 'rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/90';
+    submitBtn.onclick = async () => {
+      if (options.onConfirm) {
+        submitBtn.setAttribute('disabled', 'true');
+        const orig = submitBtn.textContent;
+        submitBtn.textContent = 'Processing...';
+        try {
+          await options.onConfirm();
+          hideCronModal();
+        } catch (err: any) {
+          showToast(err.message || 'Action failed', false);
+        } finally {
+          submitBtn.removeAttribute('disabled');
+          submitBtn.textContent = orig;
+        }
+      } else {
+        hideCronModal();
+      }
+    };
+
+    if (cancelBtn) {
+      if (options.showCancel === false) {
+        cancelBtn.classList.add('hidden');
+      } else {
+        cancelBtn.classList.remove('hidden');
+      }
+    }
+
+    backdrop.classList.remove('hidden');
+    backdrop.classList.add('flex');
+  }
+
+  function hideCronModal() {
+    const backdrop = document.getElementById('cron-modal-backdrop');
+    if (backdrop) {
+      backdrop.classList.add('hidden');
+      backdrop.classList.remove('flex');
+    }
+  }
+
+  const modalCloseBtn = document.getElementById('cron-modal-close');
+  if (modalCloseBtn) modalCloseBtn.onclick = hideCronModal;
+  const modalCancelBtn = document.getElementById('cron-modal-cancel');
+  if (modalCancelBtn) modalCancelBtn.onclick = hideCronModal;
+
   // Load Cron Jobs table
   async function loadCronJobs() {
     const tbody = document.getElementById('cron-jobs-rows');
@@ -225,7 +334,7 @@ if (pipeConnId) {
       const tr = document.createElement('tr');
       tr.className = 'border-b border-slate-100 dark:border-border/50 animate-pulse';
       const td = document.createElement('td');
-      td.colSpan = 6;
+      td.colSpan = 7;
       td.className = 'py-4 pr-4';
       const bar = document.createElement('div');
       bar.className = 'h-4 bg-slate-200 dark:bg-muted rounded w-3/4';
@@ -250,6 +359,20 @@ if (pipeConnId) {
       data.pipelines.forEach((p: any) => {
         const tr = document.createElement('tr');
         tr.className = 'border-b border-slate-100 hover:bg-slate-50/50 dark:border-border/50 dark:hover:bg-muted/20 transition-colors text-xs';
+
+        // 0. Checkbox Column
+        const tdCheckbox = document.createElement('td');
+        tdCheckbox.className = 'py-3 pr-3 w-8';
+        if (p.job_id) {
+          const chk = document.createElement('input');
+          chk.type = 'checkbox';
+          chk.className = 'cron-job-checkbox rounded border-slate-300 text-primary focus:ring-primary h-4 w-4 cursor-pointer';
+          chk.setAttribute('data-job-id', String(p.job_id));
+          chk.setAttribute('data-channel', p.channel);
+          chk.addEventListener('change', updateBulkBar);
+          tdCheckbox.appendChild(chk);
+        }
+        tr.appendChild(tdCheckbox);
 
         // 1. Pipeline Column
         const tdPipeline = document.createElement('td');
@@ -390,12 +513,14 @@ if (pipeConnId) {
 
         tbody.appendChild(tr);
       });
+
+      updateBulkBar();
     } catch (err: any) {
       console.error('Failed to load cron jobs', err);
       tbody.innerHTML = '';
       const errTr = document.createElement('tr');
       const errTd = document.createElement('td');
-      errTd.colSpan = 6;
+      errTd.colSpan = 7;
       errTd.className = 'py-4 text-center text-xs text-red-500';
       errTd.textContent = 'Failed to load cron jobs. ';
 
@@ -686,15 +811,507 @@ if (pipeConnId) {
     }
   });
 
-  // Cron Jobs Refresh button
-  const cronRefreshBtn = document.getElementById('cron-jobs-refresh');
-  if (cronRefreshBtn) {
-    cronRefreshBtn.addEventListener('click', async () => {
-      cronRefreshBtn.setAttribute('role', 'status');
-      const orig = cronRefreshBtn.textContent;
-      cronRefreshBtn.textContent = 'Refreshing...';
-      await loadCronJobs();
-      cronRefreshBtn.textContent = orig || 'Refresh';
+  // Cron Select All Header Checkbox
+  const selectAllHeader = document.getElementById('cron-select-all') as HTMLInputElement;
+  if (selectAllHeader) {
+    selectAllHeader.addEventListener('change', () => {
+      const boxes = document.querySelectorAll('.cron-job-checkbox') as NodeListOf<HTMLInputElement>;
+      boxes.forEach(b => { b.checked = selectAllHeader.checked; });
+      updateBulkBar();
+    });
+  }
+
+  // Cron Bulk Clear Button
+  const bulkClearBtn = document.getElementById('cron-bulk-clear');
+  if (bulkClearBtn) {
+    bulkClearBtn.addEventListener('click', () => {
+      const boxes = document.querySelectorAll('.cron-job-checkbox') as NodeListOf<HTMLInputElement>;
+      boxes.forEach(b => { b.checked = false; });
+      updateBulkBar();
+    });
+  }
+
+  // Cron Bulk Run Now
+  const bulkRunBtn = document.getElementById('cron-bulk-run');
+  if (bulkRunBtn) {
+    bulkRunBtn.addEventListener('click', () => {
+      const job_ids = getSelectedJobIds();
+      if (job_ids.length === 0) return;
+
+      const form = document.createElement('div');
+      form.className = 'space-y-3';
+      form.innerHTML = `
+        <p class="text-slate-600 dark:text-muted-foreground">Trigger manual execution across <strong>${job_ids.length}</strong> selected FastCron job(s).</p>
+        <div class="grid grid-cols-2 gap-3 border-t border-border pt-3">
+          <label class="space-y-1">
+            <span class="font-semibold text-muted-foreground">Override From Date (Optional)</span>
+            <input id="bulk-run-from" type="date" class="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs" />
+          </label>
+          <label class="space-y-1">
+            <span class="font-semibold text-muted-foreground">Override To Date (Optional)</span>
+            <input id="bulk-run-to" type="date" class="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs" />
+          </label>
+        </div>
+        <p class="text-[11px] text-muted-foreground">Leave dates blank to use connection offset defaults. Same-day date ranges (start == end) are fully supported.</p>
+      `;
+
+      showCronModal({
+        title: 'Bulk Run Now',
+        bodyNode: form,
+        confirmLabel: 'Run Selected Jobs',
+        onConfirm: async () => {
+          const fromInput = document.getElementById('bulk-run-from') as HTMLInputElement;
+          const toInput = document.getElementById('bulk-run-to') as HTMLInputElement;
+          const from_date = fromInput?.value || undefined;
+          const to_date = toInput?.value || undefined;
+
+          if (from_date && to_date && from_date > to_date) {
+            throw new Error('Start Date must be before End Date (identical dates allowed for same-day pull).');
+          }
+
+          const res = await fetch('/api/analytics/cron/bulk', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'run',
+              job_ids,
+              options: from_date && to_date ? { from_date, to_date } : undefined,
+            }),
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            showToast(`Bulk Run Triggered: ${data.results?.filter((r: any) => r.success).length}/${job_ids.length} successful`);
+            await loadCronJobs();
+          } else {
+            throw new Error(data.error || 'Bulk Run failed');
+          }
+        },
+      });
+    });
+  }
+
+  // Cron Bulk Enable
+  const bulkEnableBtn = document.getElementById('cron-bulk-enable');
+  if (bulkEnableBtn) {
+    bulkEnableBtn.addEventListener('click', async () => {
+      const job_ids = getSelectedJobIds();
+      if (job_ids.length === 0) return;
+
+      const body = document.createElement('div');
+      body.innerHTML = `<p class="text-slate-600 dark:text-muted-foreground">Enable <strong>${job_ids.length}</strong> selected FastCron job(s)?</p>`;
+
+      showCronModal({
+        title: 'Bulk Enable Jobs',
+        bodyNode: body,
+        confirmLabel: 'Enable Jobs',
+        confirmClass: 'rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700',
+        onConfirm: async () => {
+          const res = await fetch('/api/analytics/cron/bulk', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'enable', job_ids }),
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            showToast(`Jobs Enabled: ${data.results?.filter((r: any) => r.success).length}/${job_ids.length} active`);
+            await loadCronJobs();
+          } else {
+            throw new Error(data.error || 'Bulk enable failed');
+          }
+        },
+      });
+    });
+  }
+
+  // Cron Bulk Disable
+  const bulkDisableBtn = document.getElementById('cron-bulk-disable');
+  if (bulkDisableBtn) {
+    bulkDisableBtn.addEventListener('click', async () => {
+      const job_ids = getSelectedJobIds();
+      if (job_ids.length === 0) return;
+
+      const body = document.createElement('div');
+      body.innerHTML = `<p class="text-slate-600 dark:text-muted-foreground">Disable <strong>${job_ids.length}</strong> selected FastCron job(s)? Scheduled runs will pause.</p>`;
+
+      showCronModal({
+        title: 'Bulk Disable Jobs',
+        bodyNode: body,
+        confirmLabel: 'Disable Jobs',
+        confirmClass: 'rounded-xl bg-amber-600 px-4 py-2 text-xs font-bold text-white hover:bg-amber-700',
+        onConfirm: async () => {
+          const res = await fetch('/api/analytics/cron/bulk', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'disable', job_ids }),
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            showToast(`Jobs Disabled: ${data.results?.filter((r: any) => r.success).length}/${job_ids.length} disabled`);
+            await loadCronJobs();
+          } else {
+            throw new Error(data.error || 'Bulk disable failed');
+          }
+        },
+      });
+    });
+  }
+
+  // Cron Bulk Pause
+  const bulkPauseBtn = document.getElementById('cron-bulk-pause');
+  if (bulkPauseBtn) {
+    bulkPauseBtn.addEventListener('click', () => {
+      const job_ids = getSelectedJobIds();
+      if (job_ids.length === 0) return;
+
+      const form = document.createElement('div');
+      form.className = 'space-y-3';
+      form.innerHTML = `
+        <p class="text-slate-600 dark:text-muted-foreground">Temporarily pause <strong>${job_ids.length}</strong> selected job(s) for a set duration:</p>
+        <label class="space-y-1 block">
+          <span class="font-semibold text-muted-foreground">Pause Duration</span>
+          <select id="bulk-pause-duration" class="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs focus:border-primary focus:outline-none">
+            <option value="15 minutes">15 minutes</option>
+            <option value="30 minutes">30 minutes</option>
+            <option value="45 minutes">45 minutes</option>
+            <option value="1 hour" selected>1 hour (Default)</option>
+            <option value="2 hours">2 hours</option>
+            <option value="6 hours">6 hours</option>
+            <option value="12 hours">12 hours</option>
+            <option value="1 day">1 day</option>
+            <option value="2 days">2 days</option>
+            <option value="7 days">7 days</option>
+          </select>
+        </label>
+      `;
+
+      showCronModal({
+        title: 'Bulk Pause Jobs',
+        bodyNode: form,
+        confirmLabel: 'Pause Jobs',
+        onConfirm: async () => {
+          const select = document.getElementById('bulk-pause-duration') as HTMLSelectElement;
+          const forExpr = select?.value || '1 hour';
+          const res = await fetch('/api/analytics/cron/bulk', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'pause', job_ids, options: { for: forExpr } }),
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            showToast(`Jobs Paused: ${data.results?.filter((r: any) => r.success).length}/${job_ids.length} for ${forExpr}`);
+            await loadCronJobs();
+          } else {
+            throw new Error(data.error || 'Bulk pause failed');
+          }
+        },
+      });
+    });
+  }
+
+  // Cron Bulk Delete
+  const bulkDeleteBtn = document.getElementById('cron-bulk-delete');
+  if (bulkDeleteBtn) {
+    bulkDeleteBtn.addEventListener('click', () => {
+      const job_ids = getSelectedJobIds();
+      if (job_ids.length === 0) return;
+
+      const form = document.createElement('div');
+      form.className = 'space-y-3';
+      form.innerHTML = `
+        <div class="rounded-xl bg-red-500/10 border border-red-500/20 p-3 text-red-600 dark:text-red-400">
+          <p class="font-bold">Warning: Permanent Action</p>
+          <p class="mt-1">This will permanently delete <strong>${job_ids.length}</strong> FastCron job(s) from FastCron and reset local schedules to pending.</p>
+        </div>
+        <label class="space-y-1 block">
+          <span class="font-semibold text-muted-foreground">Type <strong>DELETE</strong> to confirm:</span>
+          <input id="bulk-delete-confirm-input" type="text" placeholder="DELETE" class="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs focus:border-red-500 focus:outline-none" />
+        </label>
+      `;
+
+      showCronModal({
+        title: 'Delete FastCron Jobs',
+        bodyNode: form,
+        confirmLabel: 'Permanently Delete',
+        confirmClass: 'rounded-xl bg-red-600 px-4 py-2 text-xs font-bold text-white hover:bg-red-700',
+        onConfirm: async () => {
+          const input = document.getElementById('bulk-delete-confirm-input') as HTMLInputElement;
+          if (input?.value.trim() !== 'DELETE') {
+            throw new Error('Please type DELETE to confirm');
+          }
+
+          const res = await fetch('/api/analytics/cron/bulk', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'delete', job_ids }),
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            showToast(`Jobs Deleted: ${data.results?.filter((r: any) => r.success).length}/${job_ids.length}`);
+            loadPipelineSettings();
+            await loadCronJobs();
+          } else {
+            throw new Error(data.error || 'Bulk delete failed');
+          }
+        },
+      });
+    });
+  }
+
+  // Cron Bulk Logs
+  const bulkLogsBtn = document.getElementById('cron-bulk-logs');
+  if (bulkLogsBtn) {
+    bulkLogsBtn.addEventListener('click', async () => {
+      const job_ids = getSelectedJobIds();
+      if (job_ids.length === 0) return;
+
+      const res = await fetch('/api/analytics/cron/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'logs', job_ids }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        showToast(data.error || 'Failed to fetch logs', false);
+        return;
+      }
+
+      const logs: any[] = Array.isArray(data.data) ? data.data : [];
+      const container = document.createElement('div');
+      container.className = 'space-y-2';
+
+      if (logs.length === 0) {
+        container.innerHTML = '<p class="text-center py-6 text-muted-foreground">No execution logs found for selected jobs.</p>';
+      } else {
+        const table = document.createElement('table');
+        table.className = 'w-full text-left text-xs';
+        table.innerHTML = `
+          <thead>
+            <tr class="border-b border-border text-[10px] uppercase font-bold text-muted-foreground">
+              <th class="py-2 pr-2">Time</th>
+              <th class="py-2 pr-2">Job</th>
+              <th class="py-2 pr-2">Status</th>
+              <th class="py-2 pr-2">HTTP</th>
+              <th class="py-2">Duration</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${logs.slice(0, 50).map(l => `
+              <tr class="border-b border-border/50 hover:bg-muted/20">
+                <td class="py-2 pr-2 font-mono whitespace-nowrap">${relativeTime(l.date || l.started_at || l.time)}</td>
+                <td class="py-2 pr-2 font-mono font-bold">#${l.job_id}</td>
+                <td class="py-2 pr-2"><span class="inline-flex rounded px-1.5 py-0.5 text-[10px] font-bold ${l.status === 'OK' || l.status === 'success' || (l.http_code && l.http_code < 400) ? 'bg-emerald-500/10 text-emerald-600' : 'bg-red-500/10 text-red-600'}">${l.status || 'Done'}</span></td>
+                <td class="py-2 pr-2 font-mono">${l.http_code || l.code || '200'}</td>
+                <td class="py-2 font-mono text-muted-foreground">${l.duration ? `${l.duration}s` : '—'}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        `;
+        container.appendChild(table);
+      }
+
+      showCronModal({
+        title: `Aggregated Execution Logs (${logs.length} entries)`,
+        bodyNode: container,
+        confirmLabel: 'Close',
+        showCancel: false,
+      });
+    });
+  }
+
+  // Cron Bulk Failures
+  const bulkFailuresBtn = document.getElementById('cron-bulk-failures');
+  if (bulkFailuresBtn) {
+    bulkFailuresBtn.addEventListener('click', async () => {
+      const job_ids = getSelectedJobIds();
+      if (job_ids.length === 0) return;
+
+      const res = await fetch('/api/analytics/cron/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'failures', job_ids }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        showToast(data.error || 'Failed to fetch failure history', false);
+        return;
+      }
+
+      const failures: any[] = Array.isArray(data.data) ? data.data : [];
+      const container = document.createElement('div');
+
+      if (failures.length === 0) {
+        container.innerHTML = '<p class="text-center py-6 text-emerald-600 dark:text-emerald-400 font-semibold">🎉 Zero failure records found for selected jobs!</p>';
+      } else {
+        const table = document.createElement('table');
+        table.className = 'w-full text-left text-xs';
+        table.innerHTML = `
+          <thead>
+            <tr class="border-b border-border text-[10px] uppercase font-bold text-muted-foreground">
+              <th class="py-2 pr-2">Time</th>
+              <th class="py-2 pr-2">Job</th>
+              <th class="py-2 pr-2">HTTP</th>
+              <th class="py-2">Error Message</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${failures.map(f => `
+              <tr class="border-b border-border/50 hover:bg-muted/20">
+                <td class="py-2 pr-2 font-mono whitespace-nowrap text-red-500">${relativeTime(f.date || f.started_at || f.time)}</td>
+                <td class="py-2 pr-2 font-mono font-bold">#${f.job_id}</td>
+                <td class="py-2 pr-2 font-mono text-red-500">${f.http_code || f.code || '500'}</td>
+                <td class="py-2 text-slate-700 dark:text-foreground font-mono text-[11px]">${f.message || f.error || 'Request failure'}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        `;
+        container.appendChild(table);
+      }
+
+      showCronModal({
+        title: `Failure Records (${failures.length} issues)`,
+        bodyNode: container,
+        confirmLabel: 'Close',
+        showCancel: false,
+      });
+    });
+  }
+
+  // Cron Bulk Next Runs
+  const bulkNextBtn = document.getElementById('cron-bulk-next');
+  if (bulkNextBtn) {
+    bulkNextBtn.addEventListener('click', async () => {
+      const job_ids = getSelectedJobIds();
+      if (job_ids.length === 0) return;
+
+      const res = await fetch('/api/analytics/cron/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'next', job_ids }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        showToast(data.error || 'Failed to fetch next runs', false);
+        return;
+      }
+
+      const container = document.createElement('div');
+      container.className = 'space-y-4';
+
+      const nextData = data.data || {};
+      for (const jId of job_ids) {
+        const item = nextData[jId];
+        const card = document.createElement('div');
+        card.className = 'rounded-xl border border-border bg-card p-3 space-y-2';
+        const runsList = Array.isArray(item?.runs) ? item.runs : [];
+        card.innerHTML = `
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-foreground">Job #${jId} (${item?.display_name || 'Pipeline'})</span>
+            <span class="font-mono text-xs text-muted-foreground">${item?.channel || ''}</span>
+          </div>
+          <ul class="space-y-1 font-mono text-xs text-slate-700 dark:text-foreground pl-2 border-l-2 border-primary/40">
+            ${runsList.length > 0 ? runsList.slice(0, 3).map((r: any) => `<li>• ${typeof r === 'string' ? r : r.time || r.date || JSON.stringify(r)}</li>`).join('') : '<li class="text-muted-foreground text-[11px]">— No upcoming runs returned —</li>'}
+          </ul>
+        `;
+        container.appendChild(card);
+      }
+
+      showCronModal({
+        title: 'Upcoming FastCron Executions',
+        bodyNode: container,
+        confirmLabel: 'Close',
+        showCancel: false,
+      });
+    });
+  }
+
+  // Cron Bulk Edit
+  const bulkEditBtn = document.getElementById('cron-bulk-edit');
+  if (bulkEditBtn) {
+    bulkEditBtn.addEventListener('click', () => {
+      const job_ids = getSelectedJobIds();
+      if (job_ids.length === 0) return;
+
+      const form = document.createElement('div');
+      form.className = 'space-y-3';
+      form.innerHTML = `
+        <p class="text-slate-600 dark:text-muted-foreground">Update configuration settings across <strong>${job_ids.length}</strong> selected FastCron job(s):</p>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="space-y-1 block">
+            <span class="font-semibold text-muted-foreground">Timeout (5–60s)</span>
+            <input id="bulk-edit-timeout" type="number" min="5" max="60" placeholder="30" class="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs" />
+          </label>
+          <label class="space-y-1 block">
+            <span class="font-semibold text-muted-foreground">Max Concurrent Instances (0–5)</span>
+            <input id="bulk-edit-instances" type="number" min="0" max="5" placeholder="1" class="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs" />
+          </label>
+        </div>
+        <label class="flex items-center gap-2 pt-2 cursor-pointer">
+          <input id="bulk-edit-notify" type="checkbox" checked class="rounded border-border text-primary focus:ring-primary h-4 w-4" />
+          <span class="font-semibold text-foreground">Notify on job failure</span>
+        </label>
+      `;
+
+      showCronModal({
+        title: 'Bulk Edit FastCron Settings',
+        bodyNode: form,
+        confirmLabel: 'Apply Settings',
+        onConfirm: async () => {
+          const timeoutInput = document.getElementById('bulk-edit-timeout') as HTMLInputElement;
+          const instancesInput = document.getElementById('bulk-edit-instances') as HTMLInputElement;
+          const notifyInput = document.getElementById('bulk-edit-notify') as HTMLInputElement;
+
+          const options: Record<string, any> = {
+            notify: notifyInput ? notifyInput.checked : true,
+          };
+          if (timeoutInput?.value) options.timeout = Number(timeoutInput.value);
+          if (instancesInput?.value) options.instances = Number(instancesInput.value);
+
+          const res = await fetch('/api/analytics/cron/bulk', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'edit', job_ids, options }),
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            showToast(`Settings Updated on ${data.results?.filter((r: any) => r.success).length}/${job_ids.length} jobs`);
+            await loadCronJobs();
+          } else {
+            throw new Error(data.error || 'Bulk edit failed');
+          }
+        },
+      });
+    });
+  }
+
+  // Cron Sync Missing
+  const syncMissingBtn = document.getElementById('cron-bulk-sync-missing');
+  if (syncMissingBtn) {
+    syncMissingBtn.addEventListener('click', async () => {
+      syncMissingBtn.setAttribute('disabled', 'true');
+      const orig = syncMissingBtn.innerHTML;
+      syncMissingBtn.innerHTML = '<span>⚡</span><span>Syncing...</span>';
+
+      try {
+        const res = await fetch('/api/analytics/cron/bulk', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'sync_missing' }),
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          const added = Array.isArray(data.results) ? data.results.filter((r: any) => r.success).length : 0;
+          showToast(`FastCron Sync Complete: ${added} missing job(s) provisioned.`);
+          loadPipelineSettings();
+          await loadCronJobs();
+        } else {
+          showToast(data.error || 'Sync missing failed', false);
+        }
+      } catch (err: any) {
+        showToast(err.message || 'Network error on sync missing', false);
+      } finally {
+        syncMissingBtn.removeAttribute('disabled');
+        syncMissingBtn.innerHTML = orig;
+      }
     });
   }
 

@@ -438,15 +438,50 @@ const accountName = connection.display_name || 'Account';
       </article>
     </div>
 
-    <section id="cron-jobs" aria-labelledby="cron-jobs-title" class="mt-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div class="flex items-center justify-between">
-        <h2 id="cron-jobs-title" class="text-base font-semibold text-slate-800">Cron Jobs</h2>
-        <button type="button" id="cron-jobs-refresh" class="text-sm text-slate-500 hover:text-slate-800">Refresh</button>
+    <section id="cron-jobs" aria-labelledby="cron-jobs-title" class="mt-6 rounded-xl border border-slate-200 dark:border-border bg-white dark:bg-card p-6 shadow-sm relative">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 id="cron-jobs-title" class="text-base font-semibold text-slate-800 dark:text-foreground">Cron Jobs & Automation</h2>
+          <p class="text-xs text-muted-foreground mt-0.5">Manage live FastCron schedules, observability logs, and bulk lifecycle actions.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button type="button" id="cron-bulk-sync-missing" class="rounded-lg border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition-all flex items-center gap-1">
+            <span>⚡</span>
+            <span>Sync Missing</span>
+          </button>
+          <button type="button" id="cron-jobs-refresh" class="rounded-lg border border-slate-300 dark:border-border bg-card px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-foreground hover:bg-muted transition-all">
+            Refresh
+          </button>
+        </div>
       </div>
+
+      <!-- Sticky Bulk Actions Bar -->
+      <div id="cron-bulk-bar" class="hidden sticky top-2 z-20 mt-4 rounded-xl border border-primary/30 bg-primary/5 dark:bg-primary/10 p-3 backdrop-blur-md shadow-md flex flex-wrap items-center justify-between gap-3 transition-all">
+        <div class="flex items-center gap-2">
+          <span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground" id="cron-selected-count">0</span>
+          <span class="text-xs font-semibold text-foreground">job(s) selected</span>
+        </div>
+        <div class="flex flex-wrap items-center gap-1.5">
+          <button type="button" id="cron-bulk-run" class="rounded-lg bg-primary px-2.5 py-1 text-xs font-bold text-primary-foreground hover:bg-primary/90 transition-all">Run Now</button>
+          <button type="button" id="cron-bulk-enable" class="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 transition-all">Enable</button>
+          <button type="button" id="cron-bulk-disable" class="rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-bold text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 transition-all">Disable</button>
+          <button type="button" id="cron-bulk-pause" class="rounded-lg border border-border bg-card px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted transition-all">Pause</button>
+          <button type="button" id="cron-bulk-logs" class="rounded-lg border border-border bg-card px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted transition-all">Logs</button>
+          <button type="button" id="cron-bulk-failures" class="rounded-lg border border-border bg-card px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted transition-all">Failures</button>
+          <button type="button" id="cron-bulk-next" class="rounded-lg border border-border bg-card px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted transition-all">Next Runs</button>
+          <button type="button" id="cron-bulk-edit" class="rounded-lg border border-border bg-card px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted transition-all">Edit</button>
+          <button type="button" id="cron-bulk-delete" class="rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1 text-xs font-bold text-red-600 dark:text-red-400 hover:bg-red-500/20 transition-all">Delete</button>
+          <button type="button" id="cron-bulk-clear" class="rounded-lg text-xs text-muted-foreground hover:text-foreground px-2 py-1 transition-all">Deselect</button>
+        </div>
+      </div>
+
       <div class="mt-4 overflow-x-auto">
         <table class="w-full text-sm">
           <thead>
-            <tr class="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+            <tr class="border-b border-slate-200 dark:border-border text-left text-xs uppercase tracking-wide text-slate-500 dark:text-muted-foreground">
+              <th scope="col" class="py-2 pr-3 w-8">
+                <input type="checkbox" id="cron-select-all" aria-label="Select all jobs" class="rounded border-slate-300 text-primary focus:ring-primary h-4 w-4 cursor-pointer" />
+              </th>
               <th scope="col" class="py-2 pr-4">Pipeline</th>
               <th scope="col" class="py-2 pr-4">Job</th>
               <th scope="col" class="py-2 pr-4">Schedule</th>
@@ -457,6 +492,27 @@ const accountName = connection.display_name || 'Account';
           </thead>
           <tbody id="cron-jobs-rows" aria-live="polite"></tbody>
         </table>
+      </div>
+
+      <!-- Bulk Action Modal / Drawer Container -->
+      <div id="cron-modal-backdrop" class="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div id="cron-modal-card" class="w-full max-w-2xl rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+          <div class="flex items-center justify-between border-b border-border pb-3">
+            <h3 id="cron-modal-title" class="text-base font-bold text-foreground">Bulk Action</h3>
+            <button type="button" id="cron-modal-close" class="rounded-lg p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            </button>
+          </div>
+
+          <div id="cron-modal-body" class="space-y-4 text-xs">
+            <!-- Dynamic modal content -->
+          </div>
+
+          <div id="cron-modal-footer" class="flex items-center justify-end gap-2 border-t border-border pt-3">
+            <button type="button" id="cron-modal-cancel" class="rounded-xl border border-border bg-card px-4 py-2 text-xs font-semibold hover:bg-muted">Cancel</button>
+            <button type="button" id="cron-modal-submit" class="rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/90">Confirm</button>
+          </div>
+        </div>
       </div>
     </section>
     
