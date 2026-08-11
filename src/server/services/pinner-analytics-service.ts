@@ -178,13 +178,13 @@ export const pinnerAnalyticsService = {
   ): Promise<ServiceResponse<{ rows: TopPinSnapshot[]; total: number; window: { start: string; end: string } | null }>> {
     await assertWorkspaceAccess(schedulingClient, workspaceId, userId);
 
-    const cacheKey = edgeCache.keys.topPins(
+    const cacheKey = edgeCache.keys.topPinsPaged(
       workspaceId,
       connectionId,
       sortBy,
-      30,
       fromDate,
       toDate,
+      30,
       bypassCache
     );
     let cached: any = { status: 'MISS', data: null };

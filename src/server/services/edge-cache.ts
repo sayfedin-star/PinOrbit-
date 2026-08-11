@@ -53,6 +53,21 @@ export const edgeCache = {
       }
       return `analytics:${workspaceId}:${connectionId}:top-pins:${windowDays}d:${sortBy}${bypassPart}`;
     },
+    topPinsPaged(
+      workspaceId: string,
+      connectionId: string,
+      sortBy = 'IMPRESSION',
+      fromDate?: string,
+      toDate?: string,
+      windowDays = 30,
+      bypassCache = false
+    ): string {
+      const bypassPart = bypassCache ? ':bypass' : '';
+      if (fromDate && toDate) {
+        return `analytics:${workspaceId}:${connectionId}:top-pins:paged:v1:${fromDate}_${toDate}:${sortBy}${bypassPart}`;
+      }
+      return `analytics:${workspaceId}:${connectionId}:top-pins:paged:v1:${windowDays}d:${sortBy}${bypassPart}`;
+    },
     timeseries(workspaceId: string, connectionId: string, windowDays = 30): string {
       return `analytics:${workspaceId}:${connectionId}:timeseries:${windowDays}d`;
     },
