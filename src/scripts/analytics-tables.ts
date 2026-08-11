@@ -190,7 +190,7 @@ async function renderS1() {
             <td class="py-2.5 px-4 text-right">${formatNum(asNumber(d.saves))}</td>
             <td class="py-2.5 px-4 text-right">${formatPct(asNumber(d.save_rate))}</td>
             <td class="py-2.5 px-4 text-center">
-              <button class="text-red-500 hover:text-red-700 transition-colors" onclick="deleteDailyRecord('${escapeHtml(asText(d.metric_date))}')" title="Delete record">
+              <button class="text-red-500 hover:text-red-700 transition-colors" data-action="delete-daily" data-date="${escapeHtml(asText(d.metric_date))}" title="Delete record">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
               </button>
             </td>
@@ -222,8 +222,8 @@ async function renderS1() {
     
     const btnDiv = document.getElementById('s1-page-buttons')!;
     btnDiv.innerHTML = `
-      <button class="px-2 py-1 rounded bg-muted/40 hover:bg-muted disabled:opacity-50" ${state.s1Page === 1 ? 'disabled' : ''} onclick="goS1(${state.s1Page - 1})">Prev</button>
-      <button class="px-2 py-1 rounded bg-muted/40 hover:bg-muted disabled:opacity-50" ${state.s1Page >= maxPage ? 'disabled' : ''} onclick="goS1(${state.s1Page + 1})">Next</button>
+      <button class="px-2 py-1 rounded bg-muted/40 hover:bg-muted disabled:opacity-50" ${state.s1Page === 1 ? 'disabled' : ''} data-action="goto-page" data-section="s1" data-page="${state.s1Page - 1}">Prev</button>
+      <button class="px-2 py-1 rounded bg-muted/40 hover:bg-muted disabled:opacity-50" ${state.s1Page >= maxPage ? 'disabled' : ''} data-action="goto-page" data-section="s1" data-page="${state.s1Page + 1}">Next</button>
     `;
 
   } catch (e: any) {
@@ -310,8 +310,8 @@ async function renderS2() {
     
     const btnDiv = document.getElementById('s2-page-buttons')!;
     btnDiv.innerHTML = `
-      <button class="px-2 py-1 rounded bg-muted/40 hover:bg-muted disabled:opacity-50" ${state.s2Page === 1 ? 'disabled' : ''} onclick="goS2(${state.s2Page - 1})">Prev</button>
-      <button class="px-2 py-1 rounded bg-muted/40 hover:bg-muted disabled:opacity-50" ${state.s2Page >= maxPage ? 'disabled' : ''} onclick="goS2(${state.s2Page + 1})">Next</button>
+      <button class="px-2 py-1 rounded bg-muted/40 hover:bg-muted disabled:opacity-50" ${state.s2Page === 1 ? 'disabled' : ''} data-action="goto-page" data-section="s2" data-page="${state.s2Page - 1}">Prev</button>
+      <button class="px-2 py-1 rounded bg-muted/40 hover:bg-muted disabled:opacity-50" ${state.s2Page >= maxPage ? 'disabled' : ''} data-action="goto-page" data-section="s2" data-page="${state.s2Page + 1}">Next</button>
     `;
 
   } catch (e: any) {
@@ -319,7 +319,7 @@ async function renderS2() {
   }
 }
 
-(window as any).deleteDailyRecord = async (date: string) => {
+async function deleteDailyRecord(date: string) {
   if (!confirm(`Are you sure you want to delete metrics for ${date}?`)) return;
   try {
     const res = await fetch(`/api/analytics/connections/${connectionId}/daily/${date}`, { method: 'DELETE' });
@@ -331,10 +331,39 @@ async function renderS2() {
   } catch (e: any) {
     alert(e.message);
   }
-};
+}
 
-(window as any).goS1 = (p: number) => { state.s1Page = p; renderS1(); };
-(window as any).goS2 = (p: number) => { state.s2Page = p; renderS2(); };
+function gotoS1Page(p: number) {
+  state.s1Page = p;
+  renderS1();
+}
+
+function gotoS2Page(p: number) {
+  state.s2Page = p;
+  renderS2();
+}
+
+document.addEventListener('click', (e) => {
+  const target = (e.target as HTMLElement)?.closest<HTMLElement>('[data-action]');
+  if (!target) return;
+
+  const action = target.getAttribute('data-action');
+  if (action === 'goto-page') {
+    const section = target.getAttribute('data-section');
+    const page = Number(target.getAttribute('data-page'));
+    if (!Number.isFinite(page)) return;
+    if (section === 's1') {
+      gotoS1Page(page);
+    } else if (section === 's2') {
+      gotoS2Page(page);
+    }
+  } else if (action === 'delete-daily') {
+    const date = target.getAttribute('data-date');
+    if (date) {
+      deleteDailyRecord(date);
+    }
+  }
+});
 
 // Listeners
 document.getElementById('s1-ps')?.addEventListener('change', (e: any) => { state.s1Size = Number(e.target.value); state.s1Page = 1; renderS1(); });
@@ -449,9 +478,10 @@ async function init() {
   renderS2();
 }
 
-window.addEventListener('analytics:data-purged', () => {
-  renderS1();
-  renderS2();
+window.addEventListener('analytics:data-purged', async () => {
+  state.s1Page = 1;
+  state.s2Page = 1;
+  await Promise.all([renderS1(), renderS2()]);
 });
 
 init();

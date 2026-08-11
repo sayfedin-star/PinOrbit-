@@ -230,4 +230,102 @@ describe('Pinner Analytics Edge Cache Suite', () => {
     expect(postBypassRead.cacheStatus).toBe('HIT');
     expect(postBypassRead.data.impressions).toBe(48730);
   });
+
+  describe('Edge Cache Decision Table (Cases 1–5)', () => {
+    const testKey = 'analytics:decision:table:test';
+
+    it('Case 1: Memory fresh → HIT (memory)', async () => {
+      const mockKv = {
+        get: vi.fn().mockResolvedValue({ source: 'kv' }),
+      };
+
+      // Set fresh memory entry (TTL 3600s)
+      await edgeCache.set(testKey, { source: 'memory-fresh' }, undefined, 3600);
+
+      const result = await edgeCache.get(testKey, mockKv);
+      expect(result.status).toBe('HIT');
+      expect(result.data).toEqual({ source: 'memory-fresh' });
+      expect(mockKv.get).not.toHaveBeenCalled();
+    });
+
+    it('Case 2: Memory stale + KV fresh → HIT (KV) and refresh memory entry', async () => {
+      vi.useFakeTimers();
+      try {
+        const mockKv = {
+          get: vi.fn().mockResolvedValue({ source: 'kv-fresh' }),
+        };
+
+        // Set memory entry with TTL 10s
+        await edgeCache.set(testKey, { source: 'memory-stale' }, undefined, 10);
+
+        // Advance time past TTL (e.g. 20s)
+        vi.advanceTimersByTime(20_000);
+
+        const result = await edgeCache.get(testKey, mockKv, 3600);
+        expect(mockKv.get).toHaveBeenCalledWith(testKey, 'json');
+        expect(result.status).toBe('HIT');
+        expect(result.data).toEqual({ source: 'kv-fresh' });
+
+        // Verify memory cache was refreshed with KV fresh data
+        const subsequentMemoryOnly = await edgeCache.get(testKey, undefined);
+        expect(subsequentMemoryOnly.status).toBe('HIT');
+        expect(subsequentMemoryOnly.data).toEqual({ source: 'kv-fresh' });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('Case 3: Memory stale + KV stale/absent → STALE with memory data', async () => {
+      vi.useFakeTimers();
+      try {
+        const mockKv = {
+          get: vi.fn().mockResolvedValue(null),
+        };
+
+        // Set memory entry with TTL 10s
+        await edgeCache.set(testKey, { source: 'memory-stale' }, undefined, 10);
+
+        // Advance time past TTL (e.g. 20s)
+        vi.advanceTimersByTime(20_000);
+
+        const result = await edgeCache.get(testKey, mockKv);
+        expect(mockKv.get).toHaveBeenCalledWith(testKey, 'json');
+        expect(result.status).toBe('STALE');
+        expect(result.data).toEqual({ source: 'memory-stale' });
+        expect(result.ttlRemaining).toBe(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('Case 4: No memory + KV fresh → HIT (KV)', async () => {
+      const mockKv = {
+        get: vi.fn().mockResolvedValue({ source: 'kv-fresh-only' }),
+      };
+
+      // Memory is clear
+      const result = await edgeCache.get(testKey, mockKv, 3600);
+      expect(mockKv.get).toHaveBeenCalledWith(testKey, 'json');
+      expect(result.status).toBe('HIT');
+      expect(result.data).toEqual({ source: 'kv-fresh-only' });
+
+      // Verify memory was populated
+      const subsequentMemoryOnly = await edgeCache.get(testKey, undefined);
+      expect(subsequentMemoryOnly.status).toBe('HIT');
+      expect(subsequentMemoryOnly.data).toEqual({ source: 'kv-fresh-only' });
+    });
+
+    it('Case 5: No memory + KV stale/absent → MISS', async () => {
+      const mockKv = {
+        get: vi.fn().mockResolvedValue(null),
+      };
+
+      // Memory is clear, KV returns null
+      const result = await edgeCache.get(testKey, mockKv);
+      expect(mockKv.get).toHaveBeenCalledWith(testKey, 'json');
+      expect(result.status).toBe('MISS');
+      expect(result.data).toBeNull();
+    });
+  });
 });
+

@@ -65,25 +65,9 @@ export const edgeCache = {
     ttlSeconds = DEFAULT_TTL_SECONDS
   ): Promise<CachedResponse<T | null>> {
     const now = Date.now();
-
-    // 1. Try Cloudflare KV if namespace is available in runtime context
-    if (kvNamespace && typeof kvNamespace.get === 'function') {
-      try {
-        const raw = await kvNamespace.get(key, 'json');
-        if (raw) {
-          return {
-            data: raw as T,
-            status: 'HIT',
-            cachedAt: now,
-          };
-        }
-      } catch (e) {
-        console.warn(`[EdgeCache] KV read error for key ${key}:`, e);
-      }
-    }
-
-    // 2. Check in-memory store fallback
     const memoryEntry = memoryCache.get(key);
+
+    // 1. Memory fresh → HIT (memory)
     if (memoryEntry) {
       const ageMs = now - memoryEntry.cachedAt;
       const ttlMs = memoryEntry.ttlMs;
@@ -95,17 +79,43 @@ export const edgeCache = {
           cachedAt: memoryEntry.cachedAt,
           ttlRemaining: Math.max(0, Math.floor((ttlMs - ageMs) / 1000)),
         };
-      } else {
-        // Stale entry
-        return {
-          data: memoryEntry.value as T,
-          status: 'STALE',
-          cachedAt: memoryEntry.cachedAt,
-          ttlRemaining: 0,
-        };
       }
     }
 
+    // If memory is stale or absent, consult Cloudflare KV if namespace is available
+    if (kvNamespace && typeof kvNamespace.get === 'function') {
+      try {
+        const raw = await kvNamespace.get(key, 'json');
+        if (raw) {
+          // 2 & 4: KV is fresh → refresh memory entry and return HIT (KV)
+          const ttlMs = ttlSeconds * 1000;
+          memoryCache.set(key, {
+            value: raw,
+            cachedAt: now,
+            ttlMs,
+          });
+          return {
+            data: raw as T,
+            status: 'HIT',
+            cachedAt: now,
+          };
+        }
+      } catch (e) {
+        console.warn(`[EdgeCache] KV read error for key ${key}:`, e);
+      }
+    }
+
+    // 3. Memory stale + KV stale/absent → STALE with memory data
+    if (memoryEntry) {
+      return {
+        data: memoryEntry.value as T,
+        status: 'STALE',
+        cachedAt: memoryEntry.cachedAt,
+        ttlRemaining: 0,
+      };
+    }
+
+    // 5. No memory + KV stale/absent → MISS
     return {
       data: null,
       status: 'MISS',
