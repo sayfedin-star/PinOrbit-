@@ -1,6 +1,25 @@
 const pipelineConnectionEl = document.querySelector('[data-connection-id]');
 const pipeConnId = pipelineConnectionEl?.getAttribute('data-connection-id');
 
+const humanizeCron = (expr: string, tz: string) => {
+  const m = /^(\d{1,2})\s+(\d{1,2})\s+\*\s+\*\s+\*$/.exec((expr || '').trim());
+  return m ? `Daily at ${String(m[2]).padStart(2, '0')}:${String(m[1]).padStart(2, '0')} ${tz}` : (expr || '—');
+};
+
+const relativeTime = (iso?: string | null) => {
+  if (!iso) return '—';
+  const diffMs = Date.now() - new Date(iso).getTime();
+  if (isNaN(diffMs)) return '—';
+  const diffSec = Math.floor(diffMs / 1000);
+  if (diffSec < 60) return `${diffSec}s ago`;
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHours = Math.floor(diffMin / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  return `${diffDays}d ago`;
+};
+
 function showInlineError(target: HTMLElement, message: string) {
   let errEl = target.querySelector('.inline-error');
   if (!errEl) {
@@ -55,7 +74,7 @@ if (pipeConnId) {
       const lastSyncEl = document.getElementById('connection-last-sync');
       if (lastSyncEl) {
         lastSyncEl.textContent = data.last_analytics_sync_at 
-          ? new Date(data.last_analytics_sync_at).toLocaleString() 
+          ? `${new Date(data.last_analytics_sync_at).toLocaleString()} (${relativeTime(data.last_analytics_sync_at)})`
           : '—';
       }
 
@@ -195,6 +214,202 @@ if (pipeConnId) {
     }
   }
 
+  // Load Cron Jobs table
+  async function loadCronJobs() {
+    const tbody = document.getElementById('cron-jobs-rows');
+    if (!tbody || !pipeConnId) return;
+
+    // Render skeleton pulse rows while fetching
+    tbody.innerHTML = '';
+    for (let i = 0; i < 2; i++) {
+      const tr = document.createElement('tr');
+      tr.className = 'border-b border-slate-100 dark:border-border/50 animate-pulse';
+      const td = document.createElement('td');
+      td.colSpan = 6;
+      td.className = 'py-4 pr-4';
+      const bar = document.createElement('div');
+      bar.className = 'h-4 bg-slate-200 dark:bg-muted rounded w-3/4';
+      td.appendChild(bar);
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+    }
+
+    try {
+      const res = await fetch(`/api/analytics/connections/${pipeConnId}/cron-jobs`);
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      if (!data.success || !Array.isArray(data.pipelines)) {
+        throw new Error(data.error || 'Invalid response from cron-jobs API');
+      }
+
+      tbody.innerHTML = '';
+      const timezone = data.timezone || 'UTC';
+
+      data.pipelines.forEach((p: any) => {
+        const tr = document.createElement('tr');
+        tr.className = 'border-b border-slate-100 hover:bg-slate-50/50 dark:border-border/50 dark:hover:bg-muted/20 transition-colors text-xs';
+
+        // 1. Pipeline Column
+        const tdPipeline = document.createElement('td');
+        tdPipeline.className = 'py-3 pr-4 font-medium text-slate-800 dark:text-foreground';
+        const labelDiv = document.createElement('div');
+        labelDiv.className = 'font-semibold';
+        labelDiv.textContent = p.label || (p.channel === 'account_analytics' ? 'Pipeline A: Account Analytics' : 'Pipeline B: Ranked Top Pins');
+        const channelDiv = document.createElement('div');
+        channelDiv.className = 'font-mono text-[11px] text-slate-400 dark:text-muted-foreground';
+        channelDiv.textContent = p.channel === 'account_analytics' ? '/v5/user_account/analytics' : '/v5/user_account/analytics/top_pins';
+        tdPipeline.appendChild(labelDiv);
+        tdPipeline.appendChild(channelDiv);
+        tr.appendChild(tdPipeline);
+
+        // 2. Job Column
+        const tdJob = document.createElement('td');
+        tdJob.className = 'py-3 pr-4 font-mono text-slate-700 dark:text-foreground';
+        if (p.job_id) {
+          const code = document.createElement('span');
+          code.className = 'inline-flex items-center px-1.5 py-0.5 rounded bg-slate-100 dark:bg-muted font-bold';
+          code.textContent = `#${p.job_id}`;
+          tdJob.appendChild(code);
+        } else {
+          tdJob.textContent = '—';
+        }
+        tr.appendChild(tdJob);
+
+        // 3. Schedule Column
+        const tdSchedule = document.createElement('td');
+        tdSchedule.className = 'py-3 pr-4';
+        const cronDiv = document.createElement('div');
+        cronDiv.className = 'font-mono font-bold text-slate-800 dark:text-foreground';
+        cronDiv.textContent = p.cron_expression || '—';
+        const humanDiv = document.createElement('div');
+        humanDiv.className = 'text-[11px] text-slate-500 dark:text-muted-foreground';
+        humanDiv.textContent = humanizeCron(p.cron_expression, timezone);
+        tdSchedule.appendChild(cronDiv);
+        tdSchedule.appendChild(humanDiv);
+        tr.appendChild(tdSchedule);
+
+        // 4. Status Column
+        const tdStatus = document.createElement('td');
+        tdStatus.className = 'py-3 pr-4';
+        const statusWrapper = document.createElement('div');
+        statusWrapper.className = 'flex items-center gap-1.5 flex-wrap';
+
+        const badge = document.createElement('span');
+        const status = p.schedule_status || 'pending';
+        if (status === 'synced') {
+          badge.className = 'inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400';
+          badge.textContent = 'synced';
+        } else if (status === 'error') {
+          badge.className = 'inline-flex items-center rounded-full bg-red-500/10 px-2 py-0.5 text-[11px] font-bold text-red-500';
+          badge.textContent = 'error';
+        } else {
+          badge.className = 'inline-flex items-center rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-bold text-amber-600 dark:text-amber-400';
+          badge.textContent = 'pending';
+        }
+        statusWrapper.appendChild(badge);
+
+        if (p.live_status) {
+          const liveChip = document.createElement('span');
+          liveChip.className = 'inline-flex items-center rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-bold text-blue-600 dark:text-blue-400';
+          liveChip.textContent = String(p.live_status);
+          statusWrapper.appendChild(liveChip);
+        }
+        tdStatus.appendChild(statusWrapper);
+        tr.appendChild(tdStatus);
+
+        // 5. Last Runs Column (Sparkline 10 cells)
+        const tdRuns = document.createElement('td');
+        tdRuns.className = 'py-3 pr-4';
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('viewBox', '0 0 116 14');
+        svg.setAttribute('class', 'w-28 h-3.5 inline-block align-middle');
+        svg.setAttribute('role', 'img');
+        svg.setAttribute('aria-label', 'Last 10 runs status');
+
+        const runs = Array.isArray(p.last_runs) ? p.last_runs : [];
+        for (let cellIdx = 0; cellIdx < 10; cellIdx++) {
+          const run = runs[cellIdx];
+          const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          rect.setAttribute('x', String(cellIdx * 12));
+          rect.setAttribute('y', '1');
+          rect.setAttribute('width', '8');
+          rect.setAttribute('height', '12');
+          rect.setAttribute('rx', '2');
+
+          const titleEl = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+          if (run) {
+            rect.setAttribute('fill', run.ok ? '#10b981' : '#ef4444');
+            titleEl.textContent = `Run ${cellIdx + 1}: ${run.ok ? 'Success' : 'Failed'} (${relativeTime(run.at)})`;
+          } else {
+            rect.setAttribute('fill', '#cbd5e1');
+            rect.setAttribute('class', 'dark:fill-slate-700');
+            titleEl.textContent = 'No recorded run';
+          }
+          rect.appendChild(titleEl);
+          svg.appendChild(rect);
+        }
+        tdRuns.appendChild(svg);
+        tr.appendChild(tdRuns);
+
+        // 6. Actions Column
+        const tdActions = document.createElement('td');
+        tdActions.className = 'py-3 whitespace-nowrap';
+        const actionsDiv = document.createElement('div');
+        actionsDiv.className = 'flex items-center gap-2';
+
+        const runBtn = document.createElement('button');
+        runBtn.type = 'button';
+        runBtn.className = 'rounded-lg bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition-all';
+        runBtn.textContent = 'Run Now';
+        runBtn.addEventListener('click', () => {
+          const targetArticle = document.querySelector(`article[data-pipeline="${p.channel === 'account_analytics' ? 'analytics' : 'top_pins'}"]`);
+          const runActionBtn = targetArticle?.querySelector('button[data-action="run"]') as HTMLButtonElement;
+          if (runActionBtn) {
+            runActionBtn.click();
+          }
+        });
+
+        const logsBtn = document.createElement('button');
+        logsBtn.type = 'button';
+        logsBtn.className = 'rounded-lg border border-slate-300 dark:border-border bg-card px-2.5 py-1 text-xs font-semibold text-slate-700 dark:text-foreground hover:bg-muted transition-all';
+        logsBtn.textContent = 'View Logs';
+        logsBtn.addEventListener('click', () => {
+          const targetArticle = document.querySelector(`article[data-pipeline="${p.channel === 'account_analytics' ? 'analytics' : 'top_pins'}"]`);
+          const logsActionBtn = targetArticle?.querySelector('button[data-action="logs"]') as HTMLButtonElement;
+          if (logsActionBtn) {
+            logsActionBtn.click();
+          }
+        });
+
+        actionsDiv.appendChild(runBtn);
+        actionsDiv.appendChild(logsBtn);
+        tdActions.appendChild(actionsDiv);
+        tr.appendChild(tdActions);
+
+        tbody.appendChild(tr);
+      });
+    } catch (err: any) {
+      console.error('Failed to load cron jobs', err);
+      tbody.innerHTML = '';
+      const errTr = document.createElement('tr');
+      const errTd = document.createElement('td');
+      errTd.colSpan = 6;
+      errTd.className = 'py-4 text-center text-xs text-red-500';
+      errTd.textContent = 'Failed to load cron jobs. ';
+
+      const retryBtn = document.createElement('button');
+      retryBtn.type = 'button';
+      retryBtn.className = 'underline font-bold ml-1 hover:text-red-700';
+      retryBtn.textContent = 'Retry';
+      retryBtn.addEventListener('click', () => loadCronJobs());
+      errTd.appendChild(retryBtn);
+      errTr.appendChild(errTd);
+      tbody.appendChild(errTr);
+    }
+  }
+
   // Bind save buttons
   document.querySelectorAll('button[data-action="save"]').forEach(btn => {
     btn.removeAttribute('disabled');
@@ -267,6 +482,7 @@ if (pipeConnId) {
             btn.removeAttribute('disabled');
           }, 2000);
           loadPipelineSettings();
+          loadCronJobs();
         } else {
           const contentType = res.headers.get('content-type');
           let msg = 'Failed to save';
@@ -365,6 +581,7 @@ if (pipeConnId) {
         if (res.ok && data.success) {
           showToast(`Run Success: ${data.message || 'Sync triggered successfully'}`);
           loadPipelineSettings();
+          loadCronJobs();
         } else {
           const msg = data.error || data.message || `HTTP ${res.status}: Run failed`;
           showInlineError(target, msg);
@@ -399,6 +616,7 @@ if (pipeConnId) {
         if (res.ok && data.success) {
           showToast(`Schedule Synced: FastCron Job #${data.fastcron_job_id || 'Active'}`);
           loadPipelineSettings();
+          loadCronJobs();
         } else {
           const msg = data.error || data.message || `HTTP ${res.status}: Schedule sync failed`;
           showInlineError(target, msg);
@@ -445,7 +663,43 @@ if (pipeConnId) {
     });
   });
 
+  // Copy webhook URL buttons (event delegation)
+  document.addEventListener('click', async (e) => {
+    const btn = (e.target as HTMLElement).closest('button[data-action="copy-webhook"]');
+    if (!btn) return;
+    const parent = btn.closest('.sm\\:col-span-2') || btn.closest('label') || btn.parentElement;
+    const input = parent?.querySelector('input[data-field="webhook_url"]') as HTMLInputElement;
+    if (!input || !input.value) {
+      showToast('No webhook URL to copy', false);
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(input.value);
+      const origText = btn.textContent;
+      btn.textContent = 'Copied!';
+      setTimeout(() => {
+        btn.textContent = origText || 'Copy';
+      }, 2000);
+      showToast('Webhook URL copied to clipboard');
+    } catch {
+      showToast('Failed to copy to clipboard', false);
+    }
+  });
+
+  // Cron Jobs Refresh button
+  const cronRefreshBtn = document.getElementById('cron-jobs-refresh');
+  if (cronRefreshBtn) {
+    cronRefreshBtn.addEventListener('click', async () => {
+      cronRefreshBtn.setAttribute('role', 'status');
+      const orig = cronRefreshBtn.textContent;
+      cronRefreshBtn.textContent = 'Refreshing...';
+      await loadCronJobs();
+      cronRefreshBtn.textContent = orig || 'Refresh';
+    });
+  }
+
   loadPipelineSettings();
+  loadCronJobs();
 
   let settingsLoadedAt = 0;
   const SETTINGS_TTL_MS = 30_000;
@@ -455,6 +709,8 @@ if (pipeConnId) {
       if (Date.now() - settingsLoadedAt <= SETTINGS_TTL_MS) return;
       settingsLoadedAt = Date.now();
       loadPipelineSettings();
+      loadCronJobs();
     });
   });
 }
+
