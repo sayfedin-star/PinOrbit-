@@ -445,9 +445,13 @@ if (pipeConnId) {
 
   loadPipelineSettings();
 
-  // Reload on tab activation
+  let settingsLoadedAt = 0;
+  const SETTINGS_TTL_MS = 30_000;
   document.querySelectorAll('[role="tab"]').forEach(t => {
     t.addEventListener('click', () => {
+      if (t.getAttribute('data-tab') !== 'pipeline') return;
+      if (Date.now() - settingsLoadedAt <= SETTINGS_TTL_MS) return;
+      settingsLoadedAt = Date.now();
       loadPipelineSettings();
     });
   });

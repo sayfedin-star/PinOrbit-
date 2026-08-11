@@ -49,9 +49,7 @@ export const GET: APIRoute = async ({ params, request, locals }) => {
       { status: 400, headers: { 'Content-Type': 'application/json' } }
     );
   }
-  // Increase internal limit to allow pagination from a larger pool, or rely on DB limit?
-  // Let's pass a large limit so we get all pins for the window and paginate in-memory
-  const limit = 500; 
+  const limit = 50; 
   const bypassCache = url.searchParams.get('cache_bypass') === '1';
   const fromDate = url.searchParams.get('from_date') || undefined;
   const toDate = url.searchParams.get('to_date') || undefined;
@@ -72,34 +70,22 @@ export const GET: APIRoute = async ({ params, request, locals }) => {
       kvNamespace,
       bypassCache,
       fromDate,
-      toDate
+      toDate,
+      page,
+      pageSize,
+      query
     );
 
-    let rows = data || [];
-
-    if (query) {
-      rows = rows.filter(r => 
-        String(r.pin_id).toLowerCase().includes(query) || 
-        (r.title && String(r.title).toLowerCase().includes(query))
-      );
-    }
-
-
-
-    const total = rows.length;
-    const start = (page - 1) * pageSize;
-    const pagedRows = rows.slice(start, start + pageSize);
-
-    // Extract window from the first row if available
-    const windowStart = rows.length > 0 ? rows[0].window_start : null;
-    const windowEnd = rows.length > 0 ? rows[0].window_end : null;
+    const rows = (data as any)?.rows || (Array.isArray(data) ? data : []);
+    const total = (data as any)?.total ?? rows.length;
+    const window = (data as any)?.window || (rows.length > 0 && rows[0].window_start && rows[0].window_end ? { start: rows[0].window_start, end: rows[0].window_end } : null);
 
     return new Response(JSON.stringify({ 
       success: true, 
       data: {
-        rows: pagedRows,
+        rows,
         total,
-        window: windowStart && windowEnd ? { start: windowStart, end: windowEnd } : null
+        window
       }
     }), {
       status: 200,

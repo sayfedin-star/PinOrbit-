@@ -115,7 +115,10 @@ export const pinnerAnalyticsService = {
     kvNamespace?: any,
     bypassCache = false,
     fromDate?: string,
-    toDate?: string
+    toDate?: string,
+    page = 1,
+    pageSize = 25,
+    query?: string
   ): Promise<ServiceResponse<TopPinSnapshot[]>> {
     await assertWorkspaceAccess(schedulingClient, workspaceId, userId);
 
@@ -146,7 +149,10 @@ export const pinnerAnalyticsService = {
       sortBy,
       fromDate,
       toDate,
-      limit
+      limit,
+      page,
+      pageSize,
+      query
     );
 
     // R10.1: NEVER cache empty results

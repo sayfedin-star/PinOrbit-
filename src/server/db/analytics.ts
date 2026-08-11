@@ -1068,14 +1068,20 @@ export const analyticsDb = {
    * Retrieves ranked top pins with date range filtering.
    * R19 F3: Two-step window-pinned reader returning ONLY the newest window snapshot matching range.
    */
+  /**
+   * Retrieves paginated Top Pins snapshots for a given window (R-04 Layer B).
+   */
   async getTopPinsPaginated(
     workspaceId: string,
     connectionId: string,
     sortBy: PinnerSortBy,
     fromDate?: string,
     toDate?: string,
-    limit = 50
-  ): Promise<TopPinSnapshot[]> {
+    limit = 50,
+    page = 1,
+    pageSize = 25,
+    q?: string
+  ): Promise<{ rows: TopPinSnapshot[]; total: number; window: { start: string; end: string } | null } & TopPinSnapshot[]> {
     if (!workspaceId || !connectionId) {
       throw new Error('Tenant Boundary Violation: workspaceId and connectionId are required.');
     }
@@ -1100,38 +1106,52 @@ export const analyticsDb = {
 
     if (windowError) throw windowError;
     if (!latestWindow || latestWindow.length === 0) {
-      return [];
+      const emptyResult: any = [];
+      emptyResult.rows = [];
+      emptyResult.total = 0;
+      emptyResult.window = null;
+      return emptyResult;
     }
 
     const { window_start: w0, window_end: w1 } = latestWindow[0];
 
-    // Step 2: return rows for THAT exact window
-    const { data, error } = await analyticsClient
+    const selectCols =
+      'pin_id,title,image_url,destination_url,rank_position,window_start,window_end,impressions,engagement,outbound_clicks,pin_clicks,saves,engagement_rate,outbound_click_rate,pin_click_rate,save_rate,data_status';
+
+    const ps = pageSize || limit;
+    const start = (page - 1) * ps;
+    const end = start + ps - 1;
+
+    let query = analyticsClient
       .from('top_pins_snapshots')
-      .select('*')
+      .select(selectCols, { count: 'exact' })
       .eq('workspace_id', workspaceId)
       .eq('connection_id', connectionId)
       .eq('sort_by', sortBy)
       .eq('window_start', w0)
-      .eq('window_end', w1)
-      .order('rank_position', { ascending: true })
-      .order('recorded_at', { ascending: false })
-      .limit(limit);
+      .eq('window_end', w1);
 
-    if (error) throw error;
-    
-    // Deduplicate by rank_position (keeping newest recorded snapshot)
-    const seenRanks = new Set<number>();
-    const uniqueRows: TopPinSnapshot[] = [];
-    for (const row of (data as TopPinSnapshot[]) || []) {
-      if (!seenRanks.has(row.rank_position)) {
-        seenRanks.add(row.rank_position);
-        uniqueRows.push(row);
-      }
-      if (uniqueRows.length >= limit) break;
+    if (q && q.trim()) {
+      const term = q.trim();
+      query = query.or(`pin_id.ilike.%${term}%,title.ilike.%${term}%`);
     }
 
-    return uniqueRows;
+    const { data, error, count } = await query
+      .order('rank_position', { ascending: true })
+      .order('recorded_at', { ascending: false })
+      .range(start, end);
+
+    if (error) throw error;
+
+    const rows = (data as TopPinSnapshot[]) || [];
+    const total = count ?? rows.length;
+
+    const result: any = rows;
+    result.rows = rows;
+    result.total = total;
+    result.window = { start: w0, end: w1 };
+
+    return result;
   },
 
   /**

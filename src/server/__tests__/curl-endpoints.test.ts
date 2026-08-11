@@ -286,4 +286,41 @@ describe('R12/R15 Full 17-Endpoint Route Verification Suite', () => {
       expect(res.status).toBeLessThan(500);
     }
   });
+
+  it('R-05: validates date range bounds on GET /api/analytics/connections/[id]/daily', async () => {
+    const connId = '8aa5b660-e54a-4e44-b8bd-28e9d3ab8596';
+    const locals = {
+      user: { id: 'user-1' },
+      supabase: {},
+      activeWorkspaceId: '9f08ca03-e79c-46fa-9518-6858216daf65',
+    };
+
+    // 1. from_date after to_date -> 422 JSON
+    const resInverted = await getConnDaily({
+      params: { id: connId },
+      request: new Request(`http://localhost/api/analytics/connections/${connId}/daily?from_date=2026-08-10&to_date=2026-08-01`),
+      locals,
+    } as any);
+    expect(resInverted.status).toBe(422);
+    const dataInverted = await resInverted.json();
+    expect(dataInverted).toEqual({ success: false, error: 'from_date cannot be after to_date.' });
+
+    // 2. Span > 365 days -> 422 JSON
+    const resExceed = await getConnDaily({
+      params: { id: connId },
+      request: new Request(`http://localhost/api/analytics/connections/${connId}/daily?from_date=2025-01-01&to_date=2026-01-02`),
+      locals,
+    } as any);
+    expect(resExceed.status).toBe(422);
+    const dataExceed = await resExceed.json();
+    expect(dataExceed).toEqual({ success: false, error: 'Date range span cannot exceed 365 days.' });
+
+    // 3. Valid date range -> 200 JSON
+    const resValid = await getConnDaily({
+      params: { id: connId },
+      request: new Request(`http://localhost/api/analytics/connections/${connId}/daily?from_date=2026-08-01&to_date=2026-08-10`),
+      locals,
+    } as any);
+    expect(resValid.status).toBe(200);
+  });
 });

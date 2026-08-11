@@ -36,11 +36,28 @@ export const GET: APIRoute = async ({ params, request, locals }) => {
     const isDesc = (url.searchParams.get('dir') || 'desc').toLowerCase() === 'desc';
     const query = (url.searchParams.get('q') || '').toLowerCase().trim();
 
+    const MAX_SPAN_DAYS = 365;
+    const today = new Date().toISOString().split('T')[0];
+    let from = fromDate, to = toDate;
+    if (!from || !to) { const d = new Date(Date.now() - 30*86400000); from = from || d.toISOString().split('T')[0]; to = to || today; }
+    if (from > to) {
+      return new Response(JSON.stringify({ success: false, error: 'from_date cannot be after to_date.' }), {
+        status: 422,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    if ((+new Date(to) - +new Date(from))/86400000 > MAX_SPAN_DAYS) {
+      return new Response(JSON.stringify({ success: false, error: 'Date range span cannot exceed 365 days.' }), {
+        status: 422,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     const result = await analyticsDb.getConnectionDailyMetrics(
       workspaceId,
       connectionId,
-      fromDate,
-      toDate
+      from,
+      to
     );
 
     let rows = result.rows;

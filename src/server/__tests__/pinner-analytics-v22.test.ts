@@ -333,14 +333,21 @@ describe('Pinner Analytics R11 Contract & V22 Methods Test Suite', () => {
                 };
               }
               // Step 2: rows for that exact window
-              return {
+              const mockQuery: any = {
                 eq: vi.fn().mockReturnThis(),
+                or: vi.fn().mockReturnThis(),
                 order: vi.fn().mockReturnThis(),
+                range: vi.fn().mockResolvedValue({
+                  data: mockSnapshotsWindow3Newest,
+                  count: mockSnapshotsWindow3Newest.length,
+                  error: null,
+                }),
                 limit: vi.fn().mockResolvedValue({
                   data: mockSnapshotsWindow3Newest,
                   error: null,
                 }),
               };
+              return mockQuery;
             }),
           };
         }
