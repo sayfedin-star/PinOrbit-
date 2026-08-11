@@ -4,6 +4,7 @@ import type { APIRoute } from 'astro';
 import { assertWorkspaceAccess } from '../../../../../server/auth/workspace-guard';
 import { analyticsDb } from '../../../../../server/db/analytics';
 import type { PinnerSortBy } from '../../../../../lib/types';
+import { errorStatus } from '../../../../../server/lib/http-error';
 
 const ALLOWED_SORT_MODES = new Set(['IMPRESSION', 'OUTBOUND_CLICK', 'SAVE', 'ENGAGEMENT', 'PIN_CLICK']);
 
@@ -104,14 +105,13 @@ export const GET: APIRoute = async ({ params, request, locals }) => {
       }
     );
   } catch (err: any) {
-    const isAuth = err.message?.includes('Forbidden') || err.message?.includes('Unauthorized');
     return new Response(
       JSON.stringify({
         success: false,
         error: err.message || 'Failed to retrieve pin leaderboard.',
       }),
       {
-        status: isAuth ? 403 : 500,
+        status: errorStatus(err),
         headers: { 'Content-Type': 'application/json' },
       }
     );

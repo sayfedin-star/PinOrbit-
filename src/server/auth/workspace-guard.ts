@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { HttpError } from '../lib/http-error';
 
 export interface WorkspaceMembership {
   id: string;
@@ -26,7 +27,7 @@ export async function assertWorkspaceAccess(
   userId: string
 ): Promise<WorkspaceContext> {
   if (!workspaceId || !userId) {
-    throw new Error('Unauthorized: missing workspace or user identifier.');
+    throw new HttpError(401, 'Unauthorized: missing workspace or user identifier.');
   }
 
   const { data, error } = await schedulingClient
@@ -37,7 +38,7 @@ export async function assertWorkspaceAccess(
     .single();
 
   if (error || !data) {
-    throw new Error(`Forbidden: User ${userId} is not a member of workspace ${workspaceId}.`);
+    throw new HttpError(403, `Forbidden: User ${userId} is not a member of workspace ${workspaceId}.`);
   }
 
   return {

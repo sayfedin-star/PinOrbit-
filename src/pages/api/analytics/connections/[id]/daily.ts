@@ -3,6 +3,7 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 import { assertWorkspaceAccess } from '../../../../../server/auth/workspace-guard';
 import { analyticsDb } from '../../../../../server/db/analytics';
+import { errorStatus } from '../../../../../server/lib/http-error';
 
 export const GET: APIRoute = async ({ params, request, locals }) => {
   const user = locals.user;
@@ -90,14 +91,13 @@ export const GET: APIRoute = async ({ params, request, locals }) => {
       headers: { 'Content-Type': 'application/json' },
     });
   } catch (err: any) {
-    const isAuth = err.message?.includes('Forbidden') || err.message?.includes('Unauthorized');
     return new Response(
       JSON.stringify({
         success: false,
         error: err.message || 'Failed to retrieve connection daily metrics.',
       }),
       {
-        status: isAuth ? 403 : 500,
+        status: errorStatus(err),
         headers: { 'Content-Type': 'application/json' },
       }
     );

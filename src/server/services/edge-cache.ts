@@ -17,6 +17,8 @@ export interface CachedResponse<T> {
   ttlRemaining?: number;
 }
 
+import type { EdgeKVNamespace } from '../lib/edge-kv';
+
 interface InMemoryCacheEntry<T> {
   value: T;
   cachedAt: number;
@@ -24,7 +26,7 @@ interface InMemoryCacheEntry<T> {
 }
 
 // In-Memory fallback store for SSR and local environments
-const memoryCache = new Map<string, InMemoryCacheEntry<any>>();
+const memoryCache = new Map<string, InMemoryCacheEntry<unknown>>();
 
 const DEFAULT_TTL_SECONDS = 6 * 60 * 60; // 6 hours
 
@@ -61,7 +63,7 @@ export const edgeCache = {
    */
   async get<T>(
     key: string,
-    kvNamespace?: any,
+    kvNamespace?: EdgeKVNamespace | any,
     ttlSeconds = DEFAULT_TTL_SECONDS
   ): Promise<CachedResponse<T | null>> {
     const now = Date.now();
@@ -128,7 +130,7 @@ export const edgeCache = {
   async set<T>(
     key: string,
     value: T,
-    kvNamespace?: any,
+    kvNamespace?: EdgeKVNamespace | any,
     ttlSeconds = DEFAULT_TTL_SECONDS
   ): Promise<void> {
     const now = Date.now();
@@ -159,7 +161,7 @@ export const edgeCache = {
   async invalidateConnection(
     workspaceId: string,
     connectionId: string,
-    kvNamespace?: any
+    kvNamespace?: EdgeKVNamespace | any
   ): Promise<void> {
     const prefix = `analytics:${workspaceId}:${connectionId}:`;
 

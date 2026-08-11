@@ -139,11 +139,21 @@ export interface ETLProcessingResult {
 }
 
 /**
+ * Helper to execute and log batch upserts cleanly (R-09).
+ */
+async function upsertBatch<T>(label: string, rows: T[], fn: (r: T[]) => Promise<number>): Promise<number> {
+  if (!rows.length) return 0;
+  const count = await fn(rows);
+  console.info(`[PinnerETL] ${label}: upserted ${count} rows`);
+  return count;
+}
+
+/**
  * Normalizes Pinterest metrics ensuring proper BIGINT counts and NUMERIC(8,6) rates.
  * Forward-compatibility: unknown metric keys are preserved ONLY in raw_metrics JSONB.
  */
 function normalizeMetrics(raw: PinnerRawMetrics = {}) {
-  const sanitizeNumber = (v: any): number => {
+  const sanitizeNumber = (v: unknown): number => {
     if (v === undefined || v === null) return 0;
     if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
     let s = String(v).trim().toLowerCase();
@@ -156,19 +166,19 @@ function normalizeMetrics(raw: PinnerRawMetrics = {}) {
     return Number.isFinite(n) ? n * multiplier : 0;
   };
 
-  const parseCount = (v: any): number => {
+  const parseCount = (v: unknown): number => {
     const n = sanitizeNumber(v);
     const result = n < 0 ? 0 : Math.floor(n);
     return Number.isFinite(result) ? result : 0;
   };
 
-  const parseRate = (v: any): number => {
+  const parseRate = (v: unknown): number => {
     const n = sanitizeNumber(v);
     const result = parseFloat(n.toFixed(6));
     return Number.isFinite(result) ? result : 0;
   };
 
-  const parseTiming = (v: any): number => {
+  const parseTiming = (v: unknown): number => {
     const n = sanitizeNumber(v);
     const result = n < 0 ? 0.0 : parseFloat(n.toFixed(2));
     return Number.isFinite(result) ? result : 0;
@@ -719,35 +729,21 @@ export const pinnerETL = {
       // =========================================================================
       // Persistence Layer (Project 3 Upserts)
       // =========================================================================
-      let dailyUpsertCount = 0;
-      if (dailyRows.length > 0) {
-        dailyUpsertCount = await analyticsDb.upsertAccountDailyMetrics(
-          workspaceId,
-          connectionId,
-          dailyRows
-        );
-      }
+      const dailyUpsertCount = await upsertBatch('daily', dailyRows, (r) =>
+        analyticsDb.upsertAccountDailyMetrics(workspaceId, connectionId, r)
+      );
 
       if (summaryRow) {
         await analyticsDb.upsertAccountSummary(workspaceId, connectionId, summaryRow);
       }
 
-      let topPinsUpsertCount = 0;
-      if (topPinRows.length > 0) {
-        topPinsUpsertCount = await analyticsDb.upsertTopPinsSnapshots(
-          workspaceId,
-          connectionId,
-          topPinRows
-        );
-      }
+      const topPinsUpsertCount = await upsertBatch('top_pins', topPinRows, (r) =>
+        analyticsDb.upsertTopPinsSnapshots(workspaceId, connectionId, r)
+      );
 
-      let rollupsUpsertCount = 0;
-      if (workspaceRollupRows.length > 0) {
-        rollupsUpsertCount = await analyticsDb.upsertDailyWorkspaceMetrics(
-          workspaceId,
-          workspaceRollupRows
-        );
-      }
+      const rollupsUpsertCount = await upsertBatch('workspace_rollups', workspaceRollupRows, (r) =>
+        analyticsDb.upsertDailyWorkspaceMetrics(workspaceId, r)
+      );
 
       if (destinationUrlsToTrack.length > 0) {
         await analyticsDb.upsertUrlPerformance(workspaceId, destinationUrlsToTrack);

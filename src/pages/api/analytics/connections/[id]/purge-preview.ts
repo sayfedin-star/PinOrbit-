@@ -4,6 +4,7 @@ import type { APIRoute } from 'astro';
 import { assertWorkspaceAccess } from '../../../../../server/auth/workspace-guard';
 import { analyticsDb } from '../../../../../server/db/analytics';
 import type { PurgeTarget } from '../../../../../lib/types';
+import { errorStatus } from '../../../../../server/lib/http-error';
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const VALID_TARGETS = new Set<PurgeTarget>(['daily', 'top_pins']);
@@ -137,14 +138,13 @@ export const GET: APIRoute = async ({ params, request, locals }) => {
       }
     );
   } catch (err: any) {
-    const isAuth = err.message?.includes('Forbidden') || err.message?.includes('Unauthorized');
     return new Response(
       JSON.stringify({
         success: false,
         error: err.message || 'Failed to preview purge.',
       }),
       {
-        status: isAuth ? 403 : 500,
+        status: errorStatus(err),
         headers: { 'Content-Type': 'application/json' },
       }
     );

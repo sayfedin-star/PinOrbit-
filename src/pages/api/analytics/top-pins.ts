@@ -3,6 +3,8 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 import { pinnerAnalyticsService } from '../../../server/services/pinner-analytics-service';
 import type { PinnerSortBy } from '../../../lib/types';
+import { getAnalyticsKV } from '../../../server/lib/edge-kv';
+import { errorStatus } from '../../../server/lib/http-error';
 
 export const GET: APIRoute = async ({ request, locals }) => {
   const user = locals.user;
@@ -22,7 +24,7 @@ export const GET: APIRoute = async ({ request, locals }) => {
   const workspaceId = url.searchParams.get('workspace_id') || locals.activeWorkspaceId;
   const connectionId = url.searchParams.get('connection_id');
   const sortBy = (url.searchParams.get('sort_by') || 'IMPRESSION').toUpperCase() as PinnerSortBy;
-  const limit = Math.min(50, Math.max(1, parseInt(url.searchParams.get('limit') || '50', 10)));
+  const limit = parseInt(url.searchParams.get('limit') || '50', 10);
   const bypassCache = url.searchParams.get('cache_bypass') === '1';
   const fromDate = url.searchParams.get('from_date') || undefined;
   const toDate = url.searchParams.get('to_date') || undefined;
@@ -38,7 +40,7 @@ export const GET: APIRoute = async ({ request, locals }) => {
   }
 
   try {
-    const kvNamespace = (locals as any)?.runtime?.env?.ANALYTICS_KV;
+    const kvNamespace = getAnalyticsKV(locals);
     const { data, cacheStatus } = await pinnerAnalyticsService.getTopPins(
       schedulingClient,
       user.id,
@@ -60,15 +62,13 @@ export const GET: APIRoute = async ({ request, locals }) => {
       },
     });
   } catch (err: any) {
-    const isAuthError =
-      err.message?.includes('Forbidden') || err.message?.includes('Unauthorized');
     return new Response(
       JSON.stringify({
         success: false,
         error: err.message || 'Failed to retrieve top pins.',
       }),
       {
-        status: isAuthError ? 403 : 500,
+        status: errorStatus(err),
         headers: { 'Content-Type': 'application/json' },
       }
     );

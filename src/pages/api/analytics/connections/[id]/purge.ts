@@ -5,6 +5,8 @@ import { assertWorkspaceAccess } from '../../../../../server/auth/workspace-guar
 import { analyticsDb } from '../../../../../server/db/analytics';
 import { edgeCache } from '../../../../../server/services/edge-cache';
 import type { PurgeTarget } from '../../../../../lib/types';
+import { getAnalyticsKV } from '../../../../../server/lib/edge-kv';
+import { errorStatus } from '../../../../../server/lib/http-error';
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const VALID_TARGETS = new Set<PurgeTarget>(['daily', 'top_pins']);
@@ -159,7 +161,7 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
     );
 
     // Invalidate edge cache for this connection
-    const runtimeKvNamespace = (locals as any)?.runtime?.env?.ANALYTICS_KV;
+    const runtimeKvNamespace = getAnalyticsKV(locals);
     await edgeCache.invalidateConnection(workspaceId, connectionId, runtimeKvNamespace);
 
     return new Response(
@@ -174,14 +176,13 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
       }
     );
   } catch (err: any) {
-    const isAuth = err.message?.includes('Forbidden') || err.message?.includes('Unauthorized');
     return new Response(
       JSON.stringify({
         success: false,
         error: err.message || 'Failed to execute data purge.',
       }),
       {
-        status: isAuth ? 403 : 500,
+        status: errorStatus(err),
         headers: { 'Content-Type': 'application/json' },
       }
     );

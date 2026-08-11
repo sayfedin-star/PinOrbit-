@@ -2,6 +2,8 @@ export const prerender = false;
 
 import type { APIRoute } from 'astro';
 import { pinnerAnalyticsService } from '../../../server/services/pinner-analytics-service';
+import { getAnalyticsKV } from '../../../server/lib/edge-kv';
+import { errorStatus } from '../../../server/lib/http-error';
 
 export const GET: APIRoute = async ({ request, locals }) => {
   const user = locals.user;
@@ -34,7 +36,7 @@ export const GET: APIRoute = async ({ request, locals }) => {
   }
 
   try {
-    const kvNamespace = (locals as any)?.runtime?.env?.ANALYTICS_KV;
+    const kvNamespace = getAnalyticsKV(locals);
     const { data, cacheStatus } = await pinnerAnalyticsService.getOverview(
       schedulingClient,
       user.id,
@@ -53,15 +55,13 @@ export const GET: APIRoute = async ({ request, locals }) => {
       },
     });
   } catch (err: any) {
-    const isAuthError =
-      err.message?.includes('Forbidden') || err.message?.includes('Unauthorized');
     return new Response(
       JSON.stringify({
         success: false,
         error: err.message || 'Failed to retrieve overview metrics.',
       }),
       {
-        status: isAuthError ? 403 : 500,
+        status: errorStatus(err),
         headers: { 'Content-Type': 'application/json' },
       }
     );

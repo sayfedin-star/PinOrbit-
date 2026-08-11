@@ -45,7 +45,9 @@ if (pipeConnId) {
           } else {
             msg = await res.text();
           }
-        } catch {}
+        } catch (parseErr) {
+          msg = `HTTP ${res.status} (unparseable error body: ${parseErr instanceof Error ? parseErr.message : 'unknown'})`;
+        }
         throw new Error(`HTTP ${res.status}: ${msg}`);
       }
       const { data } = await res.json();
