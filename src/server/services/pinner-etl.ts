@@ -358,6 +358,22 @@ export const pinnerETL = {
       };
     }
 
+    if (connectionData.workspace_id !== workspaceId) {
+      return {
+        success: false,
+        persisted: false,
+        workspaceId,
+        connectionId,
+        dailyRowsIngested: 0,
+        summarySaved: false,
+        topPinsIngested: 0,
+        workspaceRollupsUpdated: 0,
+        revoked: false,
+        snitchAlerted: false,
+        error: 'tenant_mismatch',
+      };
+    }
+
     // Determine ingestion channel and job type
     const channel: 'account_analytics' | 'top_pins' =
       explicitChannel === 'top_pins' || (!payload.account_analytics && payload.top_pins_analytics)

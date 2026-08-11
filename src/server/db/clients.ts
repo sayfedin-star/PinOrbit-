@@ -73,12 +73,18 @@ export function getServerEnv(runtimeEnv?: Record<string, any>): ServerEnvConfig 
     rawTokenKek = process.env.TOKEN_KEK;
   }
 
-  const TOKEN_KEK =
-    rawTokenKek !== undefined && rawTokenKek.trim().length >= 16
-      ? rawTokenKek.trim()
-      : isDev
-      ? 'pinorbit_dev_token_kek_00000000'
-      : '';
+  let TOKEN_KEK: string;
+  if (rawTokenKek !== undefined && rawTokenKek.trim().length >= 16) {
+    TOKEN_KEK = rawTokenKek.trim();
+  } else if (isDev) {
+    TOKEN_KEK = 'pinorbit_dev_token_kek_00000000';
+  } else if (isProd) {
+    const errorMsg = "TOKEN_KEK is required in production (>= 16 chars). Set via 'wrangler secret put TOKEN_KEK'.";
+    console.error(errorMsg);
+    throw new Error(errorMsg);
+  } else {
+    TOKEN_KEK = 'pinorbit_dev_token_kek_00000000';
+  }
 
   return {
     SCHEDULING_SUPABASE_URL,

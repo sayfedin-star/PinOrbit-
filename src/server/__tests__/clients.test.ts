@@ -81,4 +81,30 @@ describe('PinOrbit v2 Multi-Project Server Architecture', () => {
     expect(session.isAuthenticated).toBe(false);
     expect(session.user).toBeNull();
   });
+
+  it('F-07: getServerEnv throws in production if TOKEN_KEK is missing or < 16 chars', () => {
+    const originalNodeEnv = process.env.NODE_ENV;
+    const originalTokenKek = process.env.TOKEN_KEK;
+
+    try {
+      process.env.NODE_ENV = 'production';
+      delete process.env.TOKEN_KEK;
+
+      expect(() => getServerEnv({})).toThrow(/TOKEN_KEK is required in production/);
+
+      // Short key (< 16 chars)
+      expect(() => getServerEnv({ TOKEN_KEK: 'short_key_123' })).toThrow(/TOKEN_KEK is required in production/);
+
+      // Valid key (>= 16 chars)
+      const validEnv = getServerEnv({ TOKEN_KEK: 'valid_prod_token_kek_12345678' });
+      expect(validEnv.TOKEN_KEK).toBe('valid_prod_token_kek_12345678');
+    } finally {
+      process.env.NODE_ENV = originalNodeEnv;
+      if (originalTokenKek !== undefined) {
+        process.env.TOKEN_KEK = originalTokenKek;
+      } else {
+        delete process.env.TOKEN_KEK;
+      }
+    }
+  });
 });

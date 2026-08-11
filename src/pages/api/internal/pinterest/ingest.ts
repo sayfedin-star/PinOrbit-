@@ -20,7 +20,7 @@ import type { PinnerIngestPayload } from '../../../../lib/types';
  * 7. Execute pinnerETL.processIngestionPayload.
  */
 export const POST: APIRoute = async ({ request, locals }) => {
-  const runtimeEnv = (locals as any)?.runtime?.env || (locals as any)?.runtimeEnv || {};
+  const runtimeEnv = (locals as { runtime?: { env?: Record<string, any> }; runtimeEnv?: Record<string, any> })?.runtime?.env || (locals as { runtimeEnv?: Record<string, any> })?.runtimeEnv || {};
 
   // 1. Parse JSON body
   let payload: PinnerIngestPayload;
@@ -105,16 +105,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   // 4. Tenant Boundary Check & Server-Side Injection (R7)
   if (payload.workspace_id && payload.workspace_id !== connection.workspace_id) {
-    return new Response(
-      JSON.stringify({
-        success: false,
-        error: 'tenant_mismatch',
-      }),
-      {
-        status: 409,
-        headers: { 'Content-Type': 'application/json' },
-      }
-    );
+    console.warn('[IngestAPI] Client workspace_id mismatch — using connection.workspace_id', {
+      client_ws: payload.workspace_id,
+      connection_ws: connection.workspace_id,
+    });
   }
   payload.workspace_id = connection.workspace_id;
 

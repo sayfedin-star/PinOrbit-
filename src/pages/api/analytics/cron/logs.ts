@@ -9,7 +9,7 @@ export const GET: APIRoute = async ({ request, locals }) => {
   const user = locals.user;
   const schedulingClient = locals.supabase;
   const workspaceId = locals.activeWorkspaceId;
-  const runtimeEnv = (locals as any)?.runtime?.env || (locals as any)?.runtimeEnv || {};
+  const runtimeEnv = (locals as { runtime?: { env?: Record<string, any> }; runtimeEnv?: Record<string, any> })?.runtime?.env || (locals as { runtimeEnv?: Record<string, any> })?.runtimeEnv || {};
 
   if (!user || !schedulingClient) {
     return new Response(
@@ -93,18 +93,20 @@ export const GET: APIRoute = async ({ request, locals }) => {
 
     const logResult = await fastcronService.getCronLogs(
       workspaceId,
+      connectionId,
       jobId,
       runtimeEnv
     );
 
     if (!logResult.success) {
+      const statusCode = logResult.error?.includes('403 Forbidden') ? 403 : 400;
       return new Response(
         JSON.stringify({
           success: false,
           error: logResult.error || 'Failed to fetch FastCron execution logs.',
         }),
         {
-          status: 400,
+          status: statusCode,
           headers: { 'Content-Type': 'application/json' },
         }
       );

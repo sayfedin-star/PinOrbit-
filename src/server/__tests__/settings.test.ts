@@ -630,5 +630,63 @@ describe('Pinner Analytics Settings & Security Suite (V20.1 Per-Pipeline Date Of
       })
     );
   });
+
+  it('rejects invalid timezone with 422', async () => {
+    (analyticsDb.getWorkspaceConnection as any).mockResolvedValue({
+      id: connectionId,
+      workspace_id: workspaceId,
+      display_name: 'tz-conn',
+    });
+
+    const locals = { user: { id: 'u1' }, supabase: {}, activeWorkspaceId: workspaceId };
+    const res = await postConnSettingsHandler({
+      params: { id: connectionId },
+      request: new Request('http://localhost', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          timezone: 'Invalid/Non_Existent_Timezone_12345',
+        }),
+      }),
+      locals,
+    } as any);
+
+    expect(res.status).toBe(422);
+    const json = await res.json();
+    expect(json.success).toBe(false);
+    expect(json.error).toContain('Invalid timezone');
+  });
+
+  it('accepts valid timezone and updates workspace settings', async () => {
+    (analyticsDb.getWorkspaceConnection as any).mockResolvedValue({
+      id: connectionId,
+      workspace_id: workspaceId,
+      display_name: 'tz-conn',
+    });
+    (analyticsDb.updateWorkspaceConnection as any).mockResolvedValue({
+      id: connectionId,
+      workspace_id: workspaceId,
+      display_name: 'tz-conn',
+    });
+
+    const locals = { user: { id: 'u1' }, supabase: {}, activeWorkspaceId: workspaceId };
+    const res = await postConnSettingsHandler({
+      params: { id: connectionId },
+      request: new Request('http://localhost', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          timezone: 'America/New_York',
+        }),
+      }),
+      locals,
+    } as any);
+
+    expect(res.status).toBe(200);
+    expect(analyticsDb.upsertWorkspaceAnalyticsSettings).toHaveBeenCalledWith(
+      workspaceId,
+      { timezone: 'America/New_York' }
+    );
+  });
 });
 

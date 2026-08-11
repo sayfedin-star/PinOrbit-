@@ -877,17 +877,35 @@ export const fastcronService = {
    */
   async getCronLogs(
     workspaceId: string,
+    connectionId: string,
     jobId: number | null | undefined,
-    runtimeEnv: Record<string, any>,
-    connectionId?: string
+    runtimeEnv: Record<string, any>
   ): Promise<{ success: boolean; logs?: any[]; error?: string }> {
     if (!jobId) {
       return { success: false, error: 'job_not_configured' };
     }
 
-    const connection = connectionId ? await analyticsDb.getWorkspaceConnection(workspaceId, connectionId) : null;
+    if (!connectionId) {
+      return { success: false, error: 'connection_id is required' };
+    }
+
+    const connection = await analyticsDb.getWorkspaceConnection(workspaceId, connectionId);
+    if (!connection) {
+      return { success: false, error: 'Connection not found in this workspace.' };
+    }
+
+    const isMatch =
+      (connection.analytics_fastcron_job_id != null && Number(connection.analytics_fastcron_job_id) === Number(jobId)) ||
+      (connection.top_pins_fastcron_job_id != null && Number(connection.top_pins_fastcron_job_id) === Number(jobId));
+
+    if (!isMatch) {
+      return { success: false, error: '403 Forbidden: jobId does not belong to this connection' };
+    }
+
     const settings = await analyticsDb.getWorkspaceAnalyticsSettings(workspaceId);
-    const token = this.resolveFastCronToken(connection?.fastcron_token, settings?.fastcron_token, runtimeEnv);
+    const channelToken = connection.analytics_fastcron_token || connection.top_pins_fastcron_token;
+    const effectiveConnToken = channelToken || connection.fastcron_token;
+    const token = await this.resolveFastCronToken(effectiveConnToken, settings?.fastcron_token, runtimeEnv);
     if (!token) {
       return { success: false, error: 'FastCron API token not configured.' };
     }

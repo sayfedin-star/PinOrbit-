@@ -8,6 +8,34 @@ import { getServerEnv } from '../../../../../server/db/clients';
 import { encryptToken } from '../../../../../server/lib/token-crypto';
 import type { AnalyticsConnectionSettingsResponse } from '../../../../../lib/types';
 
+const FALLBACK_TIMEZONES = [
+  'Africa/Cairo', 'Africa/Johannesburg', 'Africa/Lagos', 'Africa/Nairobi',
+  'America/Anchorage', 'America/Argentina/Buenos_Aires', 'America/Bogota',
+  'America/Caracas', 'America/Chicago', 'America/Denver', 'America/Halifax',
+  'America/Los_Angeles', 'America/Mexico_City', 'America/New_York',
+  'America/Phoenix', 'America/Santiago', 'America/Sao_Paulo', 'America/Toronto',
+  'America/Vancouver', 'Asia/Bangkok', 'Asia/Dubai', 'Asia/Hong_Kong',
+  'Asia/Jakarta', 'Asia/Jerusalem', 'Asia/Kolkata', 'Asia/Manila',
+  'Asia/Riyadh', 'Asia/Seoul', 'Asia/Shanghai', 'Asia/Singapore',
+  'Asia/Taipei', 'Asia/Tokyo', 'Atlantic/Reykjavik', 'Australia/Adelaide',
+  'Australia/Brisbane', 'Australia/Melbourne', 'Australia/Perth',
+  'Australia/Sydney', 'Europe/Amsterdam', 'Europe/Athens', 'Europe/Berlin',
+  'Europe/Brussels', 'Europe/Dublin', 'Europe/Istanbul', 'Europe/Lisbon',
+  'Europe/London', 'Europe/Madrid', 'Europe/Paris', 'Europe/Rome',
+  'Pacific/Auckland', 'Pacific/Honolulu', 'UTC',
+];
+
+function isValidTimeZone(tz: string): boolean {
+  if (!tz || typeof tz !== 'string') return false;
+  try {
+    if (typeof Intl !== 'undefined' && typeof Intl.supportedValuesOf === 'function') {
+      const supported = Intl.supportedValuesOf('timeZone');
+      return supported.includes(tz);
+    }
+  } catch {}
+  return FALLBACK_TIMEZONES.includes(tz);
+}
+
 export const GET: APIRoute = async ({ params, locals }) => {
   const user = locals.user;
   const schedulingClient = locals.supabase;
@@ -157,7 +185,7 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
   const schedulingClient = locals.supabase;
   const workspaceId = locals.activeWorkspaceId;
   const connectionId = params.id;
-  const runtimeEnv = (locals as any)?.runtime?.env || (locals as any)?.runtimeEnv || {};
+  const runtimeEnv = (locals as { runtime?: { env?: Record<string, any> }; runtimeEnv?: Record<string, any> })?.runtime?.env || (locals as { runtimeEnv?: Record<string, any> })?.runtimeEnv || {};
 
   if (!user || !schedulingClient) {
     return new Response(
@@ -495,9 +523,13 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
     // Workspace-level Timezone
     if (body.timezone !== undefined) {
       const tz = String(body.timezone).trim();
-      if (tz) {
-        await analyticsDb.upsertWorkspaceAnalyticsSettings(workspaceId, { timezone: tz });
+      if (!isValidTimeZone(tz)) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Invalid timezone.' }),
+          { status: 422, headers: { 'Content-Type': 'application/json' } }
+        );
       }
+      await analyticsDb.upsertWorkspaceAnalyticsSettings(workspaceId, { timezone: tz });
     }
 
     const updated = await analyticsDb.updateWorkspaceConnection(workspaceId, connectionId, updates);

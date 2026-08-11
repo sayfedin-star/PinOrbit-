@@ -283,16 +283,36 @@ describe('FastCron Full Service Suite (R6 Reconcile Idempotency & Orphan Cleanup
       } as any;
     }) as any);
 
+    (analyticsDb.getWorkspaceConnection as any).mockResolvedValue({
+      id: connectionId,
+      workspace_id: workspaceId,
+      analytics_fastcron_job_id: 9900,
+      top_pins_fastcron_job_id: 9901,
+    });
+
     (analyticsDb.getWorkspaceAnalyticsSettings as any).mockResolvedValue({
       fastcron_token: 'db_token_1234567890',
     });
 
-    const logRes = await fastcronService.getCronLogs(workspaceId, 9900, mockRuntimeEnv);
+    const logRes = await fastcronService.getCronLogs(workspaceId, connectionId, 9900, mockRuntimeEnv);
     expect(logRes.success).toBe(true);
     expect(logRes.logs?.length).toBe(1);
     expect(logRes.logs?.[0].http_status).toBe(200);
 
     fetchSpy.mockRestore();
+  });
+
+  it('F-05: getCronLogs rejects with 403 when jobId does not belong to connection', async () => {
+    (analyticsDb.getWorkspaceConnection as any).mockResolvedValue({
+      id: connectionId,
+      workspace_id: workspaceId,
+      analytics_fastcron_job_id: 9900,
+      top_pins_fastcron_job_id: 9901,
+    });
+
+    const logRes = await fastcronService.getCronLogs(workspaceId, connectionId, 1234, mockRuntimeEnv);
+    expect(logRes.success).toBe(false);
+    expect(logRes.error).toContain('403 Forbidden: jobId does not belong to this connection');
   });
 
   it('R8.2: Fails with schedule_status error and returns success:false if FastCron returns non-numeric or missing id', async () => {

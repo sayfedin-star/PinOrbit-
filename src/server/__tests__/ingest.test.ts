@@ -357,7 +357,9 @@ describe('Pinterest Ingestion Validation Sequence & Security Suite (V19 Strict M
     );
   });
 
-  it('R7.4: Envelope WITH wrong workspace_id returns HTTP 409 { success: false, error: "tenant_mismatch" }', async () => {
+  it('F-08: Logs warning and overwrites with connection.workspace_id when client workspace_id differs', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
     mockAnalyticsClient.from.mockReturnValue({
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
@@ -386,6 +388,7 @@ describe('Pinterest Ingestion Validation Sequence & Security Suite (V19 Strict M
         connection_id: mockConnId,
         workspace_id: wrongWsId,
         channel: 'account_analytics',
+        account_analytics: { summary: {} },
       }),
     });
 
@@ -394,11 +397,23 @@ describe('Pinterest Ingestion Validation Sequence & Security Suite (V19 Strict M
       locals: { runtime: { env: mockRuntimeEnv } },
     } as any);
 
-    expect(res.status).toBe(409);
-    const json = await res.json();
-    expect(json.success).toBe(false);
-    expect(json.error).toBe('tenant_mismatch');
-    expect(pinnerETL.processIngestionPayload).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[IngestAPI] Client workspace_id mismatch — using connection.workspace_id',
+      {
+        client_ws: wrongWsId,
+        connection_ws: mockWsId,
+      }
+    );
+    expect(pinnerETL.processIngestionPayload).toHaveBeenCalledWith(
+      expect.objectContaining({
+        connection_id: mockConnId,
+        workspace_id: mockWsId,
+      }),
+      expect.anything()
+    );
+
+    warnSpy.mockRestore();
   });
 });
 
