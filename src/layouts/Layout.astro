@@ -21,7 +21,7 @@ const { title, description = 'PinOrbit - Automated Pinterest recipe publishing d
     <meta name="generator" content={Astro.generator} />
     <title>{title} | PinOrbit Admin</title>
 
-    <!-- Inline script to avoid theme flash -->
+    <!-- Inline script to avoid theme & sidebar flash -->
     <script is:inline>
       const theme = (() => {
         if (typeof localStorage !== 'undefined' && localStorage.getItem('theme')) {
@@ -34,6 +34,10 @@ const { title, description = 'PinOrbit - Automated Pinterest recipe publishing d
       } else {
         document.documentElement.classList.remove('dark');
       }
+
+      if (typeof localStorage !== 'undefined' && localStorage.getItem('pinorbit_sidebar_collapsed') === '1') {
+        document.documentElement.classList.add('sidebar-collapsed');
+      }
     </script>
   </head>
   <body class="min-h-screen bg-background font-sans antialiased">
@@ -42,7 +46,7 @@ const { title, description = 'PinOrbit - Automated Pinterest recipe publishing d
       <Sidebar />
 
       <!-- Main Container -->
-      <div class="flex flex-1 flex-col lg:pl-64">
+      <div id="main-content-container" class="flex flex-1 flex-col lg:pl-64 transition-all duration-200">
         <Topbar title={title} />
 
         <main class="flex-1 p-4 sm:p-6 lg:p-8">

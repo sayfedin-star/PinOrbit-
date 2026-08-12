@@ -81,6 +81,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     pathname.startsWith('/boards') ||
     pathname.startsWith('/pins') ||
     pathname.startsWith('/logs') || 
+    pathname.startsWith('/settings') ||
     pathname.startsWith('/audit');
 
   if (isProtectedPath && !session.isAuthenticated) {
