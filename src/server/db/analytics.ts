@@ -10,6 +10,8 @@ import type {
   AnalyticsConnection,
   AnalyticsIngestionRun,
   PinLeaderboardItem,
+  PinLeaderboardOptions,
+  PinLeaderboardResult,
   PinTrendPoint,
   PurgePreviewCounts,
   PurgeResultCounts,
@@ -543,7 +545,8 @@ export const analyticsDb = {
   },
 
   /**
-   * Retrieves aggregated pin leaderboard scoped strictly to a single sort_by mode (V26.1).
+   * Retrieves aggregated pin leaderboard scoped strictly to a single sort_by mode (V26.1 + V36).
+   * Computes per-item pooled rates, supports additive filtering, server sorting, and pagination.
    */
   async getPinLeaderboard(
     workspaceId: string,
@@ -551,8 +554,9 @@ export const analyticsDb = {
     sortBy: PinnerSortBy,
     days = 30,
     limit = 25,
-    search?: string | null
-  ): Promise<PinLeaderboardItem[]> {
+    search?: string | null,
+    options: PinLeaderboardOptions = {}
+  ): Promise<PinLeaderboardResult> {
     if (!workspaceId || !connectionId) {
       throw new Error('Tenant Boundary Violation: workspaceId and connectionId are required.');
     }
@@ -560,15 +564,16 @@ export const analyticsDb = {
     const analyticsClient = dbClients.getAnalytics();
     const cleanSearch = search && search.trim().length > 0 ? (search || '').trim().replace(/[\\%_]/g, '\\$&') : null;
     
-    // Call stored SQL aggregation RPC get_pin_leaderboard
+    // Fetch candidate aggregated records (up to 1000 for client filtering & pagination)
     const { data, error } = await analyticsClient.rpc('get_pin_leaderboard', {
-      p_workspace_id: workspaceId,
       p_connection_id: connectionId,
       p_sort_by: sortBy,
       p_days: days,
-      p_limit: limit,
+      p_limit: 1000,
       p_search: cleanSearch,
     });
+
+    let allItems: PinLeaderboardItem[] = [];
 
     if (error) {
       console.warn('[AnalyticsDb] get_pin_leaderboard RPC error, falling back to SQL aggregation query:', error.message);
@@ -587,84 +592,180 @@ export const analyticsDb = {
       }
 
       const { data: rawRows, error: rawError } = await query;
-      if (rawError || !rawRows) return [];
-
-      const pinMap = new Map<string, any>();
-      for (const row of rawRows) {
-        const existing = pinMap.get(row.pin_id);
-        if (!existing) {
-          pinMap.set(row.pin_id, {
-            pin_id: row.pin_id,
-            title: row.title || null,
-            image_url: row.image_url || null,
-            destination_url: row.destination_url || null,
-            appearances: 1,
-            best_rank: row.rank_position,
-            total_impressions: Number(row.impressions || 0),
-            total_engagements: Number(row.engagement || 0),
-            total_saves: Number(row.saves || 0),
-            total_outbound_clicks: Number(row.outbound_clicks || 0),
-            total_pin_clicks: Number(row.pin_clicks || 0),
-            last_seen: row.window_end,
-            prev_rank: null,
-          });
-        } else {
-          existing.appearances++;
-          if (row.rank_position < existing.best_rank) existing.best_rank = row.rank_position;
-          existing.total_impressions += Number(row.impressions || 0);
-          existing.total_engagements += Number(row.engagement || 0);
-          existing.total_saves += Number(row.saves || 0);
-          existing.total_outbound_clicks += Number(row.outbound_clicks || 0);
-          existing.total_pin_clicks += Number(row.pin_clicks || 0);
-          if (new Date(row.window_end) > new Date(existing.last_seen)) existing.last_seen = row.window_end;
-          if (!existing.title && row.title) existing.title = row.title;
+      if (!rawError && rawRows) {
+        const pinMap = new Map<string, any>();
+        for (const row of rawRows) {
+          const existing = pinMap.get(row.pin_id);
+          if (!existing) {
+            pinMap.set(row.pin_id, {
+              pin_id: row.pin_id,
+              title: row.title || null,
+              image_url: row.image_url || null,
+              destination_url: row.destination_url || null,
+              appearances: 1,
+              best_rank: row.rank_position,
+              total_impressions: Number(row.impressions || 0),
+              total_engagements: Number(row.engagement || 0),
+              total_saves: Number(row.saves || 0),
+              total_outbound_clicks: Number(row.outbound_clicks || 0),
+              total_pin_clicks: Number(row.pin_clicks || 0),
+              last_seen: row.window_end,
+              prev_rank: null,
+            });
+          } else {
+            existing.appearances++;
+            if (row.rank_position < existing.best_rank) existing.best_rank = row.rank_position;
+            existing.total_impressions += Number(row.impressions || 0);
+            existing.total_engagements += Number(row.engagement || 0);
+            existing.total_saves += Number(row.saves || 0);
+            existing.total_outbound_clicks += Number(row.outbound_clicks || 0);
+            existing.total_pin_clicks += Number(row.pin_clicks || 0);
+            if (new Date(row.window_end) > new Date(existing.last_seen)) existing.last_seen = row.window_end;
+            if (!existing.title && row.title) existing.title = row.title;
+          }
         }
+
+        allItems = Array.from(pinMap.values()).map(item => {
+          const total_impressions = Number(item.total_impressions || 0);
+          const total_engagements = Number(item.total_engagements || 0);
+          const total_outbound_clicks = Number(item.total_outbound_clicks || 0);
+          const total_pin_clicks = Number(item.total_pin_clicks || 0);
+          const total_saves = Number(item.total_saves || 0);
+
+          return {
+            ...item,
+            last_seen: item.last_seen ? new Date(item.last_seen).toISOString().split('T')[0] : '',
+            trend: 'NEW',
+            engagement_rate: total_impressions > 0 ? total_engagements / total_impressions : 0,
+            outbound_click_rate: total_impressions > 0 ? total_outbound_clicks / total_impressions : 0,
+            pin_click_rate: total_impressions > 0 ? total_pin_clicks / total_impressions : 0,
+            save_rate: total_impressions > 0 ? total_saves / total_impressions : 0,
+          };
+        });
       }
+    } else if (data && Array.isArray(data)) {
+      allItems = data.map((row: any) => {
+        let trend = 'NEW';
+        if (row.prev_rank !== null && row.prev_rank !== undefined && row.best_rank !== null) {
+          const diff = Number(row.prev_rank) - Number(row.best_rank);
+          if (diff > 0) trend = `▲${diff}`;
+          else if (diff < 0) trend = `▼${Math.abs(diff)}`;
+          else trend = '▬';
+        }
 
-      const items = Array.from(pinMap.values());
-      items.sort((a, b) => {
-        if (sortBy === 'OUTBOUND_CLICK') return b.total_outbound_clicks - a.total_outbound_clicks;
-        if (sortBy === 'SAVE') return b.total_saves - a.total_saves;
-        if (sortBy === 'ENGAGEMENT') return b.total_engagements - a.total_engagements;
-        if (sortBy === 'PIN_CLICK') return b.total_pin_clicks - a.total_pin_clicks;
-        return b.total_impressions - a.total_impressions;
+        const total_impressions = Number(row.total_impressions || 0);
+        const total_engagements = Number(row.total_engagements || 0);
+        const total_outbound_clicks = Number(row.total_outbound_clicks || 0);
+        const total_pin_clicks = Number(row.total_pin_clicks || 0);
+        const total_saves = Number(row.total_saves || 0);
+
+        return {
+          pin_id: row.pin_id,
+          title: row.title || null,
+          image_url: row.image_url || null,
+          destination_url: row.destination_url || null,
+          appearances: Number(row.appearances || 0),
+          best_rank: Number(row.best_rank || 0),
+          total_impressions,
+          total_engagements,
+          total_saves,
+          total_outbound_clicks,
+          total_pin_clicks,
+          last_seen: row.last_seen ? new Date(row.last_seen).toISOString().split('T')[0] : '',
+          prev_rank: row.prev_rank !== null && row.prev_rank !== undefined ? Number(row.prev_rank) : null,
+          trend,
+          engagement_rate: total_impressions > 0 ? total_engagements / total_impressions : 0,
+          outbound_click_rate: total_impressions > 0 ? total_outbound_clicks / total_impressions : 0,
+          pin_click_rate: total_impressions > 0 ? total_pin_clicks / total_impressions : 0,
+          save_rate: total_impressions > 0 ? total_saves / total_impressions : 0,
+        };
       });
-
-      return items.slice(0, limit).map(item => ({
-        ...item,
-        last_seen: item.last_seen ? new Date(item.last_seen).toISOString().split('T')[0] : '',
-        trend: 'NEW',
-      }));
     }
 
-    if (!data || !Array.isArray(data)) return [];
+    // Apply additive filters
+    let filtered = allItems;
 
-    return data.map((row: any) => {
-      let trend = 'NEW';
-      if (row.prev_rank !== null && row.prev_rank !== undefined && row.best_rank !== null) {
-        const diff = Number(row.prev_rank) - Number(row.best_rank);
-        if (diff > 0) trend = `▲${diff}`;
-        else if (diff < 0) trend = `▼${Math.abs(diff)}`;
-        else trend = '▬';
+    if (search && search.trim()) {
+      const q = search.trim().toLowerCase();
+      filtered = filtered.filter(item =>
+        item.pin_id.toLowerCase().includes(q) || (item.title && item.title.toLowerCase().includes(q))
+      );
+    }
+
+    if (options.min_impressions !== undefined && options.min_impressions >= 0) {
+      filtered = filtered.filter(item => item.total_impressions >= options.min_impressions!);
+    }
+
+    if (options.min_appearances !== undefined && options.min_appearances >= 1) {
+      filtered = filtered.filter(item => item.appearances >= options.min_appearances!);
+    }
+
+    if (options.trend && options.trend !== 'ALL') {
+      const t = options.trend.toUpperCase();
+      if (t === 'NEW') {
+        filtered = filtered.filter(item => item.trend === 'NEW');
+      } else if (t === 'RISING') {
+        filtered = filtered.filter(item => item.trend.startsWith('▲'));
+      } else if (t === 'FALLING') {
+        filtered = filtered.filter(item => item.trend.startsWith('▼'));
       }
+    }
 
-      return {
-        pin_id: row.pin_id,
-        title: row.title || null,
-        image_url: row.image_url || null,
-        destination_url: row.destination_url || null,
-        appearances: Number(row.appearances || 0),
-        best_rank: Number(row.best_rank || 0),
-        total_impressions: Number(row.total_impressions || 0),
-        total_engagements: Number(row.total_engagements || 0),
-        total_saves: Number(row.total_saves || 0),
-        total_outbound_clicks: Number(row.total_outbound_clicks || 0),
-        total_pin_clicks: Number(row.total_pin_clicks || 0),
-        last_seen: row.last_seen ? new Date(row.last_seen).toISOString().split('T')[0] : '',
-        prev_rank: row.prev_rank !== null && row.prev_rank !== undefined ? Number(row.prev_rank) : null,
-        trend,
-      };
+    if (options.has_link !== undefined && options.has_link !== null) {
+      if (options.has_link === true) {
+        filtered = filtered.filter(item => Boolean(item.destination_url && item.destination_url.trim().length > 0));
+      } else {
+        filtered = filtered.filter(item => !item.destination_url || item.destination_url.trim().length === 0);
+      }
+    }
+
+    // Sort items
+    const sortField = options.sort || 'total_impressions';
+    const isAsc = options.sort_dir === 'asc' || (sortField === 'best_rank' && options.sort_dir !== 'desc');
+
+    filtered.sort((a, b) => {
+      let diff = 0;
+      switch (sortField) {
+        case 'appearances':
+          diff = a.appearances - b.appearances;
+          break;
+        case 'best_rank':
+          diff = a.best_rank - b.best_rank;
+          break;
+        case 'total_saves':
+          diff = a.total_saves - b.total_saves;
+          break;
+        case 'total_engagements':
+          diff = a.total_engagements - b.total_engagements;
+          break;
+        case 'total_outbound_clicks':
+          diff = a.total_outbound_clicks - b.total_outbound_clicks;
+          break;
+        case 'total_pin_clicks':
+          diff = a.total_pin_clicks - b.total_pin_clicks;
+          break;
+        case 'last_seen':
+          diff = new Date(a.last_seen || 0).getTime() - new Date(b.last_seen || 0).getTime();
+          break;
+        case 'total_impressions':
+        default:
+          diff = a.total_impressions - b.total_impressions;
+          break;
+      }
+      return isAsc ? diff : -diff;
     });
+
+    const total_unique = filtered.length;
+    const page = Math.max(1, options.page || 1);
+    const pageSize = options.page_size || limit || 25;
+    const pagedItems = filtered.slice((page - 1) * pageSize, page * pageSize);
+
+    return {
+      items: pagedItems,
+      total_unique,
+      page,
+      page_size: pageSize,
+    };
   },
 
   /**

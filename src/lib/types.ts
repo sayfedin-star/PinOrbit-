@@ -678,6 +678,41 @@ export interface PinLeaderboardItem {
   last_seen: string;
   prev_rank?: number | null;
   trend: string;
+  // V36 additive pooled rates
+  engagement_rate?: number;
+  outbound_click_rate?: number;
+  pin_click_rate?: number;
+  save_rate?: number;
+}
+
+export type PinLeaderboardSortField =
+  | 'appearances'
+  | 'best_rank'
+  | 'total_impressions'
+  | 'total_saves'
+  | 'last_seen'
+  | 'total_engagements'
+  | 'total_outbound_clicks'
+  | 'total_pin_clicks';
+
+export type PinLeaderboardTrendFilter = 'ALL' | 'NEW' | 'RISING' | 'FALLING';
+
+export interface PinLeaderboardOptions {
+  page?: number;
+  page_size?: number;
+  sort?: PinLeaderboardSortField | string;
+  sort_dir?: 'asc' | 'desc';
+  min_impressions?: number;
+  min_appearances?: number;
+  trend?: PinLeaderboardTrendFilter | string;
+  has_link?: boolean | null;
+}
+
+export interface PinLeaderboardResult {
+  items: PinLeaderboardItem[];
+  total_unique: number;
+  page: number;
+  page_size: number;
 }
 
 export interface PinTrendPoint {

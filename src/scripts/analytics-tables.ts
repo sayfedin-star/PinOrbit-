@@ -1,20 +1,10 @@
+import { formatNum, formatPct, fmtMetric, escapeHtml } from './formatters';
+
 const connectionEl = document.querySelector('[data-connection-id]');
 const connectionId = connectionEl?.getAttribute('data-connection-id');
 if (!connectionId) throw new Error('Missing connectionId');
 
 const FALLBACK_IMG = '/placeholder-pin.jpg';
-
-function escapeHtml(str: string | null | undefined): string {
-  if (!str) return '';
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
-function formatNum(n: number) { return new Intl.NumberFormat('en-US').format(n || 0); }
-function formatPct(n: number) { return new Intl.NumberFormat('en-US', { style: 'percent', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0); }
 
 const asText   = (v: any, d = '')  => (typeof v === 'string' ? v : v == null ? d : String(v));
 const asStatus = (v: any)          => { const s = typeof v === 'string' && v ? v : 'READY'; return s.toUpperCase(); };
@@ -26,7 +16,6 @@ function getStatusBadge(status: any) {
   return `<span class="rounded bg-yellow-500/10 px-1.5 py-0.5 text-[9px] font-bold text-yellow-600">${s}</span>`;
 }
 
-// State
 // State
 const defaultTo = new Date().toISOString().split('T')[0];
 const defaultFrom = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
@@ -141,7 +130,7 @@ async function safeFetch(url: string) {
 
 async function renderS1() {
   const tbody = document.getElementById('daily-metrics-tbody')!;
-  tbody.innerHTML = `<tr><td colspan="9" class="py-12 text-center text-muted-foreground">Loading daily metrics...</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="8" class="py-12 text-center text-muted-foreground">Loading daily metrics...</td></tr>`;
   syncStateToUrl();
 
   document.querySelectorAll('[data-s1-sort]').forEach(th => {
@@ -172,7 +161,7 @@ async function renderS1() {
     document.getElementById('s1-range')!.textContent = total > 0 ? `${start + 1}-${Math.min(start + state.s1Size, total)}` : '0-0';
     
     if (rows.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="9" class="py-12 text-center text-muted-foreground">
+      tbody.innerHTML = `<tr><td colspan="8" class="py-12 text-center text-muted-foreground">
         <p class="mb-2">No daily metrics found.</p>
         <button onclick="document.getElementById('tab-pipe')?.click()" class="text-primary hover:underline font-semibold">Go to Pipeline & Automation to Sync</button>
       </td></tr>`;
@@ -184,11 +173,10 @@ async function renderS1() {
             <td class="py-2.5 px-4 font-mono font-medium">${escapeHtml(asText(d.metric_date))}</td>
             <td class="py-2.5 px-4 text-center">${getStatusBadge(d.data_status)}</td>
             <td class="py-2.5 px-4 text-right">${formatNum(asNumber(d.impressions))}</td>
-            <td class="py-2.5 px-4 text-right">${formatNum(asNumber(d.engagements))} (${formatPct(asNumber(d.engagement_rate))})</td>
-            <td class="py-2.5 px-4 text-right">${formatNum(asNumber(d.outbound_clicks))} (${formatPct(asNumber(d.outbound_click_rate))})</td>
-            <td class="py-2.5 px-4 text-right">${formatNum(asNumber(d.pin_clicks))} (${formatPct(asNumber(d.pin_click_rate))})</td>
-            <td class="py-2.5 px-4 text-right">${formatNum(asNumber(d.saves))}</td>
-            <td class="py-2.5 px-4 text-right">${formatPct(asNumber(d.save_rate))}</td>
+            <td class="py-2.5 px-4 text-right">${fmtMetric(asNumber(d.engagements), asNumber(d.engagement_rate))}</td>
+            <td class="py-2.5 px-4 text-right">${fmtMetric(asNumber(d.outbound_clicks), asNumber(d.outbound_click_rate))}</td>
+            <td class="py-2.5 px-4 text-right">${fmtMetric(asNumber(d.pin_clicks), asNumber(d.pin_click_rate))}</td>
+            <td class="py-2.5 px-4 text-right">${fmtMetric(asNumber(d.saves), asNumber(d.save_rate))}</td>
             <td class="py-2.5 px-4 text-center">
               <button class="text-red-500 hover:text-red-700 transition-colors" data-action="delete-daily" data-date="${escapeHtml(asText(d.metric_date))}" title="Delete record">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
@@ -196,7 +184,7 @@ async function renderS1() {
             </td>
           </tr>`;
         } catch (err: any) {
-          return `<tr><td colspan="9" class="py-2 px-4 bg-red-500/10 text-red-500 text-xs font-bold text-center">Row Error: ${escapeHtml(err.message)}</td></tr>`;
+          return `<tr><td colspan="8" class="py-2 px-4 bg-red-500/10 text-red-500 text-xs font-bold text-center">Row Error: ${escapeHtml(err.message)}</td></tr>`;
         }
       }).join('');
     }
@@ -211,11 +199,10 @@ async function renderS1() {
         <td class="py-3 px-4">Totals (Filtered)</td>
         <td class="py-3 px-4 text-center">—</td>
         <td class="py-3 px-4 text-right">${formatNum(totals.impressions)}</td>
-        <td class="py-3 px-4 text-right">${formatNum(totals.engagements)} (${formatPct(pooledEr)})</td>
-        <td class="py-3 px-4 text-right">${formatNum(totals.outbound_clicks)} (${formatPct(pooledOcr)})</td>
-        <td class="py-3 px-4 text-right">${formatNum(totals.pin_clicks)} (${formatPct(pooledPcr)})</td>
-        <td class="py-3 px-4 text-right">${formatNum(totals.saves)}</td>
-        <td class="py-3 px-4 text-right">${formatPct(pooledSr)}</td>
+        <td class="py-3 px-4 text-right">${fmtMetric(totals.engagements, pooledEr)}</td>
+        <td class="py-3 px-4 text-right">${fmtMetric(totals.outbound_clicks, pooledOcr)}</td>
+        <td class="py-3 px-4 text-right">${fmtMetric(totals.pin_clicks, pooledPcr)}</td>
+        <td class="py-3 px-4 text-right">${fmtMetric(totals.saves, pooledSr)}</td>
         <td class="py-3 px-4 text-center">—</td>
       </tr>
     `;
@@ -227,7 +214,7 @@ async function renderS1() {
     `;
 
   } catch (e: any) {
-    tbody.innerHTML = `<tr><td colspan="9" class="py-12 text-center text-red-500">${escapeHtml(e.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="py-12 text-center text-red-500">${escapeHtml(e.message)}</td></tr>`;
   }
 }
 
@@ -297,10 +284,10 @@ async function renderS2() {
             </td>
             <td class="py-3 px-4 text-center">${getStatusBadge(p.data_status)}</td>
             <td class="py-3 px-4 text-right font-medium">${formatNum(asNumber(p.impressions))}</td>
-            <td class="py-3 px-4 text-right font-medium">${formatNum(asNumber(p.engagement))} (${formatPct(asNumber(p.engagement_rate))})</td>
-            <td class="py-3 px-4 text-right font-medium">${formatNum(asNumber(p.outbound_clicks))} (${formatPct(asNumber(p.outbound_click_rate))})</td>
-            <td class="py-3 px-4 text-right font-medium">${formatNum(asNumber(p.pin_clicks))} (${formatPct(asNumber(p.pin_click_rate))})</td>
-            <td class="py-3 px-4 text-right font-medium">${formatNum(asNumber(p.saves))}</td>
+            <td class="py-3 px-4 text-right font-medium">${fmtMetric(asNumber(p.engagement), asNumber(p.engagement_rate))}</td>
+            <td class="py-3 px-4 text-right font-medium">${fmtMetric(asNumber(p.outbound_clicks), asNumber(p.outbound_click_rate))}</td>
+            <td class="py-3 px-4 text-right font-medium">${fmtMetric(asNumber(p.pin_clicks), asNumber(p.pin_click_rate))}</td>
+            <td class="py-3 px-4 text-right font-medium">${fmtMetric(asNumber(p.saves), asNumber(p.save_rate))}</td>
           </tr>`;
         } catch (err: any) {
           return `<tr><td colspan="8" class="py-2 px-4 bg-red-500/10 text-red-500 text-xs font-bold text-center">Row Error: ${escapeHtml(err.message)}</td></tr>`;

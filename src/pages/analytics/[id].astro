@@ -158,13 +158,12 @@ const accountName = connection.display_name || 'Account';
               <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s1-sort="outbound_clicks">Outbound Clicks <span class="sort-icon"></span></th>
               <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s1-sort="pin_clicks">Pin Clicks <span class="sort-icon"></span></th>
               <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s1-sort="saves">Saves <span class="sort-icon"></span></th>
-              <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-s1-sort="save_rate">Save Rate <span class="sort-icon"></span></th>
               <th class="py-3 px-4 text-center">Delete</th>
             </tr>
           </thead>
           <tbody id="daily-metrics-tbody" class="divide-y divide-border [&>tr:nth-child(even)]:bg-muted/5">
             <tr>
-              <td colspan="9" class="py-12 text-center text-muted-foreground">
+              <td colspan="8" class="py-12 text-center text-muted-foreground">
                 Loading daily metrics...
               </td>
             </tr>
@@ -550,7 +549,7 @@ const accountName = connection.display_name || 'Account';
     </div>
   </section>
 
-  <!-- PANEL 3: PIN INTELLIGENCE (V26.1) -->
+  <!-- PANEL 3: PIN INTELLIGENCE (V26.1 + V36 PRO UX) -->
   <section id="panel-intel" role="tabpanel" aria-labelledby="tab-intel" hidden class="space-y-6">
     <div class="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
       <!-- Section Header -->
@@ -570,64 +569,223 @@ const accountName = connection.display_name || 'Account';
         </div>
       </div>
 
-      <!-- Controls Bar: Range Presets & Search Box -->
-      <div class="flex flex-wrap items-center justify-between gap-3 bg-muted/10 px-4 py-2.5 border-b border-border text-xs">
-        <div class="flex items-center gap-2">
-          <span class="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Window:</span>
-          <div class="inline-flex rounded-xl border border-border bg-muted/30 p-0.5" id="intel-range-presets">
-            <button data-intel-days="30" class="preset-btn active rounded-lg bg-primary px-2.5 py-0.5 text-xs font-semibold text-primary-foreground shadow-sm transition-all">30D</button>
-            <button data-intel-days="90" class="preset-btn rounded-lg px-2.5 py-0.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all">90D</button>
-            <button data-intel-days="180" class="preset-btn rounded-lg px-2.5 py-0.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all">180D</button>
+      <!-- Controls & Filter Bar -->
+      <div class="flex flex-col gap-3 bg-muted/10 p-4 border-b border-border text-xs">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <!-- Window Presets -->
+          <div class="flex items-center gap-2">
+            <span class="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Window:</span>
+            <div class="inline-flex rounded-xl border border-border bg-muted/30 p-0.5" id="intel-range-presets">
+              <button data-intel-days="30" class="preset-btn active rounded-lg bg-primary px-2.5 py-0.5 text-xs font-semibold text-primary-foreground shadow-sm transition-all">30D</button>
+              <button data-intel-days="90" class="preset-btn rounded-lg px-2.5 py-0.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all">90D</button>
+              <button data-intel-days="180" class="preset-btn rounded-lg px-2.5 py-0.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all">180D</button>
+            </div>
+          </div>
+
+          <!-- Actions: Search, Column Visibility, CSV Export -->
+          <div class="flex flex-wrap items-center gap-2">
+            <input
+              type="text"
+              id="intel-search"
+              placeholder="Search pin ID or title..."
+              class="rounded-xl border border-border bg-background px-3 py-1.5 text-xs focus:border-primary focus:outline-none w-48"
+            />
+
+            <!-- Column Visibility Dropdown -->
+            <div class="relative" id="intel-col-dropdown-container">
+              <button
+                type="button"
+                id="intel-col-btn"
+                class="rounded-xl border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted transition-all shadow-sm flex items-center gap-1.5"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                <span>Columns ▾</span>
+              </button>
+              <div
+                id="intel-col-menu"
+                class="hidden absolute right-0 mt-1 w-48 rounded-xl border border-border bg-card p-2 shadow-xl z-20 space-y-1 text-xs"
+              >
+                <label class="flex items-center gap-2 p-1 hover:bg-muted/40 rounded cursor-pointer">
+                  <input type="checkbox" data-col="appearances" checked class="rounded border-border" /> <span>Appearances</span>
+                </label>
+                <label class="flex items-center gap-2 p-1 hover:bg-muted/40 rounded cursor-pointer">
+                  <input type="checkbox" data-col="best_rank" checked class="rounded border-border" /> <span>Best Rank</span>
+                </label>
+                <label class="flex items-center gap-2 p-1 hover:bg-muted/40 rounded cursor-pointer">
+                  <input type="checkbox" data-col="total_impressions" checked class="rounded border-border" /> <span>Impressions</span>
+                </label>
+                <label class="flex items-center gap-2 p-1 hover:bg-muted/40 rounded cursor-pointer">
+                  <input type="checkbox" data-col="total_engagements" checked class="rounded border-border" /> <span>Engagements</span>
+                </label>
+                <label class="flex items-center gap-2 p-1 hover:bg-muted/40 rounded cursor-pointer">
+                  <input type="checkbox" data-col="total_outbound_clicks" checked class="rounded border-border" /> <span>Outbound Clicks</span>
+                </label>
+                <label class="flex items-center gap-2 p-1 hover:bg-muted/40 rounded cursor-pointer">
+                  <input type="checkbox" data-col="total_pin_clicks" checked class="rounded border-border" /> <span>Pin Clicks</span>
+                </label>
+                <label class="flex items-center gap-2 p-1 hover:bg-muted/40 rounded cursor-pointer">
+                  <input type="checkbox" data-col="total_saves" checked class="rounded border-border" /> <span>Saves</span>
+                </label>
+                <label class="flex items-center gap-2 p-1 hover:bg-muted/40 rounded cursor-pointer">
+                  <input type="checkbox" data-col="last_seen" checked class="rounded border-border" /> <span>Last Seen</span>
+                </label>
+                <label class="flex items-center gap-2 p-1 hover:bg-muted/40 rounded cursor-pointer">
+                  <input type="checkbox" data-col="trend" checked class="rounded border-border" /> <span>Trend</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- CSV Export Button -->
+            <button
+              type="button"
+              id="intel-export-csv-btn"
+              class="rounded-xl border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted transition-all shadow-sm flex items-center gap-1.5"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <span>Export CSV</span>
+            </button>
           </div>
         </div>
 
-        <div class="flex items-center gap-2">
-          <input
-            type="text"
-            id="intel-search"
-            placeholder="Search pin ID or title..."
-            class="rounded-xl border border-border bg-background px-3 py-1 text-xs focus:border-primary focus:outline-none w-56"
-          />
+        <!-- Advanced Filter Row -->
+        <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-border/50">
+          <div class="flex items-center gap-1.5">
+            <label class="text-[11px] font-semibold text-muted-foreground">Min Impr:</label>
+            <input
+              type="number"
+              id="intel-min-impr"
+              min="0"
+              placeholder="e.g. 1000"
+              class="w-24 rounded-lg border border-border bg-background px-2 py-1 text-xs focus:border-primary focus:outline-none"
+            />
+          </div>
+
+          <div class="flex items-center gap-1.5">
+            <label class="text-[11px] font-semibold text-muted-foreground">Min App:</label>
+            <input
+              type="number"
+              id="intel-min-app"
+              min="1"
+              placeholder="e.g. 3"
+              class="w-20 rounded-lg border border-border bg-background px-2 py-1 text-xs focus:border-primary focus:outline-none"
+            />
+          </div>
+
+          <div class="flex items-center gap-1.5">
+            <label class="text-[11px] font-semibold text-muted-foreground">Trend:</label>
+            <select
+              id="intel-trend-filter"
+              class="rounded-lg border border-border bg-background px-2 py-1 text-xs focus:border-primary focus:outline-none"
+            >
+              <option value="ALL">All Trends</option>
+              <option value="NEW">NEW</option>
+              <option value="RISING">Rising (▲)</option>
+              <option value="FALLING">Falling (▼)</option>
+            </select>
+          </div>
+
+          <div class="flex items-center gap-1.5">
+            <label class="text-[11px] font-semibold text-muted-foreground">Link:</label>
+            <select
+              id="intel-link-filter"
+              class="rounded-lg border border-border bg-background px-2 py-1 text-xs focus:border-primary focus:outline-none"
+            >
+              <option value="">All Pins</option>
+              <option value="true">With Link</option>
+              <option value="false">No Link</option>
+            </select>
+          </div>
+
+          <button
+            type="button"
+            id="intel-apply-filters-btn"
+            class="rounded-lg bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition-all shadow-sm"
+          >
+            Apply
+          </button>
+          <button
+            type="button"
+            id="intel-clear-filters-btn"
+            class="rounded-lg border border-border bg-card px-2.5 py-1 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted transition-all"
+          >
+            Clear
+          </button>
         </div>
       </div>
 
       <!-- Leaderboard Table -->
       <div class="overflow-x-auto">
         <table class="w-full text-left text-xs">
-          <thead class="border-b border-border bg-muted/20 text-[11px] uppercase tracking-wider text-muted-foreground font-semibold sticky top-0 z-10 shadow-sm">
+          <thead class="border-b border-border bg-muted/20 text-[11px] uppercase tracking-wider text-muted-foreground font-semibold sticky top-0 z-10 backdrop-blur shadow-sm">
             <tr>
-              <th class="py-3 px-4 w-12 text-center">#</th>
-              <th class="py-3 px-4 min-w-[260px]">Pin</th>
-              <th class="py-3 px-4 text-center">Appearances</th>
-              <th class="py-3 px-4 text-center">Best Rank</th>
-              <th class="py-3 px-4 text-right">Total Impressions</th>
-              <th class="py-3 px-4 text-right">Total Saves</th>
-              <th class="py-3 px-4 text-right">Last Seen</th>
-              <th class="py-3 px-4 text-center">Trend</th>
+              <th class="py-3 px-4 w-12 text-center select-none" data-intel-col="#">#</th>
+              <th class="py-3 px-4 min-w-[240px] select-none" data-intel-col="pin">Pin Details</th>
+              <th class="py-3 px-4 text-center cursor-pointer hover:text-primary transition-colors select-none" data-intel-col="appearances">Appearances <span class="sort-icon font-bold"></span></th>
+              <th class="py-3 px-4 text-center cursor-pointer hover:text-primary transition-colors select-none" data-intel-col="best_rank">Best Rank <span class="sort-icon font-bold"></span></th>
+              <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-intel-col="total_impressions">Impressions <span class="sort-icon font-bold"></span></th>
+              <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-intel-col="total_engagements">Engagements <span class="sort-icon font-bold"></span></th>
+              <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-intel-col="total_outbound_clicks">Outbound Clicks <span class="sort-icon font-bold"></span></th>
+              <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-intel-col="total_pin_clicks">Pin Clicks <span class="sort-icon font-bold"></span></th>
+              <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-intel-col="total_saves">Saves <span class="sort-icon font-bold"></span></th>
+              <th class="py-3 px-4 text-right cursor-pointer hover:text-primary transition-colors select-none" data-intel-col="last_seen">Last Seen <span class="sort-icon font-bold"></span></th>
+              <th class="py-3 px-4 text-center select-none" data-intel-col="trend">Trend</th>
             </tr>
           </thead>
           <tbody id="intel-leaderboard-tbody" class="divide-y divide-border [&>tr:nth-child(even)]:bg-muted/5">
             <tr>
-              <td colspan="8" class="py-12 text-center text-muted-foreground">
+              <td colspan="11" class="py-12 text-center text-muted-foreground">
                 Loading pin intelligence leaderboard...
               </td>
             </tr>
           </tbody>
         </table>
       </div>
+
+      <!-- Pagination Footer -->
+      <div id="intel-pagination" class="flex flex-wrap items-center justify-between gap-3 p-4 border-t border-border bg-muted/10 text-xs">
+        <div class="text-muted-foreground flex items-center gap-3">
+          <span>Showing <span id="intel-range" class="font-medium text-foreground">0-0</span> of <span id="intel-total" class="font-medium text-foreground">0</span> pins</span>
+          <label class="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+            Show:
+            <select id="intel-ps" class="rounded-lg border border-border bg-card px-2 py-0.5 text-xs text-foreground focus:outline-none focus:border-primary">
+              <option value="10">10</option>
+              <option value="25" selected>25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+          </label>
+        </div>
+        <div class="flex gap-1" id="intel-page-buttons"></div>
+      </div>
     </div>
 
-    <!-- Sliding Pin Timeline Drawer -->
+    <!-- Sliding Pin Timeline Drawer (Pro UX V38) -->
     <div id="intel-drawer-backdrop" class="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm opacity-0 pointer-events-none transition-opacity duration-300"></div>
-    <div id="intel-timeline-drawer" class="fixed top-0 right-0 z-50 h-full w-full max-w-xl bg-card border-l border-border shadow-2xl transform translate-x-full transition-transform duration-300 overflow-y-auto flex flex-col">
+    <div
+      id="intel-timeline-drawer"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="drawer-pin-title"
+      class="fixed top-0 right-0 z-50 h-full w-full md:max-w-3xl bg-card border-l border-border shadow-2xl transform translate-x-full transition-transform duration-300 overflow-y-auto flex flex-col"
+    >
       <!-- Drawer Header -->
-      <div class="p-5 border-b border-border flex items-start justify-between gap-4 sticky top-0 bg-card/95 backdrop-blur z-10">
+      <div class="p-4 sm:p-5 border-b border-border flex items-start justify-between gap-4 sticky top-0 bg-card z-20 shadow-sm">
         <div class="flex items-center gap-3 min-w-0">
           <img id="drawer-pin-image" src="" alt="" class="w-12 h-12 rounded-xl object-cover border border-border shrink-0 hidden" />
-          <div class="min-w-0">
+          <div class="min-w-0 space-y-1">
             <h3 id="drawer-pin-title" class="text-sm font-bold text-foreground truncate">Pin Timeline</h3>
-            <div class="flex items-center gap-2 mt-1">
-              <span class="font-mono text-xs text-muted-foreground">ID: <span id="drawer-pin-id"></span></span>
+            <div class="flex flex-wrap items-center gap-2 text-xs">
+              <div class="inline-flex items-center gap-1 font-mono text-muted-foreground bg-muted/50 px-2 py-0.5 rounded border border-border/60">
+                <span>ID: <span id="drawer-pin-id"></span></span>
+                <button
+                  type="button"
+                  id="drawer-copy-id-btn"
+                  title="Copy Pin ID"
+                  class="text-muted-foreground hover:text-foreground transition-colors p-0.5"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                </button>
+              </div>
               <a id="drawer-pin-link" href="#" target="_blank" rel="noopener noreferrer" class="text-xs text-primary hover:underline font-semibold inline-flex items-center gap-0.5">
                 <span>Pinterest</span>
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
@@ -635,68 +793,119 @@ const accountName = connection.display_name || 'Account';
             </div>
           </div>
         </div>
-        <button id="intel-drawer-close" class="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-        </button>
+
+        <div class="flex items-center gap-2 shrink-0">
+          <!-- Drawer Range Presets -->
+          <div id="drawer-range-presets" class="flex items-center rounded-xl border border-border bg-muted/40 p-0.5 text-xs">
+            <button type="button" data-drawer-days="30" class="drawer-preset-btn rounded-lg px-2 py-0.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all">30D</button>
+            <button type="button" data-drawer-days="90" class="drawer-preset-btn active rounded-lg bg-primary px-2 py-0.5 text-xs font-semibold text-primary-foreground shadow-sm transition-all">90D</button>
+            <button type="button" data-drawer-days="180" class="drawer-preset-btn rounded-lg px-2 py-0.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all">180D</button>
+          </div>
+
+          <!-- Close Button -->
+          <button
+            type="button"
+            id="intel-drawer-close"
+            aria-label="Close drawer"
+            class="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+          </button>
+        </div>
       </div>
 
       <!-- Drawer Body -->
-      <div class="p-5 space-y-6 flex-1">
-        <!-- KPI Metrics Grid -->
-        <div class="grid grid-cols-4 gap-2">
-          <div class="rounded-xl border border-border bg-muted/20 p-2.5 text-center">
-            <span class="text-[10px] uppercase font-bold text-muted-foreground block">Best Rank</span>
-            <span id="drawer-best-rank" class="text-sm font-black text-foreground mt-0.5 block">—</span>
+      <div id="drawer-main-content" class="p-4 sm:p-5 space-y-6 flex-1">
+        <!-- Section Header for Stat Cards with Window Scope Notice -->
+        <div class="flex items-center justify-between">
+          <h4 class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Performance Overview</h4>
+          <span id="drawer-window-notice" class="text-[11px] font-medium text-muted-foreground">Leaderboard Totals (30D)</span>
+        </div>
+
+        <!-- R1: 8 KPI Stat Cards Grid (Two rows of four) -->
+        <div id="drawer-stat-cards-grid" class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <!-- Rendered dynamically by pin-intelligence.ts -->
+        </div>
+
+        <!-- F2: Performance Trend Sparkline Card -->
+        <div class="rounded-xl border border-border bg-card p-4 shadow-sm space-y-3">
+          <div class="flex flex-wrap items-center justify-between gap-2 border-b border-border/50 pb-2.5">
+            <div>
+              <div class="flex items-center gap-1.5">
+                <h4 id="drawer-chart-title" class="text-xs font-bold text-foreground uppercase tracking-wider">Performance Trend</h4>
+                <span id="drawer-chart-subtitle" class="text-[11px] text-muted-foreground"></span>
+              </div>
+            </div>
+
+            <!-- Metric Switcher Chips -->
+            <div id="drawer-metric-chips" class="flex flex-wrap items-center gap-1">
+              <!-- Rendered by pin-intelligence.ts -->
+            </div>
           </div>
-          <div class="rounded-xl border border-border bg-muted/20 p-2.5 text-center">
-            <span class="text-[10px] uppercase font-bold text-muted-foreground block">Total Impr</span>
-            <span id="drawer-total-impr" class="text-sm font-black text-foreground mt-0.5 block">—</span>
-          </div>
-          <div class="rounded-xl border border-border bg-muted/20 p-2.5 text-center">
-            <span class="text-[10px] uppercase font-bold text-muted-foreground block">Total Saves</span>
-            <span id="drawer-total-saves" class="text-sm font-black text-foreground mt-0.5 block">—</span>
-          </div>
-          <div class="rounded-xl border border-border bg-muted/20 p-2.5 text-center">
-            <span class="text-[10px] uppercase font-bold text-muted-foreground block">Snapshots</span>
-            <span id="drawer-appearances" class="text-sm font-black text-foreground mt-0.5 block">—</span>
+
+          <!-- Sparkline Chart Container with Edge Badges and Tooltip -->
+          <div class="relative w-full">
+            <div class="flex items-center justify-between text-[10px] font-mono text-muted-foreground mb-1">
+              <span id="drawer-chart-min-label"></span>
+              <span id="drawer-chart-latest-badge" class="font-bold text-foreground bg-muted px-2 py-0.5 rounded-full"></span>
+            </div>
+
+            <!-- SVG Container -->
+            <div id="drawer-sparkline-container" class="relative w-full h-28 bg-muted/10 rounded-lg p-2 flex items-center justify-center">
+              <!-- Rendered by pin-intelligence.ts -->
+            </div>
+
+            <!-- Absolutely Positioned Rich Tooltip -->
+            <div
+              id="drawer-chart-tooltip"
+              class="hidden absolute z-30 pointer-events-none rounded-lg border border-border bg-popover/95 px-2.5 py-1 text-[11px] font-semibold text-popover-foreground shadow-lg backdrop-blur-sm transform -translate-x-1/2 -translate-y-full mb-2 whitespace-nowrap transition-all duration-75"
+            ></div>
           </div>
         </div>
 
-        <!-- Trend Sparkline Card -->
-        <div class="rounded-xl border border-border bg-muted/10 p-4">
-          <div class="flex items-center justify-between mb-2">
-            <h4 class="text-xs font-bold text-foreground uppercase tracking-wider">Performance Trend (90D)</h4>
-            <span class="text-[10px] text-muted-foreground">Historical trajectory</span>
-          </div>
-          <div id="drawer-sparkline-container" class="w-full h-24 flex items-center justify-center">
-            <!-- Rendered by pin-intelligence.ts -->
-          </div>
-        </div>
+        <!-- F3 & F4: Timeline History Table (Sticky Header Opaque Fix) -->
+        <div class="space-y-2.5">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <h4 class="text-xs font-bold text-foreground">Timeline History</h4>
+              <span class="text-[11px] text-muted-foreground">Chronological snapshots</span>
+            </div>
 
-        <!-- History Snapshot Table -->
-        <div class="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
-          <div class="p-3 border-b border-border bg-muted/20 flex items-center justify-between">
-            <h4 class="text-xs font-bold text-foreground">Timeline History</h4>
-            <span class="text-[11px] text-muted-foreground">Ordered by date</span>
+            <!-- Timeline CSV Export Button -->
+            <button
+              type="button"
+              id="drawer-export-csv-btn"
+              class="rounded-lg border border-border bg-card px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted transition-all shadow-sm flex items-center gap-1.5"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <span>Export History CSV</span>
+            </button>
           </div>
-          <div class="overflow-x-auto max-h-72">
-            <table class="w-full text-left text-xs">
-              <thead class="border-b border-border bg-muted/30 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold sticky top-0">
+
+          <!-- F3: Single Scroll Container with Sticky Opaque th -->
+          <div class="relative max-h-[420px] overflow-y-auto rounded-xl border border-border bg-card">
+            <table class="w-full text-xs">
+              <thead>
                 <tr>
-                  <th class="py-2 px-3">Date</th>
-                  <th class="py-2 px-3 text-center">Rank</th>
-                  <th class="py-2 px-3 text-right">Impressions</th>
-                  <th class="py-2 px-3 text-right">Engagements</th>
-                  <th class="py-2 px-3 text-right">Saves</th>
+                  <th class="sticky top-0 z-10 bg-card px-3 py-2 text-left font-bold text-muted-foreground shadow-[inset_0_-1px_0_theme(colors.border)]">DATE</th>
+                  <th class="sticky top-0 z-10 bg-card px-3 py-2 text-center font-bold text-muted-foreground shadow-[inset_0_-1px_0_theme(colors.border)]">RANK</th>
+                  <th class="sticky top-0 z-10 bg-card px-3 py-2 text-right font-bold text-muted-foreground shadow-[inset_0_-1px_0_theme(colors.border)]">IMPRESSIONS</th>
+                  <th class="sticky top-0 z-10 bg-card px-3 py-2 text-right font-bold text-muted-foreground shadow-[inset_0_-1px_0_theme(colors.border)]">ENGAGEMENTS</th>
+                  <th class="sticky top-0 z-10 bg-card px-3 py-2 text-right font-bold text-muted-foreground shadow-[inset_0_-1px_0_theme(colors.border)]">OUTBOUND CLICKS</th>
+                  <th class="sticky top-0 z-10 bg-card px-3 py-2 text-right font-bold text-muted-foreground shadow-[inset_0_-1px_0_theme(colors.border)]">PIN CLICKS</th>
+                  <th class="sticky top-0 z-10 bg-card px-3 py-2 text-right font-bold text-muted-foreground shadow-[inset_0_-1px_0_theme(colors.border)]">SAVES</th>
                 </tr>
               </thead>
-              <tbody id="drawer-history-tbody" class="divide-y divide-border">
+              <tbody id="drawer-history-tbody" class="divide-y divide-border/50">
                 <!-- Rendered by pin-intelligence.ts -->
               </tbody>
             </table>
           </div>
         </div>
       </div>
+
+      <!-- Drawer Loading Skeleton / Error / Empty States -->
+      <div id="drawer-state-container" class="hidden p-8 flex-1 flex flex-col items-center justify-center text-center"></div>
     </div>
   </section>
 
