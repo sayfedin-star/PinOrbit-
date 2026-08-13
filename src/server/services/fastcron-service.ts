@@ -996,3 +996,212 @@ export const fastcronService = {
     return this.fastcronCall('cron_batch_add', { data: items, jobs: items }, token);
   },
 };
+
+// ===== Publishing Schedules (Project 1, isolated from Analytics) =====
+import { dbClients } from '../db/clients';
+import type { SupabaseClient } from '@supabase/supabase-js';
+
+export function buildPublishingCron(s: { interval_minutes: number; window_start: string; window_end: string; active_days: string[] }): string {
+  const step = Math.max(5, Math.round(60 / Math.max(1, Math.round(60 / Math.max(5, s.interval_minutes || 36)))));
+  const min = `*/${step}`;
+  const hStart = parseInt(String(s.window_start || '09:00').slice(0, 2), 10);
+  const hEnd = parseInt(String(s.window_end || '21:00').slice(0, 2), 10);
+  const hours = hEnd >= hStart ? `${hStart}-${hEnd}` : `${hStart}-23,0-${hEnd}`;
+  const map: Record<string, string> = { Sun: '0', Mon: '1', Tue: '2', Wed: '3', Thu: '4', Fri: '5', Sat: '6' };
+  const days = (s.active_days || []).map((d) => map[d]).filter(Boolean).sort().join(',');
+  return `${min} ${hours} * * ${days || '*'}`;
+}
+
+async function resolveWebhookUrlForSchedule(schedulingClient: SupabaseClient, schedule: any): Promise<string> {
+  // First try schedule.webhook_id row in account_webhooks
+  if (schedule.webhook_id) {
+    const { data: whData } = await schedulingClient.from('account_webhooks')
+      .select('webhook_url').eq('id', schedule.webhook_id).eq('account_id', schedule.account_id).single();
+    if (whData?.webhook_url) return whData.webhook_url;
+  }
+  // Else first active webhook of the account
+  const { data: webhooks } = await schedulingClient.from('account_webhooks')
+    .select('webhook_url').eq('account_id', schedule.account_id).eq('is_active', true).limit(1);
+  if (webhooks && webhooks.length > 0 && webhooks[0].webhook_url) return webhooks[0].webhook_url;
+  throw new Error('No active webhook URL found for account');
+}
+
+async function resolveTokenForSchedule(schedule: any, runtimeEnv: Record<string, any>): Promise<string> {
+  const env = getServerEnv(runtimeEnv);
+  if (schedule.fastcron_token_encrypted) {
+    const dec = await decryptToken(schedule.fastcron_token_encrypted, env.TOKEN_KEK);
+    if (dec && dec.trim().length >= 16) return dec.trim();
+  }
+  if (env.FASTCRON_API_TOKEN && env.FASTCRON_API_TOKEN.trim().length >= 16) return env.FASTCRON_API_TOKEN.trim();
+  throw new Error('FastCron API token not configured');
+}
+
+export async function syncPublishingSchedule(schedule: any, runtimeEnv: Record<string, any>): Promise<{ success: boolean; job_id?: number | null; error?: string }> {
+  const schedulingClient = dbClients.getSchedulingAdmin(runtimeEnv);
+  let token: string;
+  try {
+    token = await resolveTokenForSchedule(schedule, runtimeEnv);
+  } catch (e: any) {
+    return { success: false, error: e.message };
+  }
+  let webhookUrl: string;
+  try {
+    webhookUrl = await resolveWebhookUrlForSchedule(schedulingClient, schedule);
+  } catch (e: any) {
+    return { success: false, error: e.message };
+  }
+  const cronExpr = buildPublishingCron(schedule);
+  const jobName = `PinOrbit-pub-${schedule.id.slice(0, 8)}`;
+  const postData = JSON.stringify({ kind: 'pin.post', schedule_id: schedule.id, dispatch_token: schedule.dispatch_token });
+  const jobParams: Record<string, any> = {
+    name: jobName,
+    expression: cronExpr,
+    timezone: schedule.timezone || 'UTC',
+    url: webhookUrl,
+    httpMethod: 'POST',
+    http_method: 'POST',
+    httpHeaders: 'Content-Type: application/json',
+    http_headers: 'Content-Type: application/json',
+    postData: postData,
+    post_data: postData,
+    instances: 1,
+    notify: true,
+    timeout: 30,
+  };
+  if (schedule.random_delay_minutes !== undefined && schedule.random_delay_minutes !== null) {
+    jobParams.random_delay = schedule.random_delay_minutes;
+  }
+  let result: { success: boolean; data?: any; error?: string };
+  if (schedule.fastcron_job_id) {
+    jobParams.id = schedule.fastcron_job_id;
+    result = await fastcronService.fastcronCall('cron_edit', jobParams, token);
+  } else {
+    result = await fastcronService.fastcronCall('cron_add', jobParams, token);
+  }
+  if (!result.success) {
+    return { success: false, error: result.error };
+  }
+  const returnedId = result.data?.id ?? result.data?.data?.id ?? (Array.isArray(result.data?.ids) ? result.data.ids[0] : null);
+  const parsedId = returnedId != null && !isNaN(Number(returnedId)) ? Number(returnedId) : null;
+  if (parsedId) {
+    await schedulingClient.from('posting_schedules').update({ fastcron_job_id: parsedId }).eq('id', schedule.id);
+  }
+  return { success: true, job_id: parsedId };
+}
+
+export async function pausePublishingSchedule(scheduleId: string, jobId: number, runtimeEnv: Record<string, any>): Promise<{ success: boolean; error?: string }> {
+  const schedulingClient = dbClients.getSchedulingAdmin(runtimeEnv);
+  const { data: schedule } = await schedulingClient.from('posting_schedules').select('fastcron_token_encrypted').eq('id', scheduleId).single();
+  const env = getServerEnv(runtimeEnv);
+  let token: string;
+  if (schedule?.fastcron_token_encrypted) {
+    const dec = await decryptToken(schedule.fastcron_token_encrypted, env.TOKEN_KEK);
+    if (dec) token = dec.trim();
+  }
+  if (!token && env.FASTCRON_API_TOKEN) token = env.FASTCRON_API_TOKEN.trim();
+  if (!token) return { success: false, error: 'Token not configured' };
+  const res = await fastcronService.fastcronCall('cron_disable', { id: jobId }, token);
+  if (!res.success) return { success: false, error: res.error };
+  await schedulingClient.from('posting_schedules').update({ status: 'paused' }).eq('id', scheduleId);
+  return { success: true };
+}
+
+export async function resumePublishingSchedule(scheduleId: string, jobId: number, runtimeEnv: Record<string, any>): Promise<{ success: boolean; error?: string }> {
+  const schedulingClient = dbClients.getSchedulingAdmin(runtimeEnv);
+  const { data: schedule } = await schedulingClient.from('posting_schedules').select('fastcron_token_encrypted').eq('id', scheduleId).single();
+  const env = getServerEnv(runtimeEnv);
+  let token: string;
+  if (schedule?.fastcron_token_encrypted) {
+    const dec = await decryptToken(schedule.fastcron_token_encrypted, env.TOKEN_KEK);
+    if (dec) token = dec.trim();
+  }
+  if (!token && env.FASTCRON_API_TOKEN) token = env.FASTCRON_API_TOKEN.trim();
+  if (!token) return { success: false, error: 'Token not configured' };
+  const res = await fastcronService.fastcronCall('cron_enable', { id: jobId }, token);
+  if (!res.success) return { success: false, error: res.error };
+  await schedulingClient.from('posting_schedules').update({ status: 'active' }).eq('id', scheduleId);
+  return { success: true };
+}
+
+export async function deletePublishingSchedule(scheduleId: string, jobId: number | null | undefined, runtimeEnv: Record<string, any>): Promise<{ success: boolean; error?: string }> {
+  const schedulingClient = dbClients.getSchedulingAdmin(runtimeEnv);
+  if (jobId) {
+    const { data: schedule } = await schedulingClient.from('posting_schedules').select('fastcron_token_encrypted').eq('id', scheduleId).single();
+    const env = getServerEnv(runtimeEnv);
+    let token: string;
+    if (schedule?.fastcron_token_encrypted) {
+      const dec = await decryptToken(schedule.fastcron_token_encrypted, env.TOKEN_KEK);
+      if (dec) token = dec.trim();
+    }
+    if (!token && env.FASTCRON_API_TOKEN) token = env.FASTCRON_API_TOKEN.trim();
+    if (token) {
+      await fastcronService.fastcronCall('cron_delete', { id: jobId }, token);
+    }
+  }
+  await schedulingClient.from('posting_schedules').delete().eq('id', scheduleId);
+  return { success: true };
+}
+
+export async function clonePublishingSchedule(scheduleId: string, runtimeEnv: Record<string, any>): Promise<{ success: boolean; new_schedule?: any; error?: string }> {
+  const schedulingClient = dbClients.getSchedulingAdmin(runtimeEnv);
+  const { data: orig, error: fetchErr } = await schedulingClient.from('posting_schedules').select('*').eq('id', scheduleId).single();
+  if (fetchErr || !orig) return { success: false, error: 'Original schedule not found' };
+  const newDispatchToken = crypto.randomUUID();
+  const newLabel = (orig.label || '') + ' (copy)';
+  const { data: newRow, error: insertErr } = await schedulingClient.from('posting_schedules')
+    .insert({
+      workspace_id: orig.workspace_id,
+      account_id: orig.account_id,
+      label: newLabel,
+      webhook_id: orig.webhook_id,
+      timezone: orig.timezone,
+      window_start: orig.window_start,
+      window_end: orig.window_end,
+      interval_minutes: orig.interval_minutes,
+      random_delay_minutes: orig.random_delay_minutes,
+      active_days: orig.active_days,
+      started_at: orig.started_at,
+      batch: orig.batch,
+      status: 'not_synced',
+      dispatch_token: newDispatchToken,
+      fastcron_job_id: null,
+      fastcron_token_encrypted: orig.fastcron_token_encrypted,
+    })
+    .select()
+    .single();
+  if (insertErr || !newRow) return { success: false, error: insertErr?.message || 'Failed to insert clone' };
+  const syncResult = await syncPublishingSchedule(newRow, runtimeEnv);
+  if (!syncResult.success) return { success: false, error: syncResult.error };
+  return { success: true, new_schedule: newRow };
+}
+
+export async function triggerBoardAction(accountId: string, action: 'create' | 'list' | 'delete', extra: Record<string, any>, runtimeEnv: Record<string, any>): Promise<{ success: boolean; status?: number; error?: string }> {
+  const schedulingClient = dbClients.getSchedulingAdmin(runtimeEnv);
+  // Resolve board channel = accounts.board_creation_webhook_id webhook row
+  const { data: account } = await schedulingClient.from('accounts').select('board_creation_webhook_id').eq('id', accountId).single();
+  let webhookUrl: string | null = null;
+  if (account?.board_creation_webhook_id) {
+    const { data: wh } = await schedulingClient.from('account_webhooks')
+      .select('webhook_url').eq('id', account.board_creation_webhook_id).single();
+    if (wh?.webhook_url) webhookUrl = wh.webhook_url;
+  }
+  // Else first active account_webhooks row
+  if (!webhookUrl) {
+    const { data: webhooks } = await schedulingClient.from('account_webhooks')
+      .select('webhook_url').eq('account_id', accountId).eq('is_active', true).limit(1);
+    if (webhooks && webhooks.length > 0) webhookUrl = webhooks[0].webhook_url;
+  }
+  if (!webhookUrl) return { success: false, error: 'No webhook URL found for board actions' };
+  const payload = { action, account_id: accountId, ...extra };
+  try {
+    const res = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(8000),
+    });
+    return { success: res.ok, status: res.status };
+  } catch (e: any) {
+    return { success: false, error: e.message };
+  }
+}
