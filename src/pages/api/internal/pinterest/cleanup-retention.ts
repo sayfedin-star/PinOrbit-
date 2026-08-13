@@ -1,7 +1,7 @@
 export const prerender = false;
 
 import type { APIRoute } from 'astro';
-import { dbClients } from '../../../../server/db/clients';
+import { dbClients, isKnownDefaultIngestSecret, isProductionEnv } from '../../../../server/db/clients';
 import { getEffectiveSecret } from '../../../../server/services/webhook-secrets';
 
 export const POST: APIRoute = async ({ request, locals }) => {
@@ -49,6 +49,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
   // 2. Authenticate
   const secret = request.headers.get('x-ingest-secret') || request.headers.get('x-dispatch-secret');
   const expected = await getEffectiveSecret(workspaceId, runtimeEnv);
+
+  if (isProductionEnv(runtimeEnv) && expected.source === 'env' && isKnownDefaultIngestSecret(expected.value)) {
+    return new Response(JSON.stringify({ success: false, error: 'Service unavailable: ingest secret not configured on server.' }), { status: 503, headers: { 'Content-Type': 'application/json' } });
+  }
 
   if (!secret || !expected.value || secret !== expected.value) {
     return new Response(

@@ -17,6 +17,21 @@ export interface ServerEnvConfig {
   TOKEN_KEK: string;
 }
 
+export const KNOWN_DEFAULT_INGEST_SECRET = 'pinorbit_ingest_secret_dev';
+export const KNOWN_DEFAULT_KEKS = ['pinorbit_dev_token_kek_00000000','pinorbit_prod_token_kek_00000000'] as const;
+
+export function isProductionEnv(runtimeEnv?: Record<string, any>): boolean {
+  const nodeProd = typeof process !== 'undefined' && process.env.NODE_ENV === 'production';
+  const astroProd = typeof import.meta !== 'undefined' && Boolean((import.meta as any).env?.PROD);
+  return Boolean(nodeProd || astroProd || runtimeEnv?.CF_ENVIRONMENT === 'production');
+}
+export function isKnownDefaultIngestSecret(v?: string | null): boolean { return v === KNOWN_DEFAULT_INGEST_SECRET; }
+export function isKnownDefaultKek(v?: string | null): boolean { return (KNOWN_DEFAULT_KEKS as readonly string[]).includes(v as string); }
+export function hasSchedulingSecretKey(runtimeEnv?: Record<string, any>): boolean {
+  const env = { ...(typeof process !== 'undefined' ? process.env : {}), ...(runtimeEnv || {}) } as Record<string, string | undefined>;
+  return Boolean(env.SCHEDULING_SUPABASE_SECRET_KEY && env.SCHEDULING_SUPABASE_SECRET_KEY.trim().length > 0);
+}
+
 /**
  * Validates and extracts server-only environment configuration.
  * Uses modern Supabase publishable/secret key naming conventions.
