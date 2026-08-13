@@ -1,0 +1,6 @@
+---
+import Layout from '../layouts/Layout.astro';
+import SectionHeader from '../components/ui/SectionHeader.astro';
+export const prerender = false;
+---
+<Layout title=\"Posting Schedules\"><div class=\"p-6\"><h1 class=\"text-xl font-bold\">Schedules</h1><div id=\"summary\" class=\"grid grid-cols-4 gap-4 my-4\"></div><table class=\"w-full text-xs\"><thead><tr><th>Account</th><th>Status</th><th>Actions</th></tr></thead><tbody id=\"schedules-tbody\"></tbody></table></div><script>async function load(){const r=await fetch(\"/api/schedules\");const d=await r.json();document.getElementById(\"schedules-tbody\").innerHTML=d.map(s=>`<tr><td>${s.account_id}</td><td>${s.status}</td><td><button data-id=\"${s.id}\">Edit</button></td></tr>`).join(\"\");}load();</script></Layout>
