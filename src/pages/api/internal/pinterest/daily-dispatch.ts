@@ -1,7 +1,7 @@
 export const prerender = false;
 
 import type { APIRoute } from 'astro';
-import { dbClients } from '../../../../server/db/clients';
+import { dbClients, isKnownDefaultIngestSecret, isProductionEnv } from '../../../../server/db/clients';
 import { getEffectiveSecret } from '../../../../server/services/webhook-secrets';
 import { SORT_MODES } from '../../../../server/services/fastcron-service';
 
@@ -167,6 +167,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
     runtimeEnv
   );
   const expectedSecret = effectiveSecretResult?.value;
+
+  if (isProductionEnv(runtimeEnv) && effectiveSecretResult?.source === 'env' && isKnownDefaultIngestSecret(expectedSecret)) {
+    return new Response(JSON.stringify({ success: false, error: 'Service unavailable: ingest secret not configured on server.' }), { status: 503, headers: { 'Content-Type': 'application/json' } });
+  }
 
   // 7. Authenticate: accept header x-ingest-secret (or legacy x-dispatch-secret) equal to expectedSecret
   const ingestSecret = request.headers.get('x-ingest-secret');

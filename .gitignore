@@ -1,35 +1,72 @@
-# build output
-dist/
-.astro/
-.wrangler/
+```
+# Logs and temp files
+*.log
+*.tmp
+*.swp
 
-# dependencies
-node_modules/
-
-# environment variables & local secrets
+# Environment
 .env
 .env.local
-.env.*.local
-.dev.vars
-*.local
-/secrets/
-local-secrets.*
-!src/pages/api/analytics/secrets/
+.env.*
 
-# database dumps & temporary exports
-dumps/
-*.dump
-*.sql.gz
-exports/
-temp-exports/
-*.csv.tmp
+# Dependencies
+node_modules/
 
-# logs
+# Build artifacts
+dist/
+build/
+target/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.git/modules/
+.DS_Store
+*.sublime-workspace
+.pytest_cache/
+.hypothesis/
+.coverage*
+.venv/
+venv/
+ENV/
+
+# Node
+node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-pnpm-debug.log*
+lerna-debug.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
 
 # OS
 .DS_Store
 Thumbs.db
+
+# Database
+*.db
+*.db-journal
+
+# Supabase
+supabase/.temp/
+supabase/migrations/*.sql.bak
+```

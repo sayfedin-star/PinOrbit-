@@ -255,9 +255,10 @@ export const pinnerETL = {
     workspaceId: string,
     connectionId: string,
     streakCount: number,
-    lastError?: any
+    lastError?: any,
+    runtimeEnv?: Record<string, any>
   ): Promise<boolean> {
-    const env = dbClients.getConfig();
+    const env = dbClients.getConfig(runtimeEnv);
     const snitchUrl = env.SNITCH_WEBHOOK_URL;
     if (!snitchUrl) {
       console.warn('[DeadManSnitch] No SNITCH_WEBHOOK_URL configured.');
@@ -292,10 +293,11 @@ export const pinnerETL = {
   async handleAccountRevocation(
     workspaceId: string,
     connectionId: string,
-    _errorDetails?: any
+    _errorDetails?: any,
+    runtimeEnv?: Record<string, any>
   ): Promise<void> {
     try {
-      const analyticsClient = dbClients.getAnalytics();
+      const analyticsClient = dbClients.getAnalytics(runtimeEnv);
       await analyticsClient
         .from('analytics_connections')
         .update({
@@ -316,7 +318,8 @@ export const pinnerETL = {
    */
   async processIngestionPayload(
     payload: PinnerIngestPayload,
-    runtimeKvNamespace?: any
+    runtimeKvNamespace?: any,
+    runtimeEnv?: Record<string, any>
   ): Promise<ETLProcessingResult> {
     const nowIso = new Date().toISOString();
     const {
@@ -333,7 +336,7 @@ export const pinnerETL = {
     }
 
     // 0. Verify Connection Exists in Project 3
-    const analyticsClient = dbClients.getAnalytics();
+    const analyticsClient = dbClients.getAnalytics(runtimeEnv);
     const { data: connectionData, error: connError } = await analyticsClient
       .from('analytics_connections')
       .select('id, workspace_id, analytics_enabled')
@@ -403,7 +406,7 @@ export const pinnerETL = {
         const isRevoked = httpStatus === 401;
 
         if (isRevoked) {
-          await this.handleAccountRevocation(workspaceId, connectionId, errorDetails);
+          await this.handleAccountRevocation(workspaceId, connectionId, errorDetails, runtimeEnv);
         }
 
         const streak = failureStreakTracker.get(workspaceId) || { count: 0, lastFailedAt: nowIso };
@@ -414,7 +417,7 @@ export const pinnerETL = {
         const currentStreak = streak.count;
         let snitchFired = false;
         if (currentStreak >= 2) {
-          snitchFired = await this.triggerDeadManSnitch(workspaceId, connectionId, currentStreak, errorDetails);
+          snitchFired = await this.triggerDeadManSnitch(workspaceId, connectionId, currentStreak, errorDetails, runtimeEnv);
         }
 
         await analyticsDb.failIngestionRun(runRecord.id, {
