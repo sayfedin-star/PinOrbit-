@@ -7,7 +7,6 @@ import Layout from '../layouts/Layout.astro';
     <div class="flex items-center justify-between gap-2">
       <h1 class="text-xl font-bold">Posting Schedules</h1>
       <div class="flex gap-2">
-        <button id="btn-add" class="px-3 py-1 rounded bg-pink-600 text-white">+ Add Posting Schedule</button>
         <button id="btn-sync" class="px-3 py-1 rounded border">Sync Missing</button>
         <button id="btn-refresh" class="px-3 py-1 rounded border">Refresh</button>
       </div>
@@ -16,15 +15,6 @@ import Layout from '../layouts/Layout.astro';
       <div class="border rounded p-3">Active: <b id="c-active">0</b></div>
       <div class="border rounded p-3">Paused: <b id="c-paused">0</b></div>
       <div class="border rounded p-3">Not synced / error: <b id="c-unsynced">0</b></div>
-    </div>
-    <div id="bulkbar" class="hidden items-center gap-2 text-sm border rounded p-2">
-      <span id="bulk-count" class="font-semibold"></span>
-      <button data-bulk="run" class="px-2 py-1 border rounded">Run Now</button>
-      <button data-bulk="resume" class="px-2 py-1 border rounded">Resume</button>
-      <button data-bulk="pause" class="px-2 py-1 border rounded">Pause</button>
-      <button data-bulk="clone" class="px-2 py-1 border rounded">Clone</button>
-      <button data-bulk="delete" class="px-2 py-1 border rounded text-red-600">Delete</button>
-      <button id="btn-deselect" class="px-2 py-1 border rounded">Deselect</button>
     </div>
     <table class="w-full text-xs border">
       <thead>
@@ -41,30 +31,6 @@ import Layout from '../layouts/Layout.astro';
       <tbody id="rows"></tbody>
     </table>
   </div>
-
-  <dialog id="modal" class="rounded p-0 w-[480px] max-w-full">
-    <form id="form" class="p-4 space-y-3 text-sm">
-      <h2 id="modal-title" class="text-lg font-bold">Add Posting Schedule</h2>
-      <input type="hidden" id="f-id" />
-      <label class="block">Account ID<input id="f-account" class="border rounded w-full p-2" required /></label>
-      <label class="block">Label<input id="f-label" class="border rounded w-full p-2" /></label>
-      <div class="grid grid-cols-2 gap-2">
-        <label class="block">Timezone<input id="f-tz" class="border rounded w-full p-2" value="UTC" /></label>
-        <label class="block">Batch<input id="f-batch" type="number" min="1" max="10" class="border rounded w-full p-2" value="1" /></label>
-        <label class="block">Window start<input id="f-start" type="time" class="border rounded w-full p-2" value="09:00" /></label>
-        <label class="block">Window end<input id="f-end" type="time" class="border rounded w-full p-2" value="21:00" /></label>
-        <label class="block">Interval (min)<input id="f-interval" type="number" min="1" max="1440" class="border rounded w-full p-2" value="36" /></label>
-        <label class="block">Random delay (min)<input id="f-delay" type="number" min="0" max="60" class="border rounded w-full p-2" value="0" /></label>
-      </div>
-      <label class="block">Active days (comma separated)<input id="f-days" class="border rounded w-full p-2" value="Mon,Tue,Wed,Thu,Fri,Sat,Sun" /></label>
-      <label class="block">Pinning started (optional)<input id="f-started" type="date" class="border rounded w-full p-2" /></label>
-      <p id="cadence" class="text-pink-600 text-xs"></p>
-      <div class="flex justify-end gap-2">
-        <button type="button" id="btn-cancel" class="px-3 py-1 border rounded">Cancel</button>
-        <button type="submit" class="px-3 py-1 rounded bg-pink-600 text-white">Save</button>
-      </div>
-    </form>
-  </dialog>
 
   <dialog id="drawer" class="rounded p-0 w-[560px] max-w-full">
     <div class="p-4">
@@ -91,11 +57,9 @@ import Layout from '../layouts/Layout.astro';
         '<td class="p-2">' + esc((s.active_days || []).join(',')) + '</td>' +
         '<td class="p-2">' + esc(s.status) + (s.fastcron_job_id ? '' : ' (no job)') + '</td>' +
         '<td class="p-2"><button data-act="run" data-id="' + s.id + '">Run</button> ' +
-        '<button data-act="edit" data-id="' + s.id + '">Edit</button> ' +
         '<button data-act="' + (s.status === 'paused' ? 'resume' : 'pause') + '" data-id="' + s.id + '">' + (s.status === 'paused' ? 'Resume' : 'Pause') + '</button> ' +
-        '<button data-act="clone" data-id="' + s.id + '">Clone</button> ' +
         '<button data-act="logs" data-id="' + s.id + '">Logs</button> ' +
-        '<button data-act="delete" data-id="' + s.id + '">Del</button></td></tr>';
+        '<a href="/accounts/' + esc(s.account_id) + '" class="text-primary hover:underline">Open account</a></td></tr>';
     }
 
     async function load() {
@@ -109,33 +73,15 @@ import Layout from '../layouts/Layout.astro';
       updateBulk();
     }
     function updateBulk() {
-      const bar = $('#bulkbar');
-      if (selected.size > 0) { bar.classList.remove('hidden'); bar.classList.add('flex'); $('#bulk-count').textContent = selected.size + ' selected'; }
-      else { bar.classList.add('hidden'); bar.classList.remove('flex'); }
+      // bulk bar removed - read-only overview
     }
     function updateCadence() {
-      const interval = Number($('#f-interval').value || 36);
-      const h = Math.max(0, Number(($('#f-end').value || '21:00').slice(0, 2)) - Number(($('#f-start').value || '09:00').slice(0, 2)));
-      $('#cadence').textContent = '≈ ' + Math.floor((h * 60) / interval) + ' pins/day capacity at ' + interval + 'm interval across ' + h + 'h window.';
+      // cadence removed - modal no longer exists
     }
     function openModal(s: any) {
-      ($('#modal') as any).showModal();
-      $('#modal-title').textContent = s ? 'Edit Posting Schedule' : 'Add Posting Schedule';
-      ($('#f-id') as any).value = s?.id || '';
-      ($('#f-account') as any).value = s?.account_id || '';
-      ($('#f-label') as any).value = s?.label || '';
-      ($('#f-tz') as any).value = s?.timezone || 'UTC';
-      ($('#f-batch') as any).value = String(s?.batch ?? 1);
-      ($('#f-start') as any).value = s?.window_start || '09:00';
-      ($('#f-end') as any).value = s?.window_end || '21:00';
-      ($('#f-interval') as any).value = String(s?.interval_minutes ?? 36);
-      ($('#f-delay') as any).value = String(s?.random_delay_minutes ?? 0);
-      ($('#f-days') as any).value = (s?.active_days || ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']).join(',');
-      ($('#f-started') as any).value = s?.started_at ? String(s.started_at).slice(0, 10) : '';
-      updateCadence();
+      // modal removed - read-only overview
     }
     async function action(id: string, act: string) {
-      if (act === 'edit') { openModal(cache.find((x) => x.id === id)); return; }
       if (act === 'logs' || act === 'failures' || act === 'next') {
         const r = await fetch('/api/schedules/' + id + '/fastcron?view=' + act);
         const d = await r.json();
@@ -150,26 +96,14 @@ import Layout from '../layouts/Layout.astro';
       if (!r.ok) alert(d.error || 'Failed');
       load();
     }
-    async function runBulk(act: string) {
-      const r = await fetch('/api/schedules/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: Array.from(selected), action: act }) });
-      const d = await r.json();
-      if (!r.ok) alert(d.error || 'Failed');
-      selected.clear();
-      load();
-    }
     document.addEventListener('click', (e) => {
       const t = e.target as HTMLElement;
       const act = t.getAttribute('data-act'); const id = t.getAttribute('data-id');
       if (act && id) { action(id, act); return; }
-      const bulk = t.getAttribute('data-bulk');
-      if (bulk) { runBulk(bulk); return; }
       const chk = t.getAttribute('data-chk');
       if (chk) { if (selected.has(chk)) selected.delete(chk); else selected.add(chk); updateBulk(); }
     });
-    $('#btn-add').addEventListener('click', () => openModal(null));
     $('#btn-refresh').addEventListener('click', load);
-    $('#btn-deselect').addEventListener('click', () => { selected.clear(); load(); });
-    $('#btn-cancel').addEventListener('click', () => ($('#modal') as any).close());
     $('#btn-close-drawer').addEventListener('click', () => ($('#drawer') as any).close());
     $('#btn-sync').addEventListener('click', async () => {
       const r = await fetch('/api/schedules/sync-missing', { method: 'POST' });
@@ -180,32 +114,6 @@ import Layout from '../layouts/Layout.astro';
     $('#chk-all').addEventListener('change', (e) => {
       const on = (e.target as HTMLInputElement).checked;
       selected = new Set(on ? cache.map((x) => x.id) : []);
-      load();
-    });
-    $('#f-interval').addEventListener('input', updateCadence);
-    $('#f-start').addEventListener('input', updateCadence);
-    $('#f-end').addEventListener('input', updateCadence);
-    ($('#form') as any).addEventListener('submit', async (e: Event) => {
-      e.preventDefault();
-      const id = ($('#f-id') as any).value;
-      const body = {
-        account_id: ($('#f-account') as any).value,
-        label: ($('#f-label') as any).value,
-        timezone: ($('#f-tz') as any).value,
-        batch: Number(($('#f-batch') as any).value),
-        window_start: ($('#f-start') as any).value,
-        window_end: ($('#f-end') as any).value,
-        interval_minutes: Number(($('#f-interval') as any).value),
-        random_delay_minutes: Number(($('#f-delay') as any).value),
-        active_days: (($('#f-days') as any).value as string).split(',').map((x) => x.trim()).filter(Boolean),
-        started_at: (($('#f-started') as any).value || null),
-      };
-      const r = id
-        ? await fetch('/api/schedules/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-        : await fetch('/api/schedules', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      const d = await r.json();
-      if (!r.ok) { alert(d.error || 'Failed'); return; }
-      ($('#modal') as any).close();
       load();
     });
     load();
