@@ -1056,7 +1056,8 @@ export async function syncPublishingSchedule(schedule: any, runtimeEnv: Record<s
   const base = (typeof process !== 'undefined' && process.env.DISPATCH_BASE_URL)
     ? process.env.DISPATCH_BASE_URL.replace(/\/$/, '')
     : 'https://pinorbit-v2.o-i.workers.dev';
-  const dispatchUrl = `${base}/api/internal/pinterest/dispatch-due-pin`;
+  const dispatchUrl = `${base}/api/internal/pinterest/dispatch-due-pin`
+    + `?schedule_id=${encodeURIComponent(schedule.id)}&dispatch_token=${encodeURIComponent(schedule.dispatch_token)}`;
   const cronExpr = buildPublishingCron(schedule);
   const jobName = `PinOrbit-pub-${schedule.id.slice(0, 8)}`;
   const postData = JSON.stringify({ schedule_id: schedule.id, dispatch_token: schedule.dispatch_token });

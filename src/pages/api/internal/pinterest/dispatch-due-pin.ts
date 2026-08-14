@@ -4,10 +4,8 @@ import { dbClients, hasSchedulingSecretKey } from '../../../../server/db/clients
 
 const json = (o: any, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { 'Content-Type': 'application/json' } });
 
-export const POST: APIRoute = async ({ request, locals }) => {
+async function handleDispatch(body: any, locals: any) {
   const runtimeEnv = (locals as any)?.runtime?.env || (locals as any)?.runtimeEnv || {};
-  let body: any = {};
-  try { body = JSON.parse((await request.text()) || '{}'); } catch { return json({ success: false, error: 'Malformed JSON payload.' }, 400); }
 
   const scheduleId = typeof body.schedule_id === 'string' ? body.schedule_id : '';
   const token = typeof body.dispatch_token === 'string' ? body.dispatch_token : '';
@@ -86,4 +84,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
     dispatched++;
   }
   return json({ success: true, dispatched, skipped });
+}
+
+export const GET: APIRoute = async ({ url, locals }) =>
+  handleDispatch({ schedule_id: url.searchParams.get('schedule_id') || '', dispatch_token: url.searchParams.get('dispatch_token') || '' }, locals);
+
+export const POST: APIRoute = async ({ request, locals }) => {
+  let body: any = {};
+  try { body = JSON.parse((await request.text()) || '{}'); } catch { return json({ success: false, error: 'Malformed JSON payload.' }, 400); }
+  return handleDispatch(body, locals);
 };
