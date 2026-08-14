@@ -3,8 +3,8 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 import { validateUserSession } from '../../../server/auth/session';
 import { assertWorkspaceAccess } from '../../../server/auth/workspace-guard';
-import { dbClients, getServerEnv } from '../../../server/db/clients';
-import { encryptToken } from '../../../server/lib/token-crypto';
+import { dbClients, getServerEnv, isKnownDefaultKek, isProductionEnv } from '../../../server/db/clients';
+import { encryptToken, resolveTokenKek } from '../../../server/lib/token-crypto';
 import { syncPublishingSchedule, deletePublishingSchedule } from '../../../server/services/fastcron-service';
 
 export const PATCH: APIRoute = async ({ request, params, locals }) => {
@@ -42,9 +42,12 @@ export const PATCH: APIRoute = async ({ request, params, locals }) => {
       if (body.fastcron_token === null) {
         updateFields.fastcron_token_encrypted = null;  // Clear override
       } else if (typeof body.fastcron_token === 'string' && body.fastcron_token.trim().length > 0) {
+        const kek = await resolveTokenKek(runtimeEnv);
+        if (!kek || (isProductionEnv(runtimeEnv) && isKnownDefaultKek(kek))) {
+          return new Response(JSON.stringify({ error: 'TOKEN_KEK unavailable' }), { status: 503, headers: { 'Content-Type': 'application/json' } });
+        }
         try {
-          const env = getServerEnv(runtimeEnv);
-          updateFields.fastcron_token_encrypted = await encryptToken(body.fastcron_token.trim(), env.TOKEN_KEK);
+          updateFields.fastcron_token_encrypted = await encryptToken(body.fastcron_token.trim(), kek);
         } catch (e: any) {
           return new Response(JSON.stringify({ error: 'Failed to encrypt token: ' + e.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
         }

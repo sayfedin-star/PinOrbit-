@@ -3,8 +3,8 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 import { validateUserSession } from '../../../server/auth/session';
 import { assertWorkspaceAccess } from '../../../server/auth/workspace-guard';
-import { dbClients, getServerEnv } from '../../../server/db/clients';
-import { encryptToken, decryptToken } from '../../../server/lib/token-crypto';
+import { dbClients, getServerEnv, isKnownDefaultKek, isProductionEnv } from '../../../server/db/clients';
+import { encryptToken, decryptToken, resolveTokenKek } from '../../../server/lib/token-crypto';
 import { maskSecret } from '../../../server/services/webhook-secrets';
 import { syncPublishingSchedule } from '../../../server/services/fastcron-service';
 
@@ -39,14 +39,14 @@ export const GET: APIRoute = async ({ url, locals }) => {
     const { data, error } = await query.order('created_at', { ascending: false });
     if (error) throw error;
 
-    const env = getServerEnv(runtimeEnv);
+    const kek = await resolveTokenKek(runtimeEnv);
     const sanitizedSchedules = await Promise.all((data || []).map(async (schedule: any) => {
       const result: any = { ...schedule };
       delete result.fastcron_token_encrypted;  // NEVER send ciphertext to client
       
-      if (schedule.fastcron_token_encrypted) {
+      if (schedule.fastcron_token_encrypted && kek) {
         try {
-          const decrypted = await decryptToken(schedule.fastcron_token_encrypted, env.TOKEN_KEK);
+          const decrypted = await decryptToken(schedule.fastcron_token_encrypted, kek);
           if (decrypted) {
             result.has_fastcron_token = true;
             result.fastcron_token_masked = maskSecret(decrypted);  // Returns '••••XXXX'
@@ -105,9 +105,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
     let fastcron_token_encrypted: string | null = null;
     if (body.fastcron_token && typeof body.fastcron_token === 'string' && body.fastcron_token.trim().length > 0) {
+      const kek = await resolveTokenKek(runtimeEnv);
+      if (!kek || (isProductionEnv(runtimeEnv) && isKnownDefaultKek(kek))) {
+        return new Response(JSON.stringify({ error: 'TOKEN_KEK unavailable' }), { status: 503, headers: { 'Content-Type': 'application/json' } });
+      }
       try {
-        const env = getServerEnv(runtimeEnv);
-        fastcron_token_encrypted = await encryptToken(body.fastcron_token.trim(), env.TOKEN_KEK);
+        fastcron_token_encrypted = await encryptToken(body.fastcron_token.trim(), kek);
       } catch (e: any) {
         return new Response(JSON.stringify({ error: 'Failed to encrypt token: ' + e.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
       }

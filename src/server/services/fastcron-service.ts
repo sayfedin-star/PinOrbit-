@@ -1,6 +1,6 @@
 import { analyticsDb } from '../db/analytics';
 import { getServerEnv } from '../db/clients';
-import { decryptToken } from '../lib/token-crypto';
+import { decryptToken, resolveTokenKek } from '../lib/token-crypto';
 import { getEffectiveSecret } from './webhook-secrets';
 import type {
   ScheduleSyncResponse,
@@ -1029,8 +1029,11 @@ async function resolveWebhookUrlForSchedule(schedulingClient: SupabaseClient, sc
 async function resolveTokenForSchedule(schedule: any, runtimeEnv: Record<string, any>): Promise<string> {
   const env = getServerEnv(runtimeEnv);
   if (schedule.fastcron_token_encrypted) {
-    const dec = await decryptToken(schedule.fastcron_token_encrypted, env.TOKEN_KEK);
-    if (dec && dec.trim().length >= 16) return dec.trim();
+    const kek = await resolveTokenKek(runtimeEnv);
+    if (kek) {
+      const dec = await decryptToken(schedule.fastcron_token_encrypted, kek);
+      if (dec && dec.trim().length >= 16) return dec.trim();
+    }
   }
   if (env.FASTCRON_API_TOKEN && env.FASTCRON_API_TOKEN.trim().length >= 16) return env.FASTCRON_API_TOKEN.trim();
   throw new Error('FastCron API token not configured');
