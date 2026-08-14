@@ -4,7 +4,7 @@ import type { APIRoute } from 'astro';
 import { validateUserSession } from '../../../../server/auth/session';
 import { assertWorkspaceAccess } from '../../../../server/auth/workspace-guard';
 import { dbClients } from '../../../../server/db/clients';
-import { pausePublishingSchedule, resumePublishingSchedule, clonePublishingSchedule, fastcronService } from '../../../../server/services/fastcron-service';
+import { pausePublishingSchedule, resumePublishingSchedule, clonePublishingSchedule, deletePublishingSchedule, fastcronService } from '../../../../server/services/fastcron-service';
 
 export const POST: APIRoute = async ({ request, params, locals }) => {
   const user = locals.user;
@@ -26,7 +26,7 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
   }
 
   const action = body.action;
-  if (!action || !['pause', 'resume', 'run', 'clone'].includes(action)) {
+  if (!action || !['pause', 'resume', 'run', 'clone', 'delete'].includes(action)) {
     return new Response(JSON.stringify({ error: 'Invalid action' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
   }
 
@@ -84,6 +84,11 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
       const result = await clonePublishingSchedule(id, runtimeEnv);
       if (!result.success) throw new Error(result.error);
       return new Response(JSON.stringify({ success: true, new_schedule: result.new_schedule }), { status: 200 });
+    }
+    if (action === 'delete') {
+      const result = await deletePublishingSchedule(id, schedule.fastcron_job_id, runtimeEnv);
+      if (!result.success) throw new Error(result.error);
+      return new Response(JSON.stringify({ success: true }), { status: 200 });
     }
   } catch (err: any) {
     return new Response(JSON.stringify({ error: err.message || 'Action failed' }), { status: 500, headers: { 'Content-Type': 'application/json' } });

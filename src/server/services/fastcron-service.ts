@@ -1026,7 +1026,7 @@ async function resolveWebhookUrlForSchedule(schedulingClient: SupabaseClient, sc
   throw new Error('No active webhook URL found for account');
 }
 
-async function resolveTokenForSchedule(schedule: any, runtimeEnv: Record<string, any>): Promise<string> {
+export async function resolveScheduleToken(schedule: any, runtimeEnv: Record<string, any>): Promise<string> {
   const env = getServerEnv(runtimeEnv);
   if (schedule.fastcron_token_encrypted) {
     const kek = await resolveTokenKek(runtimeEnv);
@@ -1038,6 +1038,8 @@ async function resolveTokenForSchedule(schedule: any, runtimeEnv: Record<string,
   if (env.FASTCRON_API_TOKEN && env.FASTCRON_API_TOKEN.trim().length >= 16) return env.FASTCRON_API_TOKEN.trim();
   throw new Error('FastCron API token not configured');
 }
+
+export const resolveTokenForSchedule = resolveScheduleToken;
 
 export async function syncPublishingSchedule(schedule: any, runtimeEnv: Record<string, any>): Promise<{ success: boolean; job_id?: number | null; error?: string }> {
   const schedulingClient = dbClients.getSchedulingAdmin(runtimeEnv);
@@ -1100,14 +1102,12 @@ export async function syncPublishingSchedule(schedule: any, runtimeEnv: Record<s
 export async function pausePublishingSchedule(scheduleId: string, jobId: number, runtimeEnv: Record<string, any>): Promise<{ success: boolean; error?: string }> {
   const schedulingClient = dbClients.getSchedulingAdmin(runtimeEnv);
   const { data: schedule } = await schedulingClient.from('posting_schedules').select('fastcron_token_encrypted').eq('id', scheduleId).single();
-  const env = getServerEnv(runtimeEnv);
   let token: string;
-  if (schedule?.fastcron_token_encrypted) {
-    const dec = await decryptToken(schedule.fastcron_token_encrypted, env.TOKEN_KEK);
-    if (dec) token = dec.trim();
+  try {
+    token = await resolveScheduleToken(schedule, runtimeEnv);
+  } catch (e: any) {
+    return { success: false, error: e.message || 'Token not configured' };
   }
-  if (!token && env.FASTCRON_API_TOKEN) token = env.FASTCRON_API_TOKEN.trim();
-  if (!token) return { success: false, error: 'Token not configured' };
   const res = await fastcronService.fastcronCall('cron_disable', { id: jobId }, token);
   if (!res.success) return { success: false, error: res.error };
   await schedulingClient.from('posting_schedules').update({ status: 'paused' }).eq('id', scheduleId);
@@ -1117,14 +1117,12 @@ export async function pausePublishingSchedule(scheduleId: string, jobId: number,
 export async function resumePublishingSchedule(scheduleId: string, jobId: number, runtimeEnv: Record<string, any>): Promise<{ success: boolean; error?: string }> {
   const schedulingClient = dbClients.getSchedulingAdmin(runtimeEnv);
   const { data: schedule } = await schedulingClient.from('posting_schedules').select('fastcron_token_encrypted').eq('id', scheduleId).single();
-  const env = getServerEnv(runtimeEnv);
   let token: string;
-  if (schedule?.fastcron_token_encrypted) {
-    const dec = await decryptToken(schedule.fastcron_token_encrypted, env.TOKEN_KEK);
-    if (dec) token = dec.trim();
+  try {
+    token = await resolveScheduleToken(schedule, runtimeEnv);
+  } catch (e: any) {
+    return { success: false, error: e.message || 'Token not configured' };
   }
-  if (!token && env.FASTCRON_API_TOKEN) token = env.FASTCRON_API_TOKEN.trim();
-  if (!token) return { success: false, error: 'Token not configured' };
   const res = await fastcronService.fastcronCall('cron_enable', { id: jobId }, token);
   if (!res.success) return { success: false, error: res.error };
   await schedulingClient.from('posting_schedules').update({ status: 'active' }).eq('id', scheduleId);
@@ -1135,15 +1133,13 @@ export async function deletePublishingSchedule(scheduleId: string, jobId: number
   const schedulingClient = dbClients.getSchedulingAdmin(runtimeEnv);
   if (jobId) {
     const { data: schedule } = await schedulingClient.from('posting_schedules').select('fastcron_token_encrypted').eq('id', scheduleId).single();
-    const env = getServerEnv(runtimeEnv);
-    let token: string;
-    if (schedule?.fastcron_token_encrypted) {
-      const dec = await decryptToken(schedule.fastcron_token_encrypted, env.TOKEN_KEK);
-      if (dec) token = dec.trim();
-    }
-    if (!token && env.FASTCRON_API_TOKEN) token = env.FASTCRON_API_TOKEN.trim();
-    if (token) {
-      await fastcronService.fastcronCall('cron_delete', { id: jobId }, token);
+    try {
+      const token = await resolveScheduleToken(schedule, runtimeEnv);
+      if (token) {
+        await fastcronService.fastcronCall('cron_delete', { id: jobId }, token);
+      }
+    } catch {
+      // Ignore token resolution error on delete so DB row can still be cleaned up
     }
   }
   await schedulingClient.from('posting_schedules').delete().eq('id', scheduleId);

@@ -4,9 +4,7 @@ import type { APIRoute } from 'astro';
 import { validateUserSession } from '../../../../server/auth/session';
 import { assertWorkspaceAccess } from '../../../../server/auth/workspace-guard';
 import { dbClients } from '../../../../server/db/clients';
-import { fastcronService } from '../../../../server/services/fastcron-service';
-import { getServerEnv } from '../../../../server/db/clients';
-import { decryptToken } from '../../../../server/lib/token-crypto';
+import { fastcronService, resolveScheduleToken } from '../../../../server/services/fastcron-service';
 
 export const GET: APIRoute = async ({ url, params, locals }) => {
   const user = locals.user;
@@ -31,13 +29,12 @@ export const GET: APIRoute = async ({ url, params, locals }) => {
       return new Response(JSON.stringify({ error: 'Job not configured' }), { status: 400 });
     }
 
-    const env = getServerEnv(runtimeEnv);
     let token: string | undefined;
-    if (schedule.fastcron_token_encrypted) {
-      const dec = await decryptToken(schedule.fastcron_token_encrypted, env.TOKEN_KEK);
-      if (dec) token = dec.trim();
+    try {
+      token = await resolveScheduleToken(schedule, runtimeEnv);
+    } catch {
+      return new Response(JSON.stringify({ error: 'Token not configured' }), { status: 400 });
     }
-    if (!token && env.FASTCRON_API_TOKEN) token = env.FASTCRON_API_TOKEN.trim();
     if (!token) return new Response(JSON.stringify({ error: 'Token not configured' }), { status: 400 });
 
     let action = 'cron_logs';

@@ -62,114 +62,36 @@ const { id } = Astro.params;
     </div>
   </div>
 
-  <!-- Grid: Scheduling Info & Webhook Summary -->
-  <div class="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
-    <!-- Section 2: Scheduling Information -->
-    <div class="rounded-2xl border border-border bg-card p-5 shadow-sm space-y-4">
-      <div class="flex flex-wrap items-center justify-between border-b border-border pb-3 gap-3">
-        <div class="flex items-center gap-2">
-          <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/10 text-amber-500">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          </div>
-          <div>
-            <h3 class="text-sm font-bold text-foreground">Posting Schedule & Timezone</h3>
-            <p class="text-xs text-muted-foreground">Automated publishing window & pacing engine</p>
-          </div>
+  <!-- Webhook Routing Summary -->
+  <div class="mb-8 rounded-2xl border border-border bg-card p-5 shadow-sm space-y-4">
+    <div class="flex items-center justify-between border-b border-border pb-3">
+      <div class="flex items-center gap-2">
+        <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
         </div>
-
-        <div class="flex flex-wrap items-center gap-2">
-          <span id="sched-live-status" class="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
-            <span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span>Window Active</span>
-          </span>
-          <span id="sched-next-countdown" class="inline-flex items-center gap-1 rounded-full bg-primary/10 border border-primary/20 px-2.5 py-0.5 text-[11px] font-semibold text-primary">
-            Next Pin: ~2 mins
-          </span>
-          <button
-            id="open-scheduling-modal-btn"
-            class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-muted transition-all"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-            <span>Edit Schedule</span>
-          </button>
-        </div>
-      </div>
-
-      <div id="scheduling-info-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        <div class="p-3 rounded-xl border border-border bg-background space-y-1">
-          <span class="text-[11px] font-medium text-muted-foreground">Pinning Started At</span>
-          <p id="sched-started-at" class="text-xs font-bold text-foreground">Loading...</p>
-        </div>
-        <div class="p-3 rounded-xl border border-border bg-background space-y-1">
-          <span class="text-[11px] font-medium text-muted-foreground">Posting Window</span>
-          <p id="sched-posting-window" class="text-xs font-bold text-foreground">Loading...</p>
-        </div>
-        <div class="p-3 rounded-xl border border-border bg-background space-y-1">
-          <span class="text-[11px] font-medium text-muted-foreground">Posting Interval</span>
-          <p id="sched-posting-interval" class="text-xs font-bold text-primary">Loading...</p>
-        </div>
-        <div class="p-3 rounded-xl border border-border bg-background space-y-1">
-          <span class="text-[11px] font-medium text-muted-foreground">Random Delay</span>
-          <p id="sched-random-delay" class="text-xs font-bold text-foreground">0 mins</p>
-        </div>
-        <div class="p-3 rounded-xl border border-border bg-background space-y-1">
-          <span class="text-[11px] font-medium text-muted-foreground">Timezone & Target Clock</span>
-          <p id="sched-timezone" class="text-xs font-bold text-foreground">Loading...</p>
-        </div>
-        <div class="p-3 rounded-xl border border-border bg-background space-y-1">
-          <span class="text-[11px] font-medium text-muted-foreground">Last Published At</span>
-          <p id="sched-last-published" class="text-xs font-bold text-emerald-500">Loading...</p>
-        </div>
-        <div class="p-3 rounded-xl border border-border bg-background space-y-1 sm:col-span-2 lg:col-span-3">
-          <span class="text-[11px] font-medium text-muted-foreground">Weekly Active Days</span>
-          <div id="sched-active-days" class="flex flex-wrap items-center gap-1.5 pt-0.5">
-            <!-- Rendered day pills -->
-          </div>
-        </div>
-        <div id="sched-pace-analyzer-box" class="p-3.5 rounded-xl border border-primary/20 bg-primary/5 space-y-1 sm:col-span-2 lg:col-span-3">
-          <div class="flex items-center justify-between text-xs">
-            <span class="font-bold text-primary flex items-center gap-1.5">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-              <span>Cadence & Daily Limit Pacing Analyzer</span>
-            </span>
-            <span id="sched-pace-val" class="font-bold text-foreground">Calculating pacing...</span>
-          </div>
-          <p id="sched-pace-desc" class="text-[11px] text-muted-foreground">Pacing is optimized to distribute posts evenly across your configured posting window.</p>
+        <div>
+          <h3 class="text-sm font-bold text-foreground">Webhook Routing Summary</h3>
+          <p class="text-xs text-muted-foreground">Multi-webhook load distribution</p>
         </div>
       </div>
     </div>
 
-    <!-- Section 3: Webhook Routing Summary -->
-    <div class="rounded-2xl border border-border bg-card p-5 shadow-sm space-y-4">
-      <div class="flex items-center justify-between border-b border-border pb-3">
-        <div class="flex items-center gap-2">
-          <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-          </div>
-          <div>
-            <h3 class="text-sm font-bold text-foreground">Webhook Routing Summary</h3>
-            <p class="text-xs text-muted-foreground">Multi-webhook load distribution</p>
-          </div>
-        </div>
+    <div id="webhook-summary-container" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div class="p-3 rounded-xl border border-border bg-background space-y-1">
+        <span class="text-[11px] font-medium text-muted-foreground">Configured Channels</span>
+        <p id="wh-sum-channels" class="text-xs font-bold text-foreground">Loading...</p>
       </div>
-
-      <div id="webhook-summary-container" class="grid grid-cols-2 gap-3">
-        <div class="p-3 rounded-xl border border-border bg-background space-y-1">
-          <span class="text-[11px] font-medium text-muted-foreground">Configured Channels</span>
-          <p id="wh-sum-channels" class="text-xs font-bold text-foreground">Loading...</p>
+      <div class="p-3 rounded-xl border border-border bg-background space-y-1">
+        <span class="text-[11px] font-medium text-muted-foreground">Primary Webhook</span>
+        <p id="wh-sum-primary" class="text-xs font-bold text-foreground">Loading...</p>
+      </div>
+      <div class="col-span-1 sm:col-span-2 p-3 rounded-xl border border-border bg-background space-y-1">
+        <div class="flex items-center justify-between text-[11px] font-medium text-muted-foreground">
+          <span>Combined Active Remaining Capacity</span>
+          <span id="wh-sum-capacity-count" class="font-bold text-foreground">---</span>
         </div>
-        <div class="p-3 rounded-xl border border-border bg-background space-y-1">
-          <span class="text-[11px] font-medium text-muted-foreground">Primary Webhook</span>
-          <p id="wh-sum-primary" class="text-xs font-bold text-foreground">Loading...</p>
-        </div>
-        <div class="col-span-2 p-3 rounded-xl border border-border bg-background space-y-1">
-          <div class="flex items-center justify-between text-[11px] font-medium text-muted-foreground">
-            <span>Combined Active Remaining Capacity</span>
-            <span id="wh-sum-capacity-count" class="font-bold text-foreground">---</span>
-          </div>
-          <div class="h-2 w-full rounded-full bg-muted overflow-hidden">
-            <div id="wh-sum-capacity-bar" class="h-full rounded-full bg-primary transition-all duration-300" style="width: 0%"></div>
-          </div>
+        <div class="h-2 w-full rounded-full bg-muted overflow-hidden">
+          <div id="wh-sum-capacity-bar" class="h-full rounded-full bg-primary transition-all duration-300" style="width: 0%"></div>
         </div>
       </div>
     </div>
@@ -177,22 +99,42 @@ const { id } = Astro.params;
 
   <!-- Section: Posting Schedules & Automation -->
   <div class="mb-8 rounded-2xl border border-border bg-card p-5 shadow-sm space-y-4">
-    <div class="flex items-center justify-between border-b border-border pb-3">
+    <div class="flex flex-wrap items-center justify-between border-b border-border pb-3 gap-3">
       <div class="flex items-center gap-2">
         <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-pink-500/10 text-pink-500">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
         </div>
         <div>
-          <h3 class="text-sm font-bold text-foreground">Posting Schedules & Automation</h3>
+          <div class="flex items-center gap-2">
+            <h3 class="text-sm font-bold text-foreground">Posting Schedules & Automation</h3>
+            <span id="sched-live-status" class="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+              <span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span>Window Active</span>
+            </span>
+            <span id="sched-next-countdown" class="inline-flex items-center gap-1 rounded-full bg-primary/10 border border-primary/20 px-2.5 py-0.5 text-[11px] font-semibold text-primary">
+              Next Pin: ~2 mins
+            </span>
+          </div>
           <p class="text-xs text-muted-foreground">Manage posting schedules for this account</p>
         </div>
       </div>
-      <div class="flex gap-2">
+      <div class="flex flex-wrap items-center gap-2">
         <button id="btn-add-schedule" class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-muted transition-all">+ Add Posting Schedule</button>
         <button id="btn-convert-legacy" class="inline-flex items-center gap-1 rounded-lg border border-primary/30 bg-primary/10 px-2.5 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition-all">Convert current schedule</button>
         <button id="btn-sync-missing" class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-muted transition-all">Sync Missing</button>
         <button id="btn-refresh-schedules" class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-muted transition-all">Refresh</button>
       </div>
+    </div>
+
+    <div id="sched-pace-analyzer-box" class="p-3.5 rounded-xl border border-primary/20 bg-primary/5 space-y-1">
+      <div class="flex items-center justify-between text-xs">
+        <span class="font-bold text-primary flex items-center gap-1.5">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          <span>Cadence & Daily Limit Pacing Analyzer</span>
+        </span>
+        <span id="sched-pace-val" class="font-bold text-foreground">Calculating pacing...</span>
+      </div>
+      <p id="sched-pace-desc" class="text-[11px] text-muted-foreground">Pacing is optimized to distribute posts evenly across your configured posting window.</p>
     </div>
 
     <table class="w-full text-xs border">
@@ -328,134 +270,7 @@ const { id } = Astro.params;
     </div>
   </div>
 
-  <!-- MODAL: Edit Scheduling Information -->
-  <div id="edit-scheduling-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" aria-modal="true" role="dialog">
-    <div id="edit-sched-backdrop" class="fixed inset-0"></div>
-    <div class="relative w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-4 z-10 max-h-[90vh] overflow-y-auto">
-      <div class="flex items-center justify-between border-b border-border pb-3">
-        <h3 class="text-base font-bold text-foreground">Edit Posting Schedule</h3>
-        <button id="close-sched-modal" class="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
-      </div>
 
-      <div id="sched-modal-error" class="hidden rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-500"></div>
-
-      <form id="sched-form" class="space-y-4">
-        <div>
-          <label class="block text-xs font-medium text-muted-foreground mb-1">Timezone</label>
-          <select id="sched-input-timezone" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none">
-            <option value="UTC">UTC (Coordinated Universal Time)</option>
-            <option value="America/New_York">America/New_York (EST/EDT)</option>
-            <option value="America/Chicago">America/Chicago (CST/CDT)</option>
-            <option value="America/Denver">America/Denver (MST/MDT)</option>
-            <option value="America/Los_Angeles">America/Los_Angeles (PST/PDT)</option>
-            <option value="Europe/London">Europe/London (GMT/BST)</option>
-            <option value="Europe/Paris">Europe/Paris (CET/CEST)</option>
-            <option value="Asia/Tokyo">Asia/Tokyo (JST)</option>
-            <option value="Australia/Sydney">Australia/Sydney (AEST/AEDT)</option>
-          </select>
-        </div>
-
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="block text-xs font-medium text-muted-foreground mb-1">Window Start Time</label>
-            <input id="sched-input-start" type="time" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none" />
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-muted-foreground mb-1">Window End Time</label>
-            <input id="sched-input-end" type="time" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none" />
-          </div>
-        </div>
-
-        <div>
-          <label class="block text-xs font-medium text-muted-foreground mb-1">Posting Frequency / Interval</label>
-          <select id="sched-input-interval-preset" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none">
-            <option value="5">Every 5 Minutes (5 mins)</option>
-            <option value="10">Every 10 Minutes (10 mins)</option>
-            <option value="15">Every 15 Minutes (15 mins)</option>
-            <option value="30">Every 30 Minutes (30 mins)</option>
-            <option value="45">Every 45 Minutes (45 mins)</option>
-            <option value="60">Every 1 Hour (60 mins)</option>
-            <option value="120">Every 2 Hours (120 mins)</option>
-            <option value="180">Every 3 Hours (180 mins)</option>
-            <option value="240">Every 4 Hours (240 mins)</option>
-            <option value="360">Every 6 Hours (360 mins)</option>
-            <option value="720">Every 12 Hours (720 mins)</option>
-            <option value="1440">Every 24 Hours (1440 mins)</option>
-            <option value="custom">Custom Minutes...</option>
-          </select>
-        </div>
-
-        <div id="sched-custom-interval-container" class="hidden">
-          <label class="block text-xs font-medium text-muted-foreground mb-1">Custom Minutes Between Posts</label>
-          <input id="sched-input-custom-interval" type="number" min="1" placeholder="e.g. 25" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none" />
-        </div>
-
-        <div>
-          <label for="sched-input-random-delay" class="block text-xs font-semibold text-foreground mb-1">Random delay (minutes)</label>
-          <input id="sched-input-random-delay" type="number" min="0" value="0" placeholder="0" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
-          <p class="text-[11px] text-muted-foreground mt-1">Adds a random delay (0 to X minutes) to your posting interval for human-like scheduling variation.</p>
-        </div>
-
-        <div>
-          <label class="block text-xs font-semibold text-foreground mb-1.5">Weekly Active Days</label>
-          <div class="flex flex-wrap items-center gap-1.5" id="sched-days-checkbox-group">
-            <label class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground cursor-pointer hover:bg-muted">
-              <input type="checkbox" value="Mon" class="sched-day-chk h-3.5 w-3.5 text-primary rounded" checked />
-              <span>Mon</span>
-            </label>
-            <label class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground cursor-pointer hover:bg-muted">
-              <input type="checkbox" value="Tue" class="sched-day-chk h-3.5 w-3.5 text-primary rounded" checked />
-              <span>Tue</span>
-            </label>
-            <label class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground cursor-pointer hover:bg-muted">
-              <input type="checkbox" value="Wed" class="sched-day-chk h-3.5 w-3.5 text-primary rounded" checked />
-              <span>Wed</span>
-            </label>
-            <label class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground cursor-pointer hover:bg-muted">
-              <input type="checkbox" value="Thu" class="sched-day-chk h-3.5 w-3.5 text-primary rounded" checked />
-              <span>Thu</span>
-            </label>
-            <label class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground cursor-pointer hover:bg-muted">
-              <input type="checkbox" value="Fri" class="sched-day-chk h-3.5 w-3.5 text-primary rounded" checked />
-              <span>Fri</span>
-            </label>
-            <label class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground cursor-pointer hover:bg-muted">
-              <input type="checkbox" value="Sat" class="sched-day-chk h-3.5 w-3.5 text-primary rounded" checked />
-              <span>Sat</span>
-            </label>
-            <label class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground cursor-pointer hover:bg-muted">
-              <input type="checkbox" value="Sun" class="sched-day-chk h-3.5 w-3.5 text-primary rounded" checked />
-              <span>Sun</span>
-            </label>
-          </div>
-        </div>
-
-        <div>
-          <label class="block text-xs font-medium text-muted-foreground mb-1">Pinning Started Date</label>
-          <input id="sched-input-started-at" type="date" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none" />
-        </div>
-
-        <div id="modal-pace-preview-box" class="p-3 rounded-xl border border-primary/30 bg-primary/10 text-xs text-foreground space-y-0.5">
-          <div class="font-bold text-primary flex items-center gap-1">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-            <span>Live Dynamic Cadence Estimator</span>
-          </div>
-          <p id="modal-pace-text" class="text-muted-foreground text-[11px]">Optimal Pacing: ~1 pin / 23 mins across window.</p>
-        </div>
-
-        <div class="flex items-center justify-end gap-3 border-t border-border pt-4">
-          <button type="button" id="cancel-sched-modal" class="rounded-xl border border-border px-4 py-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground">
-            Cancel
-          </button>
-          <button type="submit" id="save-sched-btn" class="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow hover:bg-primary/90">
-            Save Schedule
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
 
   <!-- MODAL: Edit Daily Limit -->
   <div id="edit-limit-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" aria-modal="true" role="dialog">
@@ -1294,69 +1109,6 @@ const { id } = Astro.params;
     modal?.classList.add('flex');
   }
 
-  function openSchedulingModal() {
-    if (!currentAccount) return;
-    const modal = document.getElementById('edit-scheduling-modal');
-    const tz = document.getElementById('sched-input-timezone') as HTMLSelectElement;
-    const start = document.getElementById('sched-input-start') as HTMLInputElement;
-    const end = document.getElementById('sched-input-end') as HTMLInputElement;
-    const intervalPreset = document.getElementById('sched-input-interval-preset') as HTMLSelectElement;
-    const customContainer = document.getElementById('sched-custom-interval-container');
-    const customInput = document.getElementById('sched-input-custom-interval') as HTMLInputElement;
-    const delayInput = document.getElementById('sched-input-random-delay') as HTMLInputElement;
-    const started = document.getElementById('sched-input-started-at') as HTMLInputElement;
-
-    if (tz) tz.value = currentAccount.timezone || 'UTC';
-    if (start) start.value = (currentAccount.posting_window_start || '09:00').slice(0, 5);
-    if (end) end.value = (currentAccount.posting_window_end || '21:00').slice(0, 5);
-    if (delayInput) delayInput.value = String(currentAccount.random_delay_minutes || 0);
-    if (started) started.value = currentAccount.pinning_started_at ? currentAccount.pinning_started_at.slice(0, 10) : '';
-
-    let activeDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    if (Array.isArray(currentAccount.active_days)) {
-      activeDays = currentAccount.active_days;
-    } else if (typeof currentAccount.active_days === 'string') {
-      activeDays = (currentAccount.active_days as string).replace(/[{}"']/g, '').split(',').map((d) => d.trim());
-    }
-
-    document.querySelectorAll('.sched-day-chk').forEach((chk) => {
-      const dayVal = (chk as HTMLInputElement).value;
-      (chk as HTMLInputElement).checked = activeDays.includes(dayVal);
-    });
-
-    const mins = currentAccount.posting_interval_minutes || 30;
-    const standardPresets = ['5', '10', '15', '30', '45', '60', '120', '180', '240', '360', '720', '1440'];
-    if (standardPresets.includes(String(mins))) {
-      if (intervalPreset) intervalPreset.value = String(mins);
-      if (customContainer) customContainer.classList.add('hidden');
-    } else {
-      if (intervalPreset) intervalPreset.value = 'custom';
-      if (customContainer) customContainer.classList.remove('hidden');
-      if (customInput) customInput.value = String(mins);
-    }
-
-    // Live pace calculation for modal
-    const startVal = currentAccount.posting_window_start || '09:00';
-    const endVal = currentAccount.posting_window_end || '21:00';
-    const [sH, sM] = startVal.split(':').map(Number);
-    const [eH, eM] = endVal.split(':').map(Number);
-    let winMins = (eH * 60 + eM) - (sH * 60 + sM);
-    if (winMins <= 0) winMins += 1440;
-    const maxDaily = currentAccount.max_pins_per_day || 20;
-    const optPace = Math.max(1, Math.round(winMins / maxDaily));
-    const paceText = document.getElementById('modal-pace-text');
-    if (paceText) {
-      paceText.textContent = `At daily limit of ${maxDaily} pins/day across ${(winMins/60).toFixed(1)}h window, optimal pacing is ~1 pin / ${optPace} mins.`;
-    }
-
-    modal?.classList.remove('hidden');
-    modal?.classList.add('flex');
-  }
-
-  function closeSchedModal() {
-    document.getElementById('edit-scheduling-modal')?.classList.add('hidden');
-  }
-
   function closeLimitModal() {
     document.getElementById('edit-limit-modal')?.classList.add('hidden');
   }
@@ -1371,13 +1123,6 @@ const { id } = Astro.params;
       if (createBoardBtn) {
         e.preventDefault();
         window.location.href = '/boards';
-        return;
-      }
-
-      const schedBtn = target.closest('#open-scheduling-modal-btn');
-      if (schedBtn) {
-        e.preventDefault();
-        openSchedulingModal();
         return;
       }
 
@@ -1396,78 +1141,9 @@ const { id } = Astro.params;
       }
     });
 
-    document.getElementById('close-sched-modal')?.addEventListener('click', closeSchedModal);
-    document.getElementById('cancel-sched-modal')?.addEventListener('click', closeSchedModal);
-    document.getElementById('edit-sched-backdrop')?.addEventListener('click', closeSchedModal);
-
     document.getElementById('close-limit-modal')?.addEventListener('click', closeLimitModal);
     document.getElementById('cancel-limit-modal')?.addEventListener('click', closeLimitModal);
     document.getElementById('edit-limit-backdrop')?.addEventListener('click', closeLimitModal);
-
-    const intervalPresetSelect = document.getElementById('sched-input-interval-preset') as HTMLSelectElement;
-    intervalPresetSelect?.addEventListener('change', (e) => {
-      const val = (e.target as HTMLSelectElement).value;
-      const customContainer = document.getElementById('sched-custom-interval-container');
-      if (val === 'custom') {
-        customContainer?.classList.remove('hidden');
-      } else {
-        customContainer?.classList.add('hidden');
-      }
-    });
-
-    document.getElementById('sched-form')?.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      if (!currentAccount) return;
-
-      const tz = (document.getElementById('sched-input-timezone') as HTMLSelectElement).value;
-      const start = (document.getElementById('sched-input-start') as HTMLInputElement).value;
-      const end = (document.getElementById('sched-input-end') as HTMLInputElement).value;
-      const intervalPreset = (document.getElementById('sched-input-interval-preset') as HTMLSelectElement).value;
-      const customInput = (document.getElementById('sched-input-custom-interval') as HTMLInputElement).value;
-      const delayInput = (document.getElementById('sched-input-random-delay') as HTMLInputElement).value;
-      const started = (document.getElementById('sched-input-started-at') as HTMLInputElement).value;
-
-      const checkedDays: string[] = [];
-      document.querySelectorAll('.sched-day-chk:checked').forEach((chk) => {
-        checkedDays.push((chk as HTMLInputElement).value);
-      });
-
-      let interval = 30;
-      if (intervalPreset === 'custom') {
-        interval = parseInt(customInput, 10) || 30;
-      } else {
-        interval = parseInt(intervalPreset, 10) || 30;
-      }
-
-      const randomDelay = parseInt(delayInput, 10) || 0;
-
-      const res = await updateAccountScheduling(currentAccount.id, {
-        timezone: tz,
-        posting_window_start: start,
-        posting_window_end: end,
-        posting_interval_minutes: interval,
-        random_delay_minutes: randomDelay,
-        pinning_started_at: started ? new Date(started).toISOString() : null,
-        active_days: checkedDays,
-      });
-
-      const updated = {
-        ...currentAccount,
-        ...(res.data || {}),
-        timezone: tz,
-        posting_window_start: start || null,
-        posting_window_end: end || null,
-        posting_interval_minutes: interval,
-        random_delay_minutes: randomDelay,
-        pinning_started_at: started ? new Date(started).toISOString() : null,
-        active_days: checkedDays,
-      };
-
-      closeSchedModal();
-      showFeedbackBanner('Posting schedule updated successfully.', 'success');
-      refreshAccountUI(updated);
-      loadAllData();
-    });
 
     document.getElementById('limit-form')?.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -1513,7 +1189,7 @@ const { id } = Astro.params;
           '<td class="p-2">' + escapeHtml(s.window_start) + '–' + escapeHtml(s.window_end) + '<br/>' + escapeHtml(s.timezone) + '</td>' +
           '<td class="p-2">' + s.interval_minutes + 'm ±' + s.random_delay_minutes + 'm</td>' +
           '<td class="p-2">' + escapeHtml((s.active_days || []).join(',')) + '</td>' +
-          '<td class="p-2">' + escapeHtml(s.status) + (s.fastcron_job_id ? '' : ' (no job)') + '</td>' +
+          '<td class="p-2">' + escapeHtml(s.status) + (s.fastcron_job_id ? '' : ' (no job)') + (s.started_at && new Date(s.started_at) > new Date() ? ' • starts ' + String(s.started_at).slice(0, 10) : '') + '</td>' +
           '<td class="p-2">' +
           '<button data-sact="run" data-sid="' + s.id + '">Run</button> ' +
           '<button data-sact="edit" data-sid="' + s.id + '">Edit</button> ' +
