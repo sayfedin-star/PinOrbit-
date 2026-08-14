@@ -161,12 +161,11 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
               Next Pin: ~2 mins
             </span>
           </div>
-          <p class="text-xs text-muted-foreground">Manage posting schedules for this account</p>
+          <p class="text-xs text-muted-foreground">Manage multi-schedule posting engine for this account</p>
         </div>
       </div>
       <div class="flex flex-wrap items-center gap-2">
         <button id="btn-add-schedule" class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-muted transition-all">+ Add Posting Schedule</button>
-        <button id="btn-convert-legacy" class="inline-flex items-center gap-1 rounded-lg border border-primary/30 bg-primary/10 px-2.5 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition-all">Convert current schedule</button>
         <button id="btn-sync-missing" class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-muted transition-all">Sync Missing</button>
         <button id="btn-refresh-schedules" class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-muted transition-all">Refresh</button>
       </div>
@@ -183,48 +182,278 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
       <p id="sched-pace-desc" class="text-[11px] text-muted-foreground">Pacing is optimized to distribute posts evenly across your configured posting window.</p>
     </div>
 
-    <table class="w-full text-xs border">
-      <thead>
-        <tr class="text-left border-b">
-          <th class="p-2">Label</th>
-          <th class="p-2">Channel</th>
-          <th class="p-2">Window/TZ</th>
-          <th class="p-2">Interval/Delay</th>
-          <th class="p-2">Days</th>
-          <th class="p-2">Status</th>
-          <th class="p-2">Actions</th>
-        </tr>
-      </thead>
-      <tbody id="account-schedules-rows"></tbody>
-    </table>
+    <div class="overflow-x-auto">
+      <table class="w-full text-xs">
+        <thead>
+          <tr class="text-left border-b border-border text-muted-foreground">
+            <th class="p-2.5 font-semibold">Schedule & Status</th>
+            <th class="p-2.5 font-semibold">Channel</th>
+            <th class="p-2.5 font-semibold">Window & Frequency</th>
+            <th class="p-2.5 font-semibold">FastCron Token</th>
+            <th class="p-2.5 font-semibold text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="account-schedules-rows"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- FastCron API Tokens Registry Card -->
+  <div class="mb-8 rounded-2xl border border-border bg-card p-5 shadow-sm space-y-4">
+    <div class="flex flex-wrap items-center justify-between border-b border-border pb-3 gap-3">
+      <div class="flex items-center gap-2">
+        <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/10 text-amber-500">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </div>
+        <div>
+          <h3 class="text-sm font-bold text-foreground">FastCron API Tokens</h3>
+          <p class="text-xs text-muted-foreground">Workspace token registry for multi-token scheduling</p>
+        </div>
+      </div>
+      <button id="btn-add-token" class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-muted transition-all">
+        + Add Token
+      </button>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="w-full text-xs">
+        <thead>
+          <tr class="text-left border-b border-border text-muted-foreground">
+            <th class="p-2.5 font-semibold">Name</th>
+            <th class="p-2.5 font-semibold">Masked Token</th>
+            <th class="p-2.5 font-semibold">Default</th>
+            <th class="p-2.5 font-semibold text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="tokens-table-rows"></tbody>
+      </table>
+    </div>
   </div>
 
   <!-- MODAL: Add/Edit Schedule -->
-  <dialog id="schedule-modal" class="rounded p-0 w-[480px] max-w-full">
-    <form id="schedule-form" class="p-4 space-y-3 text-sm">
-      <h2 id="schedule-modal-title" class="text-lg font-bold">Add Posting Schedule</h2>
-      <input type="hidden" id="f-sched-id" />
-      <label class="block">Label<input id="f-sched-label" class="border rounded w-full p-2" /></label>
-      <label class="block">
-        FastCron API Token (Write-Only Override)
-        <input id="f-fc-token" type="password" class="border rounded w-full p-2" placeholder="Leave empty for default" autocomplete="off" />
-      </label>
-      <div id="fc-token-status" class="text-xs text-muted-foreground"></div>
-      <label class="block">Channel<select id="f-channel" class="border rounded w-full p-2"></select></label>
-      <div class="grid grid-cols-2 gap-2">
-        <label class="block">Timezone<input id="f-sched-tz" class="border rounded w-full p-2" value="UTC" /></label>
-        <label class="block">Batch<input id="f-sched-batch" type="number" min="1" max="10" class="border rounded w-full p-2" value="1" /></label>
-        <label class="block">Window start<input id="f-sched-start" type="time" class="border rounded w-full p-2" value="09:00" /></label>
-        <label class="block">Window end<input id="f-sched-end" type="time" class="border rounded w-full p-2" value="21:00" /></label>
-        <label class="block">Interval (min)<input id="f-sched-interval" type="number" min="1" max="1440" class="border rounded w-full p-2" value="36" /></label>
-        <label class="block">Random delay (min)<input id="f-sched-delay" type="number" min="0" max="60" class="border rounded w-full p-2" value="0" /></label>
+  <dialog id="schedule-modal" class="rounded-2xl border border-border bg-card p-6 shadow-2xl w-[540px] max-w-full backdrop:bg-black/60 backdrop:backdrop-blur-sm max-h-[90vh] overflow-y-auto">
+    <form id="schedule-form" class="space-y-4 text-xs">
+      <div class="flex items-center justify-between border-b border-border pb-3">
+        <h3 id="schedule-modal-title" class="text-base font-bold text-foreground">Add Posting Schedule</h3>
+        <button type="button" id="btn-close-sched-modal" class="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
       </div>
-      <label class="block">Active days (comma separated)<input id="f-sched-days" class="border rounded w-full p-2" value="Mon,Tue,Wed,Thu,Fri,Sat,Sun" /></label>
-      <label class="block">Pinning started (optional)<input id="f-sched-started" type="date" class="border rounded w-full p-2" /></label>
-      <p id="sched-cadence" class="text-pink-600 text-xs"></p>
-      <div class="flex justify-end gap-2">
-        <button type="button" id="btn-cancel-sched" class="px-3 py-1 border rounded">Cancel</button>
-        <button type="submit" class="px-3 py-1 rounded bg-pink-600 text-white">Save</button>
+
+      <input type="hidden" id="f-sched-id" />
+
+      <div>
+        <label class="block font-medium text-muted-foreground mb-1">Schedule Label</label>
+        <input id="f-sched-label" type="text" placeholder="e.g. Main Daytime Schedule" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none" required />
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label class="block font-medium text-muted-foreground mb-1">Webhook Channel</label>
+          <select id="f-channel" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none"></select>
+        </div>
+        <div>
+          <label class="block font-medium text-muted-foreground mb-1">FastCron API Token</label>
+          <select id="f-sched-token-select" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none">
+            <option value="">Default (Workspace / Env)</option>
+            <option value="custom">Custom Token...</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="f-sched-custom-token-box" class="hidden p-3 rounded-xl border border-border bg-muted/40 space-y-1">
+        <label class="block font-medium text-muted-foreground mb-1">Custom FastCron Token (Write-Only Override)</label>
+        <input id="f-fc-token" type="password" placeholder="Enter custom FastCron API token" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none font-mono" autocomplete="off" />
+        <div id="fc-token-status" class="text-[11px] text-muted-foreground"></div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label class="block font-medium text-muted-foreground mb-1">Timezone</label>
+          <select id="f-sched-tz" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none">
+            <option value="UTC">UTC</option>
+            <option value="America/New_York">America/New_York (EST/EDT)</option>
+            <option value="America/Chicago">America/Chicago (CST/CDT)</option>
+            <option value="America/Denver">America/Denver (MST/MDT)</option>
+            <option value="America/Los_Angeles">America/Los_Angeles (PST/PDT)</option>
+            <option value="Europe/London">Europe/London (GMT/BST)</option>
+            <option value="Europe/Paris">Europe/Paris (CET/CEST)</option>
+            <option value="Asia/Tokyo">Asia/Tokyo (JST)</option>
+            <option value="Australia/Sydney">Australia/Sydney (AEST/AEDT)</option>
+          </select>
+        </div>
+        <div>
+          <label class="block font-medium text-muted-foreground mb-1">Batch Size (Pins claimed / run)</label>
+          <input id="f-sched-batch" type="number" min="1" max="10" value="1" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none" />
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block font-medium text-muted-foreground mb-1">Window Start Time</label>
+          <input id="f-sched-start" type="time" value="09:00" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none" />
+        </div>
+        <div>
+          <label class="block font-medium text-muted-foreground mb-1">Window End Time</label>
+          <input id="f-sched-end" type="time" value="21:00" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none" />
+        </div>
+      </div>
+
+      <div>
+        <label class="block font-medium text-muted-foreground mb-1">Posting Frequency / Interval</label>
+        <select id="f-sched-interval-preset" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none">
+          <option value="5">Every 5 Minutes (5 mins)</option>
+          <option value="10">Every 10 Minutes (10 mins)</option>
+          <option value="15">Every 15 Minutes (15 mins)</option>
+          <option value="30">Every 30 Minutes (30 mins)</option>
+          <option value="36">Every 36 Minutes (36 mins)</option>
+          <option value="45">Every 45 Minutes (45 mins)</option>
+          <option value="60">Every 1 Hour (60 mins)</option>
+          <option value="120">Every 2 Hours (120 mins)</option>
+          <option value="180">Every 3 Hours (180 mins)</option>
+          <option value="240">Every 4 Hours (240 mins)</option>
+          <option value="360">Every 6 Hours (360 mins)</option>
+          <option value="720">Every 12 Hours (720 mins)</option>
+          <option value="1440">Every 24 Hours (1440 mins)</option>
+          <option value="custom">Custom Minutes...</option>
+        </select>
+      </div>
+
+      <div id="f-sched-custom-interval-container" class="hidden">
+        <label class="block font-medium text-muted-foreground mb-1">Custom Minutes Between Posts</label>
+        <input id="f-sched-interval" type="number" min="1" max="1440" value="36" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none" />
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label class="block font-medium text-muted-foreground mb-1">Random Delay (minutes)</label>
+          <input id="f-sched-delay" type="number" min="0" max="60" value="0" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none" />
+        </div>
+        <div>
+          <label class="block font-medium text-muted-foreground mb-1">Pinning Started Date (optional)</label>
+          <input id="f-sched-started" type="date" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none" />
+        </div>
+      </div>
+
+      <div>
+        <label class="block font-semibold text-foreground mb-1.5">Weekly Active Days</label>
+        <div class="flex flex-wrap items-center gap-1.5" id="f-sched-days-group">
+          <label class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground cursor-pointer hover:bg-muted">
+            <input type="checkbox" value="Mon" class="f-sched-day-chk h-3.5 w-3.5 text-primary rounded" checked />
+            <span>Mon</span>
+          </label>
+          <label class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground cursor-pointer hover:bg-muted">
+            <input type="checkbox" value="Tue" class="f-sched-day-chk h-3.5 w-3.5 text-primary rounded" checked />
+            <span>Tue</span>
+          </label>
+          <label class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground cursor-pointer hover:bg-muted">
+            <input type="checkbox" value="Wed" class="f-sched-day-chk h-3.5 w-3.5 text-primary rounded" checked />
+            <span>Wed</span>
+          </label>
+          <label class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground cursor-pointer hover:bg-muted">
+            <input type="checkbox" value="Thu" class="f-sched-day-chk h-3.5 w-3.5 text-primary rounded" checked />
+            <span>Thu</span>
+          </label>
+          <label class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground cursor-pointer hover:bg-muted">
+            <input type="checkbox" value="Fri" class="f-sched-day-chk h-3.5 w-3.5 text-primary rounded" checked />
+            <span>Fri</span>
+          </label>
+          <label class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground cursor-pointer hover:bg-muted">
+            <input type="checkbox" value="Sat" class="f-sched-day-chk h-3.5 w-3.5 text-primary rounded" checked />
+            <span>Sat</span>
+          </label>
+          <label class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground cursor-pointer hover:bg-muted">
+            <input type="checkbox" value="Sun" class="f-sched-day-chk h-3.5 w-3.5 text-primary rounded" checked />
+            <span>Sun</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Cadence Estimator Box -->
+      <div id="sched-cadence-box" class="p-3 rounded-xl border border-primary/20 bg-primary/5 space-y-1">
+        <div class="font-bold text-primary flex items-center gap-1">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          <span>Pacing & FastCron Cadence Analyzer</span>
+        </div>
+        <p id="sched-cadence-text" class="text-[11px] text-muted-foreground">Calculating pacing...</p>
+        <p id="sched-cadence-effective" class="text-[11px] font-semibold text-foreground">FastCron expression: every 36 minutes • Window & active days enforced server-side</p>
+      </div>
+
+      <!-- Edit Modal Integration Box (Admin only) -->
+      <div id="sched-integration-box" class="hidden p-3.5 rounded-xl border border-border bg-muted/40 space-y-2.5">
+        <div class="flex items-center justify-between">
+          <span class="font-bold text-xs text-foreground flex items-center gap-1.5">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            <span>Direct Cron & Webhook Integration</span>
+          </span>
+          <span class="text-[10px] text-muted-foreground font-mono">Admin Only</span>
+        </div>
+
+        <div>
+          <label class="block text-[11px] font-medium text-muted-foreground mb-1">Schedule ID</label>
+          <div class="flex items-center gap-1.5">
+            <input id="sched-int-id" type="text" readonly class="w-full rounded-lg border border-border bg-background py-1 px-2 text-[11px] font-mono text-foreground select-all" />
+            <button type="button" id="btn-copy-sched-id" class="rounded-lg border border-border bg-background px-2.5 py-1 text-[11px] font-medium hover:bg-muted">Copy</button>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-[11px] font-medium text-muted-foreground mb-1">Dispatch Token</label>
+          <div class="flex items-center gap-1.5">
+            <input id="sched-int-token" type="password" readonly class="w-full rounded-lg border border-border bg-background py-1 px-2 text-[11px] font-mono text-foreground select-all" />
+            <button type="button" id="btn-toggle-reveal-token" class="rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-medium hover:bg-muted">Reveal</button>
+            <button type="button" id="btn-copy-sched-token" class="rounded-lg border border-border bg-background px-2.5 py-1 text-[11px] font-medium hover:bg-muted">Copy</button>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-[11px] font-medium text-muted-foreground mb-1">Provider-Agnostic Webhook URL (GET / POST)</label>
+          <div class="flex items-center gap-1.5">
+            <input id="sched-int-url" type="text" readonly class="w-full rounded-lg border border-border bg-background py-1 px-2 text-[11px] font-mono text-foreground select-all" />
+            <button type="button" id="btn-copy-sched-url" class="rounded-lg border border-border bg-background px-2.5 py-1 text-[11px] font-medium hover:bg-muted">Copy</button>
+          </div>
+        </div>
+        <p class="text-[10px] text-muted-foreground italic">Works with any cron provider if FastCron is down.</p>
+      </div>
+
+      <div class="flex justify-end gap-2 border-t border-border pt-4">
+        <button type="button" id="btn-cancel-sched" class="rounded-xl border border-border px-3.5 py-2 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground">Cancel</button>
+        <button type="submit" class="rounded-xl bg-primary px-3.5 py-2 text-xs font-semibold text-primary-foreground shadow hover:bg-primary/90">Save Schedule</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- MODAL: Add FastCron Token -->
+  <dialog id="token-modal" class="rounded-2xl border border-border bg-card p-6 shadow-2xl w-[420px] max-w-full backdrop:bg-black/60 backdrop:backdrop-blur-sm">
+    <form id="token-form" class="space-y-4 text-xs">
+      <div class="flex items-center justify-between border-b border-border pb-3">
+        <h3 class="text-base font-bold text-foreground">Add FastCron API Token</h3>
+        <button type="button" id="btn-close-token-modal" class="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div id="token-modal-error" class="hidden rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-500"></div>
+
+      <div>
+        <label class="block font-medium text-muted-foreground mb-1">Token Name / Identifier</label>
+        <input id="f-token-name" type="text" placeholder="e.g. Workspace FastCron" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none" required />
+      </div>
+
+      <div>
+        <label class="block font-medium text-muted-foreground mb-1">FastCron API Token</label>
+        <input id="f-token-val" type="password" placeholder="Enter FastCron API token" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none font-mono" required />
+        <p class="text-[11px] text-muted-foreground mt-1">Encrypted before saving to database.</p>
+      </div>
+
+      <label class="flex items-center gap-2 font-medium text-foreground cursor-pointer">
+        <input id="f-token-default" type="checkbox" class="h-4 w-4 rounded border-border text-primary" />
+        <span>Set as default workspace token</span>
+      </label>
+
+      <div class="flex items-center justify-end gap-2 border-t border-border pt-4">
+        <button type="button" id="btn-cancel-token" class="rounded-xl border border-border px-3.5 py-2 font-semibold text-muted-foreground hover:bg-muted hover:text-foreground">Cancel</button>
+        <button type="submit" class="rounded-xl bg-primary px-3.5 py-2 font-semibold text-primary-foreground shadow hover:bg-primary/90">Save Token</button>
       </div>
     </form>
   </dialog>
@@ -763,6 +992,7 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
       const whs = await getAccountWebhooks(accountId);
       activeAccountWebhooks = (whs || []).filter((w: any) => w.is_active);
       setupSchedulesListeners();
+      await loadTokens();
       await loadSchedules();
 
       if (!acc) {
@@ -1976,6 +2206,77 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
     modal?.classList.remove('flex');
   }
 
+  // ===== FastCron Tokens Registry wiring =====
+  let workspaceTokens: any[] = [];
+
+  async function loadTokens() {
+    const rowsEl = document.getElementById('tokens-table-rows');
+    const tokenSelect = document.getElementById('f-sched-token-select') as HTMLSelectElement | null;
+    try {
+      const r = await fetch('/api/tokens');
+      const d = await r.json();
+      workspaceTokens = Array.isArray(d) ? d : [];
+    } catch {
+      workspaceTokens = [];
+    }
+
+    if (rowsEl) {
+      rowsEl.innerHTML = workspaceTokens.length === 0
+        ? '<tr><td colspan="4" class="p-3 text-center text-muted-foreground">No custom FastCron tokens registered. Using default environment token.</td></tr>'
+        : workspaceTokens.map((t: any) =>
+            '<tr class="border-b border-border hover:bg-muted/30 transition-colors">' +
+            '<td class="p-2.5 font-semibold text-foreground">' + escapeHtml(t.name) + '</td>' +
+            '<td class="p-2.5 font-mono text-muted-foreground">' + escapeHtml(t.token_masked || '••••') + '</td>' +
+            '<td class="p-2.5">' + (t.is_default ? '<span class="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-500">Default</span>' : '<button type="button" data-token-act="set-default" data-tid="' + t.id + '" class="text-primary hover:underline text-[11px] font-medium">Set Default</button>') + '</td>' +
+            '<td class="p-2.5 text-right"><button type="button" data-token-act="delete" data-tid="' + t.id + '" class="text-rose-500 hover:underline text-[11px] font-semibold">Delete</button></td>' +
+            '</tr>'
+          ).join('');
+    }
+
+    if (tokenSelect) {
+      const currentVal = tokenSelect.value;
+      let optsHtml = '<option value="">Default (Workspace / Env)</option>';
+      for (const t of workspaceTokens) {
+        optsHtml += '<option value="' + t.id + '">' + escapeHtml(t.name) + ' (' + escapeHtml(t.token_masked || '••••') + ')' + (t.is_default ? ' [Default]' : '') + '</option>';
+      }
+      optsHtml += '<option value="custom">Custom Token...</option>';
+      tokenSelect.innerHTML = optsHtml;
+      if (currentVal) tokenSelect.value = currentVal;
+    }
+  }
+
+  async function tokenAction(id: string, act: string) {
+    if (act === 'set-default') {
+      const r = await fetch('/api/tokens/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ is_default: true }) });
+      const d = await r.json();
+      if (!r.ok) { showFeedbackBanner(d.error || JSON.stringify(d), 'error'); return; }
+      showFeedbackBanner('Default FastCron token updated.', 'success');
+      await loadTokens();
+      await loadSchedules();
+    } else if (act === 'delete') {
+      if (!confirm('Delete this FastCron token from registry?')) return;
+      const r = await fetch('/api/tokens/' + id, { method: 'DELETE' });
+      const d = await r.json();
+      if (!r.ok) { showFeedbackBanner(d.error || JSON.stringify(d), 'error'); return; }
+      showFeedbackBanner('FastCron token deleted.', 'success');
+      await loadTokens();
+      await loadSchedules();
+    }
+  }
+
+  function openTokenModal() {
+    const modal = document.getElementById('token-modal') as any;
+    const form = document.getElementById('token-form') as HTMLFormElement;
+    const errBox = document.getElementById('token-modal-error');
+    if (errBox) { errBox.textContent = ''; errBox.classList.add('hidden'); }
+    form?.reset();
+    modal?.showModal?.();
+  }
+
+  function closeTokenModal() {
+    (document.getElementById('token-modal') as any)?.close?.();
+  }
+
   // ===== Posting Schedules (engine) wiring =====
   let accountSchedules: any[] = [];
 
@@ -1988,23 +2289,74 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
       accountSchedules = Array.isArray(d) ? d : [];
     } catch { accountSchedules = []; }
     rowsEl.innerHTML = accountSchedules.length === 0
-      ? '<tr><td colspan="7" class="p-3 text-center text-muted-foreground">No engine schedules yet. Use "Convert current schedule" or "+ Add Posting Schedule".</td></tr>'
-      : accountSchedules.map((s: any) =>
-          '<tr class="border-b">' +
-          '<td class="p-2">' + escapeHtml(s.label || '(unnamed)') + '</td>' +
-          '<td class="p-2">' + escapeHtml(s.webhook_id ? 'selected' : 'auto') + '</td>' +
-          '<td class="p-2">' + escapeHtml(s.window_start) + '–' + escapeHtml(s.window_end) + '<br/>' + escapeHtml(s.timezone) + '</td>' +
-          '<td class="p-2">' + s.interval_minutes + 'm ±' + s.random_delay_minutes + 'm</td>' +
-          '<td class="p-2">' + escapeHtml((s.active_days || []).join(',')) + '</td>' +
-          '<td class="p-2">' + escapeHtml(s.status) + (s.fastcron_job_id ? '' : ' (no job)') + (s.started_at && new Date(s.started_at) > new Date() ? ' • starts ' + String(s.started_at).slice(0, 10) : '') + '</td>' +
-          '<td class="p-2">' +
-          '<button data-sact="run" data-sid="' + s.id + '">Run</button> ' +
-          '<button data-sact="edit" data-sid="' + s.id + '">Edit</button> ' +
-          '<button data-sact="' + (s.status === 'paused' ? 'resume' : 'pause') + '" data-sid="' + s.id + '">' + (s.status === 'paused' ? 'Resume' : 'Pause') + '</button> ' +
-          '<button data-sact="clone" data-sid="' + s.id + '">Clone</button> ' +
-          '<button data-sact="logs" data-sid="' + s.id + '">Logs</button> ' +
-          '<button data-sact="delete" data-sid="' + s.id + '">Del</button>' +
-          '</td></tr>').join('');
+      ? '<tr><td colspan="5" class="p-4 text-center text-muted-foreground">No engine schedules yet. Click "+ Add Posting Schedule" to create your first schedule.</td></tr>'
+      : accountSchedules.map((s: any) => {
+          const tz = s.timezone || 'UTC';
+          let day = '', hm = '';
+          try {
+            const parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(new Date());
+            day = parts.find((p: any) => p.type === 'weekday')?.value || '';
+            hm = (parts.find((p: any) => p.type === 'hour')?.value || '00') + ':' + (parts.find((p: any) => p.type === 'minute')?.value || '00');
+          } catch {}
+          const isDayOff = day && Array.isArray(s.active_days) && s.active_days.length > 0 && !s.active_days.includes(day);
+          const w0 = String(s.window_start || '09:00').slice(0,5);
+          const w1 = String(s.window_end || '21:00').slice(0,5);
+          const isClosed = hm && (w0 <= w1 ? (hm < w0 || hm > w1) : (hm < w0 && hm > w1));
+
+          let windowBadge = '';
+          if (s.status === 'paused') {
+            windowBadge = '<span class="inline-flex items-center gap-1 rounded-full bg-amber-500/10 text-amber-500 px-2 py-0.5 text-[10px] font-semibold">Paused</span>';
+          } else if (isDayOff) {
+            windowBadge = '<span class="inline-flex items-center gap-1 rounded-full bg-zinc-500/10 text-zinc-400 px-2 py-0.5 text-[10px] font-semibold">Day Off</span>';
+          } else if (isClosed) {
+            windowBadge = '<span class="inline-flex items-center gap-1 rounded-full bg-zinc-500/10 text-zinc-400 px-2 py-0.5 text-[10px] font-semibold">Window Closed</span>';
+          } else {
+            windowBadge = '<span class="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 text-emerald-500 px-2 py-0.5 text-[10px] font-semibold"><span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>Active</span>';
+          }
+
+          const startedText = s.started_at
+            ? (new Date(s.started_at) > new Date() ? 'Starts ' + String(s.started_at).slice(0, 10) : 'Started ' + String(s.started_at).slice(0, 10))
+            : 'Immediate';
+          const lastDispText = s.last_dispatched_at ? 'Last: ' + new Date(s.last_dispatched_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Last: Never';
+          const nextPinText = 'Next: ~' + Math.max(1, Math.round((s.interval_minutes || 36) / 2)) + 'm';
+
+          const tokenDisplay = s.token_name
+            ? escapeHtml(s.token_name) + ' (' + escapeHtml(s.fastcron_token_masked || '') + ')'
+            : (s.fastcron_token_masked ? 'Custom (' + escapeHtml(s.fastcron_token_masked) + ')' : 'Default (Workspace)');
+
+          const webhookLabel = s.webhook_label || (s.account_webhooks?.label) || (s.webhook_id ? 'Selected Webhook' : 'Auto / Any Active');
+
+          return '<tr class="border-b border-border hover:bg-muted/30 transition-colors">' +
+            '<td class="p-2.5">' +
+              '<div class="font-bold text-foreground">' + escapeHtml(s.label || '(unnamed schedule)') + '</div>' +
+              '<div class="flex flex-wrap items-center gap-1.5 pt-1 text-[10px] text-muted-foreground">' +
+                windowBadge +
+                '<span>•</span><span>' + escapeHtml(startedText) + '</span>' +
+                '<span>•</span><span>' + escapeHtml(lastDispText) + '</span>' +
+                '<span>•</span><span class="text-primary font-medium">' + escapeHtml(nextPinText) + '</span>' +
+              '</div>' +
+            '</td>' +
+            '<td class="p-2.5">' +
+              '<span class="inline-flex items-center rounded-lg bg-muted px-2 py-1 text-[11px] font-medium text-foreground">' + escapeHtml(webhookLabel) + '</span>' +
+            '</td>' +
+            '<td class="p-2.5">' +
+              '<div class="font-semibold text-foreground">' + escapeHtml(String(s.window_start).slice(0,5)) + '–' + escapeHtml(String(s.window_end).slice(0,5)) + ' <span class="text-[10px] text-muted-foreground font-normal">(' + escapeHtml(s.timezone) + ')</span></div>' +
+              '<div class="text-[11px] text-muted-foreground">' + s.interval_minutes + 'm ±' + s.random_delay_minutes + 'm • ' + escapeHtml((s.active_days || []).join(', ')) + '</div>' +
+            '</td>' +
+            '<td class="p-2.5 text-muted-foreground text-[11px]">' + tokenDisplay + '</td>' +
+            '<td class="p-2.5 text-right">' +
+              '<select class="sched-action-select rounded-lg border border-border bg-background py-1 px-2 text-xs font-semibold text-foreground focus:outline-none cursor-pointer" data-sid="' + s.id + '">' +
+                '<option value="" disabled selected>Actions ▾</option>' +
+                '<option value="run">⚡ Run Now</option>' +
+                '<option value="edit">✏️ Edit</option>' +
+                '<option value="' + (s.status === 'paused' ? 'resume' : 'pause') + '">' + (s.status === 'paused' ? '▶️ Resume' : '⏸️ Pause') + '</option>' +
+                '<option value="clone">📋 Clone</option>' +
+                '<option value="logs">📜 FastCron Logs</option>' +
+                '<option value="delete">🗑️ Delete</option>' +
+              '</select>' +
+            '</td>' +
+          '</tr>';
+        }).join('');
   }
 
   function populateChannelSelect() {
@@ -2012,17 +2364,34 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
     if (!sel) return;
     const active = (activeAccountWebhooks || []).filter((w: any) => w.is_active);
     sel.innerHTML = active.length
-      ? active.map((w: any, i: number) => '<option value="' + w.id + '">' + escapeHtml((w as any).label || (i === 0 ? 'Primary' : 'Channel ' + (i + 1))) + '</option>').join('')
-      : '<option value="">No active webhook</option>';
+      ? '<option value="">Auto / Any Active Channel</option>' + active.map((w: any, i: number) => '<option value="' + w.id + '">' + escapeHtml((w as any).label || (i === 0 ? 'Primary' : 'Channel ' + (i + 1))) + '</option>').join('')
+      : '<option value="">No active webhook configured</option>';
   }
 
   function updateSchedCadence() {
-    const interval = Number((document.getElementById('f-sched-interval') as HTMLInputElement).value || 36);
-    const start = (document.getElementById('f-sched-start') as HTMLInputElement).value || '09:00';
-    const end = (document.getElementById('f-sched-end') as HTMLInputElement).value || '21:00';
-    const h = Math.max(0, Number(end.slice(0, 2)) - Number(start.slice(0, 2)));
-    const el = document.getElementById('sched-cadence');
-    if (el) el.textContent = '≈ ' + Math.floor((h * 60) / interval) + ' pins/day capacity at ' + interval + 'm interval across ' + h + 'h window.';
+    const presetSel = document.getElementById('f-sched-interval-preset') as HTMLSelectElement | null;
+    const intervalInput = document.getElementById('f-sched-interval') as HTMLInputElement | null;
+    let interval = 36;
+    if (presetSel && presetSel.value !== 'custom') {
+      interval = Number(presetSel.value) || 36;
+      if (intervalInput) intervalInput.value = String(interval);
+    } else if (intervalInput) {
+      interval = Number(intervalInput.value) || 36;
+    }
+
+    const start = (document.getElementById('f-sched-start') as HTMLInputElement)?.value || '09:00';
+    const end = (document.getElementById('f-sched-end') as HTMLInputElement)?.value || '21:00';
+    const [sH, sM] = start.split(':').map(Number);
+    const [eH, eM] = end.split(':').map(Number);
+    let winMins = (eH * 60 + eM) - (sH * 60 + sM);
+    if (winMins <= 0) winMins += 1440;
+    const h = (winMins / 60).toFixed(1);
+    const estPins = Math.floor(winMins / interval);
+
+    const txtEl = document.getElementById('sched-cadence-text');
+    const effEl = document.getElementById('sched-cadence-effective');
+    if (txtEl) txtEl.textContent = `At ${interval}m interval across ${h}h window, capacity is ~${estPins} pins/day.`;
+    if (effEl) effEl.textContent = `FastCron expression: every ${interval} minutes • Window & active days enforced server-side`;
   }
 
   function openScheduleModal(s?: any) {
@@ -2033,25 +2402,75 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
     (document.getElementById('f-sched-label') as HTMLInputElement).value = s?.label || '';
     (document.getElementById('f-fc-token') as HTMLInputElement).value = '';
 
+    const tokenSelect = document.getElementById('f-sched-token-select') as HTMLSelectElement;
+    const customTokenBox = document.getElementById('f-sched-custom-token-box');
     const statusEl = document.getElementById('fc-token-status');
-    if (statusEl) {
-      if (s?.has_fastcron_token && s?.fastcron_token_masked) {
-        statusEl.innerHTML = '<span class="text-emerald-600">Custom: ' + escapeHtml(s.fastcron_token_masked) + '</span>';
-      } else {
-        statusEl.innerHTML = '<span class="text-muted-foreground">Using default (environment)</span>';
-      }
+
+    if (s?.fastcron_token_id) {
+      tokenSelect.value = s.fastcron_token_id;
+      customTokenBox?.classList.add('hidden');
+    } else if (s?.has_fastcron_token && !s?.fastcron_token_id) {
+      tokenSelect.value = 'custom';
+      customTokenBox?.classList.remove('hidden');
+      if (statusEl) statusEl.innerHTML = '<span class="text-emerald-600 font-medium">Custom override: ' + escapeHtml(s.fastcron_token_masked) + '</span>';
+    } else {
+      tokenSelect.value = '';
+      customTokenBox?.classList.add('hidden');
+      if (statusEl) statusEl.innerHTML = '<span class="text-muted-foreground">Using default (workspace / environment)</span>';
     }
 
     if (s?.webhook_id) (document.getElementById('f-channel') as HTMLSelectElement).value = s.webhook_id;
+    else (document.getElementById('f-channel') as HTMLSelectElement).value = '';
+
     (document.getElementById('f-sched-tz') as HTMLInputElement).value = s?.timezone || acc.timezone || 'UTC';
     (document.getElementById('f-sched-batch') as HTMLInputElement).value = String(s?.batch ?? 1);
     (document.getElementById('f-sched-start') as HTMLInputElement).value = (s?.window_start || acc.posting_window_start || '09:00').slice(0, 5);
     (document.getElementById('f-sched-end') as HTMLInputElement).value = (s?.window_end || acc.posting_window_end || '21:00').slice(0, 5);
-    (document.getElementById('f-sched-interval') as HTMLInputElement).value = String(s?.interval_minutes ?? acc.posting_interval_minutes ?? 36);
+
+    const mins = s?.interval_minutes ?? acc.posting_interval_minutes ?? 36;
+    const presetSel = document.getElementById('f-sched-interval-preset') as HTMLSelectElement;
+    const customContainer = document.getElementById('f-sched-custom-interval-container');
+    const customInput = document.getElementById('f-sched-interval') as HTMLInputElement;
+
+    const standardPresets = ['5', '10', '15', '30', '36', '45', '60', '120', '180', '240', '360', '720', '1440'];
+    if (standardPresets.includes(String(mins))) {
+      presetSel.value = String(mins);
+      customContainer?.classList.add('hidden');
+      customInput.value = String(mins);
+    } else {
+      presetSel.value = 'custom';
+      customContainer?.classList.remove('hidden');
+      customInput.value = String(mins);
+    }
+
     (document.getElementById('f-sched-delay') as HTMLInputElement).value = String(s?.random_delay_minutes ?? acc.random_delay_minutes ?? 0);
-    const days = s?.active_days ?? acc.active_days;
-    (document.getElementById('f-sched-days') as HTMLInputElement).value = Array.isArray(days) ? days.join(',') : (typeof days === 'string' ? (days as string).replace(/[{}"']/g, '') : 'Mon,Tue,Wed,Thu,Fri,Sat,Sun');
+
+    const activeDays = Array.isArray(s?.active_days)
+      ? s.active_days
+      : (typeof s?.active_days === 'string' ? s.active_days.replace(/[{}"']/g, '').split(',').map((x: string) => x.trim()) : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
+
+    document.querySelectorAll('.f-sched-day-chk').forEach((chk) => {
+      (chk as HTMLInputElement).checked = activeDays.includes((chk as HTMLInputElement).value);
+    });
+
     (document.getElementById('f-sched-started') as HTMLInputElement).value = s?.started_at ? String(s.started_at).slice(0, 10) : '';
+
+    // Integration box (admin only when editing existing schedule)
+    const intBox = document.getElementById('sched-integration-box');
+    if (s && s.id && (s.is_admin !== false)) {
+      intBox?.classList.remove('hidden');
+      (document.getElementById('sched-int-id') as HTMLInputElement).value = s.id;
+      const tokInput = document.getElementById('sched-int-token') as HTMLInputElement;
+      tokInput.value = s.dispatch_token || '';
+      tokInput.type = 'password';
+
+      const base = window.location.origin;
+      const urlStr = `${base}/api/internal/pinterest/dispatch-due-pin?schedule_id=${encodeURIComponent(s.id)}&dispatch_token=${encodeURIComponent(s.dispatch_token || '')}`;
+      (document.getElementById('sched-int-url') as HTMLInputElement).value = urlStr;
+    } else {
+      intBox?.classList.add('hidden');
+    }
+
     updateSchedCadence();
     (document.getElementById('schedule-modal') as any)?.showModal?.();
   }
@@ -2067,7 +2486,12 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
     if (act === 'delete' && !confirm('Delete this schedule?')) return;
     const r = await fetch('/api/schedules/' + id + '/action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: act }) });
     const d = await r.json();
-    if (!r.ok) alert(d.error || 'Failed');
+    if (!r.ok) {
+      showFeedbackBanner(d.error || JSON.stringify(d), 'error');
+      alert(d.error || JSON.stringify(d));
+    } else {
+      showFeedbackBanner(`Schedule action "${act}" completed.`, 'success');
+    }
     await loadSchedules();
   }
 
@@ -2075,71 +2499,187 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
   function setupSchedulesListeners() {
     if (schedulesListenersAttached) return;
     schedulesListenersAttached = true;
+
+    // FastCron Token listeners
+    document.getElementById('btn-add-token')?.addEventListener('click', openTokenModal);
+    document.getElementById('btn-close-token-modal')?.addEventListener('click', closeTokenModal);
+    document.getElementById('btn-cancel-token')?.addEventListener('click', closeTokenModal);
+
+    document.getElementById('tokens-table-rows')?.addEventListener('click', (e) => {
+      const t = (e.target as HTMLElement).closest('[data-token-act]');
+      if (!t) return;
+      const act = t.getAttribute('data-token-act');
+      const tid = t.getAttribute('data-tid');
+      if (act && tid) tokenAction(tid, act);
+    });
+
+    document.getElementById('token-form')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errBox = document.getElementById('token-modal-error');
+      if (errBox) errBox.classList.add('hidden');
+
+      const name = (document.getElementById('f-token-name') as HTMLInputElement).value.trim();
+      const token = (document.getElementById('f-token-val') as HTMLInputElement).value.trim();
+      const isDefault = (document.getElementById('f-token-default') as HTMLInputElement).checked;
+
+      try {
+        const r = await fetch('/api/tokens', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, token, is_default: isDefault }),
+        });
+        const d = await r.json();
+        if (!r.ok) {
+          if (errBox) { errBox.textContent = d.error || JSON.stringify(d); errBox.classList.remove('hidden'); }
+          return;
+        }
+        closeTokenModal();
+        showFeedbackBanner('FastCron token added to workspace registry.', 'success');
+        await loadTokens();
+        await loadSchedules();
+      } catch (err: any) {
+        if (errBox) { errBox.textContent = err.message || 'Network error'; errBox.classList.remove('hidden'); }
+      }
+    });
+
+    // Schedule modal token select handler
+    document.getElementById('f-sched-token-select')?.addEventListener('change', (e) => {
+      const val = (e.target as HTMLSelectElement).value;
+      const customBox = document.getElementById('f-sched-custom-token-box');
+      if (val === 'custom') {
+        customBox?.classList.remove('hidden');
+      } else {
+        customBox?.classList.add('hidden');
+      }
+    });
+
+    // Schedule modal interval preset handler
+    document.getElementById('f-sched-interval-preset')?.addEventListener('change', (e) => {
+      const val = (e.target as HTMLSelectElement).value;
+      const customContainer = document.getElementById('f-sched-custom-interval-container');
+      if (val === 'custom') {
+        customContainer?.classList.remove('hidden');
+      } else {
+        customContainer?.classList.add('hidden');
+      }
+      updateSchedCadence();
+    });
+
     document.getElementById('btn-refresh-schedules')?.addEventListener('click', () => loadSchedules());
     document.getElementById('btn-sync-missing')?.addEventListener('click', async () => {
       const r = await fetch('/api/schedules/sync-missing', { method: 'POST' });
       const d = await r.json();
-      alert(JSON.stringify(d));
+      if (!r.ok) {
+        showFeedbackBanner(d.error || JSON.stringify(d), 'error');
+        alert(d.error || JSON.stringify(d));
+      } else {
+        showFeedbackBanner('Sync completed.', 'success');
+        alert(JSON.stringify(d));
+      }
       await loadSchedules();
     });
+
     document.getElementById('btn-add-schedule')?.addEventListener('click', () => openScheduleModal());
-    document.getElementById('btn-convert-legacy')?.addEventListener('click', async () => {
-      if (!currentAccount) return;
-      const acc: any = currentAccount;
-      const firstWebhook: any = (activeAccountWebhooks || []).filter((w: any) => w.is_active)[0];
-      const body = {
-        account_id: accountId,
-        label: 'Legacy schedule',
-        webhook_id: firstWebhook?.id || null,
-        timezone: acc.timezone || 'UTC',
-        window_start: (acc.posting_window_start || '09:00').slice(0, 5),
-        window_end: (acc.posting_window_end || '21:00').slice(0, 5),
-        interval_minutes: acc.posting_interval_minutes || 36,
-        random_delay_minutes: acc.random_delay_minutes || 0,
-        active_days: Array.isArray(acc.active_days) ? acc.active_days : String(acc.active_days || 'Mon,Tue,Wed,Thu,Fri,Sat,Sun').replace(/[{}"']/g, '').split(',').map((x: string) => x.trim()),
-        started_at: acc.pinning_started_at || null,
-        batch: 1,
-      };
-      const r = await fetch('/api/schedules', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      const d = await r.json();
-      if (!r.ok) { alert(d.error || 'Failed'); return; }
-      showFeedbackBanner('Schedule created from current account schedule.', 'success');
-      await loadSchedules();
-    });
+    document.getElementById('btn-close-sched-modal')?.addEventListener('click', () => (document.getElementById('schedule-modal') as any)?.close?.());
     document.getElementById('btn-cancel-sched')?.addEventListener('click', () => (document.getElementById('schedule-modal') as any)?.close?.());
-    ['f-sched-interval', 'f-sched-start', 'f-sched-end'].forEach((iv) => document.getElementById(iv)?.addEventListener('input', updateSchedCadence));
+
+    ['f-sched-interval', 'f-sched-start', 'f-sched-end'].forEach((iv) =>
+      document.getElementById(iv)?.addEventListener('input', updateSchedCadence)
+    );
+
+    // Integration box reveal and copy buttons
+    document.getElementById('btn-toggle-reveal-token')?.addEventListener('click', () => {
+      const input = document.getElementById('sched-int-token') as HTMLInputElement;
+      const btn = document.getElementById('btn-toggle-reveal-token');
+      if (input.type === 'password') {
+        input.type = 'text';
+        if (btn) btn.textContent = 'Hide';
+      } else {
+        input.type = 'password';
+        if (btn) btn.textContent = 'Reveal';
+      }
+    });
+
+    document.getElementById('btn-copy-sched-id')?.addEventListener('click', () => {
+      const val = (document.getElementById('sched-int-id') as HTMLInputElement).value;
+      if (val) { navigator.clipboard.writeText(val); showFeedbackBanner('Schedule ID copied to clipboard.', 'success'); }
+    });
+
+    document.getElementById('btn-copy-sched-token')?.addEventListener('click', () => {
+      const val = (document.getElementById('sched-int-token') as HTMLInputElement).value;
+      if (val) { navigator.clipboard.writeText(val); showFeedbackBanner('Dispatch token copied to clipboard.', 'success'); }
+    });
+
+    document.getElementById('btn-copy-sched-url')?.addEventListener('click', () => {
+      const val = (document.getElementById('sched-int-url') as HTMLInputElement).value;
+      if (val) { navigator.clipboard.writeText(val); showFeedbackBanner('Webhook dispatch URL copied to clipboard.', 'success'); }
+    });
+
     document.getElementById('schedule-form')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const id = (document.getElementById('f-sched-id') as HTMLInputElement).value;
+      const tokenSelectVal = (document.getElementById('f-sched-token-select') as HTMLSelectElement).value;
       const fcToken = (document.getElementById('f-fc-token') as HTMLInputElement).value.trim();
-      const body = {
+
+      const presetVal = (document.getElementById('f-sched-interval-preset') as HTMLSelectElement).value;
+      const intervalMinutes = presetVal === 'custom'
+        ? Number((document.getElementById('f-sched-interval') as HTMLInputElement).value || 36)
+        : Number(presetVal || 36);
+
+      const checkedDays: string[] = [];
+      document.querySelectorAll('.f-sched-day-chk:checked').forEach((chk) => {
+        checkedDays.push((chk as HTMLInputElement).value);
+      });
+
+      const body: Record<string, any> = {
         account_id: accountId,
         label: (document.getElementById('f-sched-label') as HTMLInputElement).value,
         webhook_id: (document.getElementById('f-channel') as HTMLSelectElement).value || null,
         timezone: (document.getElementById('f-sched-tz') as HTMLInputElement).value,
-        batch: Number((document.getElementById('f-sched-batch') as HTMLInputElement).value),
+        batch: Number((document.getElementById('f-sched-batch') as HTMLInputElement).value || 1),
         window_start: (document.getElementById('f-sched-start') as HTMLInputElement).value,
         window_end: (document.getElementById('f-sched-end') as HTMLInputElement).value,
-        interval_minutes: Number((document.getElementById('f-sched-interval') as HTMLInputElement).value),
-        random_delay_minutes: Number((document.getElementById('f-sched-delay') as HTMLInputElement).value),
-        active_days: ((document.getElementById('f-sched-days') as HTMLInputElement).value).split(',').map((x: string) => x.trim()).filter(Boolean),
+        interval_minutes: intervalMinutes,
+        random_delay_minutes: Number((document.getElementById('f-sched-delay') as HTMLInputElement).value || 0),
+        active_days: checkedDays.length > 0 ? checkedDays : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
         started_at: (document.getElementById('f-sched-started') as HTMLInputElement).value || null,
-        ...(fcToken.length > 0 ? { fastcron_token: fcToken } : {}),
       };
+
+      if (tokenSelectVal === 'custom') {
+        if (fcToken.length > 0) body.fastcron_token = fcToken;
+        body.fastcron_token_id = null;
+      } else if (tokenSelectVal) {
+        body.fastcron_token_id = tokenSelectVal;
+        body.fastcron_token = null;
+      } else {
+        body.fastcron_token_id = null;
+        body.fastcron_token = null;
+      }
+
       const r = id
         ? await fetch('/api/schedules/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
         : await fetch('/api/schedules', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const d = await r.json();
-      if (!r.ok) { alert(d.error || 'Failed'); return; }
+      if (!r.ok) {
+        showFeedbackBanner(d.error || JSON.stringify(d), 'error');
+        alert(d.error || JSON.stringify(d));
+        return;
+      }
       (document.getElementById('schedule-modal') as any)?.close?.();
+      showFeedbackBanner(id ? 'Posting schedule updated.' : 'Posting schedule created.', 'success');
       await loadSchedules();
     });
-    document.getElementById('account-schedules-rows')?.addEventListener('click', (e) => {
-      const t = e.target as HTMLElement;
-      const act = t.getAttribute('data-sact'); const sid = t.getAttribute('data-sid');
-      if (act && sid) scheduleAction(sid, act);
+
+    document.getElementById('account-schedules-rows')?.addEventListener('change', (e) => {
+      const select = e.target as HTMLSelectElement;
+      if (select && select.classList.contains('sched-action-select')) {
+        const sid = select.getAttribute('data-sid');
+        const act = select.value;
+        select.value = '';
+        if (sid && act) scheduleAction(sid, act);
+      }
     });
   }
 
-  init();
+  document.addEventListener('DOMContentLoaded', init);
 </script>

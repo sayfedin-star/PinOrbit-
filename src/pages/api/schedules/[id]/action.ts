@@ -12,6 +12,9 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
   const workspaceId = locals.activeWorkspaceId;
   const runtimeEnv = (locals as any)?.runtime?.env || (locals as any)?.runtimeEnv || {};
   const { id } = params;
+  if (!id) {
+    return new Response(JSON.stringify({ error: 'Schedule ID is required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+  }
 
   if (!user || !schedulingClient || !workspaceId) {
     return new Response(JSON.stringify({ error: 'Unauthorized or missing workspace' }), { status: 401, headers: { 'Content-Type': 'application/json' } });

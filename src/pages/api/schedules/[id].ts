@@ -34,9 +34,12 @@ export const PATCH: APIRoute = async ({ request, params, locals }) => {
       return new Response(JSON.stringify({ error: 'Schedule not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
     }
     const updateFields: Record<string, any> = {};
-    const allowedFields = ['label', 'webhook_id', 'timezone', 'window_start', 'window_end', 'interval_minutes', 'random_delay_minutes', 'active_days', 'started_at', 'batch', 'status'];
+    const allowedFields = ['label', 'webhook_id', 'timezone', 'window_start', 'window_end', 'interval_minutes', 'random_delay_minutes', 'active_days', 'started_at', 'batch', 'status', 'fastcron_token_id'];
     for (const field of allowedFields) {
       if (body[field] !== undefined) updateFields[field] = body[field];
+    }
+    if (body.fastcron_token_id !== undefined && body.fastcron_token_id !== null) {
+      updateFields.fastcron_token_encrypted = null;
     }
     if (body.fastcron_token !== undefined) {
       if (body.fastcron_token === null) {
@@ -48,6 +51,7 @@ export const PATCH: APIRoute = async ({ request, params, locals }) => {
         }
         try {
           updateFields.fastcron_token_encrypted = await encryptToken(body.fastcron_token.trim(), kek);
+          updateFields.fastcron_token_id = null;
         } catch (e: any) {
           return new Response(JSON.stringify({ error: 'Failed to encrypt token: ' + e.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
         }

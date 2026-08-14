@@ -1028,13 +1028,30 @@ async function resolveWebhookUrlForSchedule(schedulingClient: SupabaseClient, sc
 
 export async function resolveScheduleToken(schedule: any, runtimeEnv: Record<string, any>): Promise<string> {
   const env = getServerEnv(runtimeEnv);
-  if (schedule.fastcron_token_encrypted) {
-    const kek = await resolveTokenKek(runtimeEnv);
-    if (kek) {
-      const dec = await decryptToken(schedule.fastcron_token_encrypted, kek);
+  const kek = await resolveTokenKek(runtimeEnv);
+  const schedulingClient = dbClients.getSchedulingAdmin(runtimeEnv);
+
+  if (schedule?.fastcron_token_id && kek) {
+    const { data: tokRow } = await schedulingClient.from('fastcron_tokens').select('token_encrypted').eq('id', schedule.fastcron_token_id).maybeSingle();
+    if (tokRow?.token_encrypted) {
+      const dec = await decryptToken(tokRow.token_encrypted, kek);
       if (dec && dec.trim().length >= 16) return dec.trim();
     }
   }
+
+  if (schedule?.fastcron_token_encrypted && kek) {
+    const dec = await decryptToken(schedule.fastcron_token_encrypted, kek);
+    if (dec && dec.trim().length >= 16) return dec.trim();
+  }
+
+  if (schedule?.workspace_id && kek) {
+    const { data: defRow } = await schedulingClient.from('fastcron_tokens').select('token_encrypted').eq('workspace_id', schedule.workspace_id).eq('is_default', true).maybeSingle();
+    if (defRow?.token_encrypted) {
+      const dec = await decryptToken(defRow.token_encrypted, kek);
+      if (dec && dec.trim().length >= 16) return dec.trim();
+    }
+  }
+
   if (env.FASTCRON_API_TOKEN && env.FASTCRON_API_TOKEN.trim().length >= 16) return env.FASTCRON_API_TOKEN.trim();
   throw new Error('FastCron API token not configured');
 }
@@ -1060,12 +1077,13 @@ export async function syncPublishingSchedule(schedule: any, runtimeEnv: Record<s
     : 'https://pinorbit-v2.o-i.workers.dev';
   const dispatchUrl = `${base}/api/internal/pinterest/dispatch-due-pin`
     + `?schedule_id=${encodeURIComponent(schedule.id)}&dispatch_token=${encodeURIComponent(schedule.dispatch_token)}`;
-  const cronExpr = buildPublishingCron(schedule);
   const jobName = `PinOrbit-pub-${schedule.id.slice(0, 8)}`;
   const postData = JSON.stringify({ schedule_id: schedule.id, dispatch_token: schedule.dispatch_token });
   const jobParams: Record<string, any> = {
     name: jobName,
-    expression: cronExpr,
+    expression: `every ${Math.max(1, schedule.interval_minutes || 36)} minutes`,
+    delay: schedule.random_delay_minutes ?? 0,
+    random_delay: schedule.random_delay_minutes ?? 0,
     timezone: schedule.timezone || 'UTC',
     url: dispatchUrl,
     httpMethod: 'POST',
@@ -1078,9 +1096,6 @@ export async function syncPublishingSchedule(schedule: any, runtimeEnv: Record<s
     notify: true,
     timeout: 30,
   };
-  if (schedule.random_delay_minutes !== undefined && schedule.random_delay_minutes !== null) {
-    jobParams.random_delay = schedule.random_delay_minutes;
-  }
   let result: { success: boolean; data?: any; error?: string };
   if (schedule.fastcron_job_id) {
     jobParams.id = schedule.fastcron_job_id;

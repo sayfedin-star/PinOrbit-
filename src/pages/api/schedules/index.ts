@@ -22,9 +22,10 @@ export const GET: APIRoute = async ({ url, locals }) => {
   }
 
   try {
-    await assertWorkspaceAccess(schedulingClient, workspaceId, user.id);
+    const role = await assertWorkspaceAccess(schedulingClient, workspaceId, user.id);
+    const isAdmin = role === 'admin' || role === 'owner';
     const adminClient = dbClients.getSchedulingAdmin(runtimeEnv);
-    let query = adminClient.from('posting_schedules').select('*, accounts(account_name)').eq('workspace_id', workspaceId);
+    let query = adminClient.from('posting_schedules').select('*, accounts(account_name), account_webhooks(label), fastcron_tokens(id, name, is_default, token_masked)').eq('workspace_id', workspaceId);
     
     // Accept optional ?account_id= and verify it belongs to workspace
     const account_id = url.searchParams.get('account_id');
@@ -44,7 +45,12 @@ export const GET: APIRoute = async ({ url, locals }) => {
       const result: any = { ...schedule };
       delete result.fastcron_token_encrypted;  // NEVER send ciphertext to client
       
-      if (schedule.fastcron_token_encrypted && kek) {
+      result.webhook_label = schedule.account_webhooks?.label || null;
+      if (schedule.fastcron_tokens) {
+        result.token_name = schedule.fastcron_tokens.name;
+        result.fastcron_token_masked = schedule.fastcron_tokens.token_masked;
+        result.has_fastcron_token = true;
+      } else if (schedule.fastcron_token_encrypted && kek) {
         try {
           const decrypted = await decryptToken(schedule.fastcron_token_encrypted, kek);
           if (decrypted) {
@@ -59,6 +65,12 @@ export const GET: APIRoute = async ({ url, locals }) => {
       } else {
         result.has_fastcron_token = false;
       }
+
+      if (!isAdmin && schedule.dispatch_token) {
+        result.dispatch_token = maskSecret(schedule.dispatch_token);
+      }
+      result.is_admin = isAdmin;
+
       return result;
     }));
 
@@ -103,6 +115,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   try {
     await assertWorkspaceAccess(schedulingClient, workspaceId, user.id, 'admin');
 
+    let fastcron_token_id = body.fastcron_token_id || null;
     let fastcron_token_encrypted: string | null = null;
     if (body.fastcron_token && typeof body.fastcron_token === 'string' && body.fastcron_token.trim().length > 0) {
       const kek = await resolveTokenKek(runtimeEnv);
@@ -111,6 +124,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       }
       try {
         fastcron_token_encrypted = await encryptToken(body.fastcron_token.trim(), kek);
+        fastcron_token_id = null;
       } catch (e: any) {
         return new Response(JSON.stringify({ error: 'Failed to encrypt token: ' + e.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
       }
@@ -133,6 +147,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       status: 'not_synced',
       dispatch_token,
       fastcron_job_id: null,
+      fastcron_token_id: fastcron_token_id,
       fastcron_token_encrypted: fastcron_token_encrypted,
     };
     const { data: inserted, error: insertErr } = await adminClient.from('posting_schedules').insert(newRow).select().single();

@@ -20,6 +20,21 @@ async function handleDispatch(body: any, locals: any) {
   if (schedule.status !== 'active') return json({ success: true, dispatched: false, reason: 'paused' });
   if (schedule.started_at && new Date(schedule.started_at).getTime() > Date.now()) return json({ success: true, dispatched: false, reason: 'not_started' });
 
+  // Timezone-aware window and active days enforcement
+  const tz = schedule.timezone || 'UTC';
+  const now = new Date();
+  let day = '', hm = '';
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(now);
+    day = parts.find(p => p.type === 'weekday')?.value || '';
+    hm = (parts.find(p => p.type === 'hour')?.value || '00') + ':' + (parts.find(p => p.type === 'minute')?.value || '00');
+  } catch {}
+  if (day && (schedule.active_days || []).length && !schedule.active_days.includes(day))
+    return json({ success: true, dispatched: false, reason: 'day_off' });
+  const w0 = String(schedule.window_start || '09:00').slice(0,5), w1 = String(schedule.window_end || '21:00').slice(0,5);
+  if (hm && (w0 <= w1 ? (hm < w0 || hm > w1) : (hm < w0 && hm > w1)))
+    return json({ success: true, dispatched: false, reason: 'window_closed' });
+
   const accountId = schedule.account_id;
   const workspaceId = schedule.workspace_id;
 
@@ -83,6 +98,11 @@ async function handleDispatch(body: any, locals: any) {
     }).catch(() => {});
     dispatched++;
   }
+
+  if (dispatched > 0) {
+    await admin.from('posting_schedules').update({ last_dispatched_at: new Date().toISOString() }).eq('id', scheduleId).then(() => {});
+  }
+
   return json({ success: true, dispatched, skipped });
 }
 
