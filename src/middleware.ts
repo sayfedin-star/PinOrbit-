@@ -50,7 +50,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     pathname.startsWith('/dashboard') || pathname.startsWith('/analytics') || pathname.startsWith('/accounts') ||
     pathname.startsWith('/competitors') || pathname.startsWith('/imports') || pathname.startsWith('/boards') ||
     pathname.startsWith('/pins') || pathname.startsWith('/logs') || pathname.startsWith('/settings') ||
-    pathname.startsWith('/audit');
+    pathname.startsWith('/audit') || pathname.startsWith('/schedules');
   if (isProtectedPath && !session.isAuthenticated) {
     return context.redirect(`/login?redirect=${encodeURIComponent(pathname)}`);
   }

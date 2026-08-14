@@ -71,7 +71,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   }
 
   try {
-    await assertWorkspaceAccess(schedulingClient, workspaceId, user.id);
+    await assertWorkspaceAccess(schedulingClient, workspaceId, user.id, 'admin');
     const result = await fastcronService.syncScheduleWithFastCron(
       workspaceId,
       connectionId,
