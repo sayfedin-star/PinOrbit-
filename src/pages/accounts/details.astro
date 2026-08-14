@@ -214,6 +214,67 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
     </div>
   </div>
 
+  <!-- Section: Posting Schedules & Automation -->
+  <div class="mb-8 rounded-2xl border border-border bg-card p-5 shadow-sm space-y-4">
+    <div class="flex items-center justify-between border-b border-border pb-3">
+      <div class="flex items-center gap-2">
+        <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-pink-500/10 text-pink-500">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        </div>
+        <div>
+          <h3 class="text-sm font-bold text-foreground">Posting Schedules & Automation</h3>
+          <p class="text-xs text-muted-foreground">Manage posting schedules for this account</p>
+        </div>
+      </div>
+      <div class="flex gap-2">
+        <button id="btn-add-schedule" class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-muted transition-all">+ Add Posting Schedule</button>
+        <button id="btn-convert-legacy" class="inline-flex items-center gap-1 rounded-lg border border-primary/30 bg-primary/10 px-2.5 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition-all">Convert current schedule</button>
+        <button id="btn-sync-missing" class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-muted transition-all">Sync Missing</button>
+        <button id="btn-refresh-schedules" class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-muted transition-all">Refresh</button>
+      </div>
+    </div>
+
+    <table class="w-full text-xs border">
+      <thead>
+        <tr class="text-left border-b">
+          <th class="p-2">Label</th>
+          <th class="p-2">Channel</th>
+          <th class="p-2">Window/TZ</th>
+          <th class="p-2">Interval/Delay</th>
+          <th class="p-2">Days</th>
+          <th class="p-2">Status</th>
+          <th class="p-2">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="account-schedules-rows"></tbody>
+    </table>
+  </div>
+
+  <!-- MODAL: Add/Edit Schedule -->
+  <dialog id="schedule-modal" class="rounded p-0 w-[480px] max-w-full">
+    <form id="schedule-form" class="p-4 space-y-3 text-sm">
+      <h2 id="schedule-modal-title" class="text-lg font-bold">Add Posting Schedule</h2>
+      <input type="hidden" id="f-sched-id" />
+      <label class="block">Label<input id="f-sched-label" class="border rounded w-full p-2" /></label>
+      <label class="block">Channel<select id="f-channel" class="border rounded w-full p-2"></select></label>
+      <div class="grid grid-cols-2 gap-2">
+        <label class="block">Timezone<input id="f-sched-tz" class="border rounded w-full p-2" value="UTC" /></label>
+        <label class="block">Batch<input id="f-sched-batch" type="number" min="1" max="10" class="border rounded w-full p-2" value="1" /></label>
+        <label class="block">Window start<input id="f-sched-start" type="time" class="border rounded w-full p-2" value="09:00" /></label>
+        <label class="block">Window end<input id="f-sched-end" type="time" class="border rounded w-full p-2" value="21:00" /></label>
+        <label class="block">Interval (min)<input id="f-sched-interval" type="number" min="1" max="1440" class="border rounded w-full p-2" value="36" /></label>
+        <label class="block">Random delay (min)<input id="f-sched-delay" type="number" min="0" max="60" class="border rounded w-full p-2" value="0" /></label>
+      </div>
+      <label class="block">Active days (comma separated)<input id="f-sched-days" class="border rounded w-full p-2" value="Mon,Tue,Wed,Thu,Fri,Sat,Sun" /></label>
+      <label class="block">Pinning started (optional)<input id="f-sched-started" type="date" class="border rounded w-full p-2" /></label>
+      <p id="sched-cadence" class="text-pink-600 text-xs"></p>
+      <div class="flex justify-end gap-2">
+        <button type="button" id="btn-cancel-sched" class="px-3 py-1 border rounded">Cancel</button>
+        <button type="submit" class="px-3 py-1 rounded bg-pink-600 text-white">Save</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- Section 4: Recent Account Pins Queue -->
   <div class="mb-8 space-y-3">
     <div class="flex items-center justify-between">
@@ -871,6 +932,11 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
         getAccountRecentLogs(accountId, 10),
         getAccountWebhookSummary(accountId),
       ]);
+
+      const whs = await getAccountWebhooks(accountId);
+      activeAccountWebhooks = (whs || []).filter((w: any) => w.is_active);
+      setupSchedulesListeners();
+      await loadSchedules();
 
       if (!acc) {
         document.getElementById('account-header-info')!.innerHTML = renderEmptyStateHTML(
@@ -2179,6 +2245,158 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
     const modal = document.getElementById('edit-limit-modal');
     modal?.classList.add('hidden');
     modal?.classList.remove('flex');
+  }
+
+  // ===== Posting Schedules (engine) wiring =====
+  let accountSchedules: any[] = [];
+
+  async function loadSchedules() {
+    const rowsEl = document.getElementById('account-schedules-rows');
+    if (!rowsEl || !accountId) return;
+    try {
+      const r = await fetch('/api/schedules?account_id=' + encodeURIComponent(accountId));
+      const d = await r.json();
+      accountSchedules = Array.isArray(d) ? d : [];
+    } catch { accountSchedules = []; }
+    rowsEl.innerHTML = accountSchedules.length === 0
+      ? '<tr><td colspan="7" class="p-3 text-center text-muted-foreground">No engine schedules yet. Use "Convert current schedule" or "+ Add Posting Schedule".</td></tr>'
+      : accountSchedules.map((s: any) =>
+          '<tr class="border-b">' +
+          '<td class="p-2">' + escapeHtml(s.label || '(unnamed)') + '</td>' +
+          '<td class="p-2">' + escapeHtml(s.webhook_id ? 'selected' : 'auto') + '</td>' +
+          '<td class="p-2">' + escapeHtml(s.window_start) + '–' + escapeHtml(s.window_end) + '<br/>' + escapeHtml(s.timezone) + '</td>' +
+          '<td class="p-2">' + s.interval_minutes + 'm ±' + s.random_delay_minutes + 'm</td>' +
+          '<td class="p-2">' + escapeHtml((s.active_days || []).join(',')) + '</td>' +
+          '<td class="p-2">' + escapeHtml(s.status) + (s.fastcron_job_id ? '' : ' (no job)') + '</td>' +
+          '<td class="p-2">' +
+          '<button data-sact="run" data-sid="' + s.id + '">Run</button> ' +
+          '<button data-sact="edit" data-sid="' + s.id + '">Edit</button> ' +
+          '<button data-sact="' + (s.status === 'paused' ? 'resume' : 'pause') + '" data-sid="' + s.id + '">' + (s.status === 'paused' ? 'Resume' : 'Pause') + '</button> ' +
+          '<button data-sact="clone" data-sid="' + s.id + '">Clone</button> ' +
+          '<button data-sact="logs" data-sid="' + s.id + '">Logs</button> ' +
+          '<button data-sact="delete" data-sid="' + s.id + '">Del</button>' +
+          '</td></tr>').join('');
+  }
+
+  function populateChannelSelect() {
+    const sel = document.getElementById('f-channel') as HTMLSelectElement | null;
+    if (!sel) return;
+    const active = (activeAccountWebhooks || []).filter((w: any) => w.is_active);
+    sel.innerHTML = active.length
+      ? active.map((w: any, i: number) => '<option value="' + w.id + '">' + escapeHtml((w as any).label || (i === 0 ? 'Primary' : 'Channel ' + (i + 1))) + '</option>').join('')
+      : '<option value="">No active webhook</option>';
+  }
+
+  function updateSchedCadence() {
+    const interval = Number((document.getElementById('f-sched-interval') as HTMLInputElement).value || 36);
+    const start = (document.getElementById('f-sched-start') as HTMLInputElement).value || '09:00';
+    const end = (document.getElementById('f-sched-end') as HTMLInputElement).value || '21:00';
+    const h = Math.max(0, Number(end.slice(0, 2)) - Number(start.slice(0, 2)));
+    const el = document.getElementById('sched-cadence');
+    if (el) el.textContent = '≈ ' + Math.floor((h * 60) / interval) + ' pins/day capacity at ' + interval + 'm interval across ' + h + 'h window.';
+  }
+
+  function openScheduleModal(s?: any) {
+    populateChannelSelect();
+    const acc: any = currentAccount || {};
+    (document.getElementById('schedule-modal-title') as HTMLElement).textContent = s ? 'Edit Posting Schedule' : 'Add Posting Schedule';
+    (document.getElementById('f-sched-id') as HTMLInputElement).value = s?.id || '';
+    (document.getElementById('f-sched-label') as HTMLInputElement).value = s?.label || '';
+    if (s?.webhook_id) (document.getElementById('f-channel') as HTMLSelectElement).value = s.webhook_id;
+    (document.getElementById('f-sched-tz') as HTMLInputElement).value = s?.timezone || acc.timezone || 'UTC';
+    (document.getElementById('f-sched-batch') as HTMLInputElement).value = String(s?.batch ?? 1);
+    (document.getElementById('f-sched-start') as HTMLInputElement).value = (s?.window_start || acc.posting_window_start || '09:00').slice(0, 5);
+    (document.getElementById('f-sched-end') as HTMLInputElement).value = (s?.window_end || acc.posting_window_end || '21:00').slice(0, 5);
+    (document.getElementById('f-sched-interval') as HTMLInputElement).value = String(s?.interval_minutes ?? acc.posting_interval_minutes ?? 36);
+    (document.getElementById('f-sched-delay') as HTMLInputElement).value = String(s?.random_delay_minutes ?? acc.random_delay_minutes ?? 0);
+    const days = s?.active_days ?? acc.active_days;
+    (document.getElementById('f-sched-days') as HTMLInputElement).value = Array.isArray(days) ? days.join(',') : (typeof days === 'string' ? (days as string).replace(/[{}"']/g, '') : 'Mon,Tue,Wed,Thu,Fri,Sat,Sun');
+    (document.getElementById('f-sched-started') as HTMLInputElement).value = s?.started_at ? String(s.started_at).slice(0, 10) : '';
+    updateSchedCadence();
+    (document.getElementById('schedule-modal') as any)?.showModal?.();
+  }
+
+  async function scheduleAction(id: string, act: string) {
+    if (act === 'edit') { openScheduleModal(accountSchedules.find((x) => x.id === id)); return; }
+    if (act === 'logs') {
+      const r = await fetch('/api/schedules/' + id + '/fastcron?view=logs');
+      const d = await r.json();
+      alert(JSON.stringify(d, null, 2));
+      return;
+    }
+    if (act === 'delete' && !confirm('Delete this schedule?')) return;
+    const r = await fetch('/api/schedules/' + id + '/action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: act }) });
+    const d = await r.json();
+    if (!r.ok) alert(d.error || 'Failed');
+    await loadSchedules();
+  }
+
+  let schedulesListenersAttached = false;
+  function setupSchedulesListeners() {
+    if (schedulesListenersAttached) return;
+    schedulesListenersAttached = true;
+    document.getElementById('btn-refresh-schedules')?.addEventListener('click', () => loadSchedules());
+    document.getElementById('btn-sync-missing')?.addEventListener('click', async () => {
+      const r = await fetch('/api/schedules/sync-missing', { method: 'POST' });
+      const d = await r.json();
+      alert(JSON.stringify(d));
+      await loadSchedules();
+    });
+    document.getElementById('btn-add-schedule')?.addEventListener('click', () => openScheduleModal());
+    document.getElementById('btn-convert-legacy')?.addEventListener('click', async () => {
+      if (!currentAccount) return;
+      const acc: any = currentAccount;
+      const firstWebhook: any = (activeAccountWebhooks || []).filter((w: any) => w.is_active)[0];
+      const body = {
+        account_id: accountId,
+        label: 'Legacy schedule',
+        webhook_id: firstWebhook?.id || null,
+        timezone: acc.timezone || 'UTC',
+        window_start: (acc.posting_window_start || '09:00').slice(0, 5),
+        window_end: (acc.posting_window_end || '21:00').slice(0, 5),
+        interval_minutes: acc.posting_interval_minutes || 36,
+        random_delay_minutes: acc.random_delay_minutes || 0,
+        active_days: Array.isArray(acc.active_days) ? acc.active_days : String(acc.active_days || 'Mon,Tue,Wed,Thu,Fri,Sat,Sun').replace(/[{}"']/g, '').split(',').map((x: string) => x.trim()),
+        started_at: acc.pinning_started_at || null,
+        batch: 1,
+      };
+      const r = await fetch('/api/schedules', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const d = await r.json();
+      if (!r.ok) { alert(d.error || 'Failed'); return; }
+      showFeedbackBanner('Schedule created from current account schedule.', 'success');
+      await loadSchedules();
+    });
+    document.getElementById('btn-cancel-sched')?.addEventListener('click', () => (document.getElementById('schedule-modal') as any)?.close?.());
+    ['f-sched-interval', 'f-sched-start', 'f-sched-end'].forEach((iv) => document.getElementById(iv)?.addEventListener('input', updateSchedCadence));
+    document.getElementById('schedule-form')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const id = (document.getElementById('f-sched-id') as HTMLInputElement).value;
+      const body = {
+        account_id: accountId,
+        label: (document.getElementById('f-sched-label') as HTMLInputElement).value,
+        webhook_id: (document.getElementById('f-channel') as HTMLSelectElement).value || null,
+        timezone: (document.getElementById('f-sched-tz') as HTMLInputElement).value,
+        batch: Number((document.getElementById('f-sched-batch') as HTMLInputElement).value),
+        window_start: (document.getElementById('f-sched-start') as HTMLInputElement).value,
+        window_end: (document.getElementById('f-sched-end') as HTMLInputElement).value,
+        interval_minutes: Number((document.getElementById('f-sched-interval') as HTMLInputElement).value),
+        random_delay_minutes: Number((document.getElementById('f-sched-delay') as HTMLInputElement).value),
+        active_days: ((document.getElementById('f-sched-days') as HTMLInputElement).value).split(',').map((x: string) => x.trim()).filter(Boolean),
+        started_at: (document.getElementById('f-sched-started') as HTMLInputElement).value || null,
+      };
+      const r = id
+        ? await fetch('/api/schedules/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+        : await fetch('/api/schedules', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const d = await r.json();
+      if (!r.ok) { alert(d.error || 'Failed'); return; }
+      (document.getElementById('schedule-modal') as any)?.close?.();
+      await loadSchedules();
+    });
+    document.getElementById('account-schedules-rows')?.addEventListener('click', (e) => {
+      const t = e.target as HTMLElement;
+      const act = t.getAttribute('data-sact'); const sid = t.getAttribute('data-sid');
+      if (act && sid) scheduleAction(sid, act);
+    });
   }
 
   init();
