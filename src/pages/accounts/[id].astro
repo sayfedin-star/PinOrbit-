@@ -352,7 +352,7 @@ const { id } = Astro.params;
         </div>
 
         <div>
-          <label class="block text-[11px] font-medium text-muted-foreground mb-1">Dispatch Token</label>
+          <label class="block text-[11px] font-medium text-muted-foreground mb-1">Dispatch Token (dispatch_token)</label>
           <div class="flex items-center gap-1.5">
             <input id="sched-int-token" type="password" readonly class="w-full rounded-lg border border-border bg-background py-1 px-2 text-[11px] font-mono text-foreground select-all" />
             <button type="button" id="btn-toggle-reveal-token" class="rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-medium hover:bg-muted">Reveal</button>
@@ -361,13 +361,13 @@ const { id } = Astro.params;
         </div>
 
         <div>
-          <label class="block text-[11px] font-medium text-muted-foreground mb-1">Provider-Agnostic Webhook URL (GET / POST)</label>
+          <label class="block text-[11px] font-medium text-muted-foreground mb-1">Provider-Agnostic Webhook URL (GET)</label>
           <div class="flex items-center gap-1.5">
             <input id="sched-int-url" type="text" readonly class="w-full rounded-lg border border-border bg-background py-1 px-2 text-[11px] font-mono text-foreground select-all" />
             <button type="button" id="btn-copy-sched-url" class="rounded-lg border border-border bg-background px-2.5 py-1 text-[11px] font-medium hover:bg-muted">Copy</button>
           </div>
         </div>
-        <p class="text-[10px] text-muted-foreground italic">Works with any cron provider if FastCron is down.</p>
+        <p class="text-[10px] text-muted-foreground italic">Provider-agnostic: works with any cron service or external trigger if FastCron is down.</p>
       </div>
 
       <div class="flex justify-end gap-2 border-t border-border pt-4">
@@ -1428,11 +1428,15 @@ const { id } = Astro.params;
 
     if (tokenSelect) {
       const currentVal = tokenSelect.value;
-      let optsHtml = '<option value="">Default (Workspace / Env)</option>';
+      const defaultToken = workspaceTokens.find((t: any) => t.is_default);
+      const defaultOptLabel = defaultToken
+        ? `Workspace default (${escapeHtml(defaultToken.name)} • ${escapeHtml(defaultToken.token_masked || '••••')})`
+        : 'Env fallback (no stored token)';
+      let optsHtml = '<option value="">' + defaultOptLabel + '</option>';
       for (const t of workspaceTokens) {
         optsHtml += '<option value="' + t.id + '">' + escapeHtml(t.name) + ' (' + escapeHtml(t.token_masked || '••••') + ')' + (t.is_default ? ' [Default]' : '') + '</option>';
       }
-      optsHtml += '<option value="custom">Custom Token...</option>';
+      optsHtml += '<option value="custom">Custom token…</option>';
       tokenSelect.innerHTML = optsHtml;
       if (currentVal) tokenSelect.value = currentVal;
     }
@@ -1468,6 +1472,82 @@ const { id } = Astro.params;
 
   function closeTokenModal() {
     (document.getElementById('token-modal') as any)?.close?.();
+  }
+
+  // ===== Portable Cron Builder (client mirror) =====
+  function buildPortableCron(s: {
+    interval_minutes?: number;
+    window_start?: string;
+    window_end?: string;
+    active_days?: string[] | string;
+  }): string {
+    const interval = Math.max(1, s?.interval_minutes || 36);
+    const startH = parseInt(String(s?.window_start || '09:00').slice(0, 2), 10) || 0;
+    const endH = parseInt(String(s?.window_end || '21:00').slice(0, 2), 10) || 0;
+
+    const windowHours: number[] = [];
+    if (startH <= endH) {
+      for (let h = startH; h <= endH; h++) windowHours.push(h);
+    } else {
+      for (let h = startH; h <= 23; h++) windowHours.push(h);
+      for (let h = 0; h <= endH; h++) windowHours.push(h);
+    }
+    if (windowHours.length === 0) windowHours.push(startH);
+
+    let minuteField = '0';
+    let hourField = '';
+
+    if (interval < 60) {
+      if (60 % interval === 0) {
+        minuteField = `*/${interval}`;
+      } else {
+        const mins: number[] = [];
+        for (let m = 0; m < 60; m += interval) mins.push(m);
+        minuteField = mins.join(',');
+      }
+      hourField = windowHours.join(',');
+    } else {
+      minuteField = '0';
+      const stepHours = Math.max(1, Math.round(interval / 60));
+      const selectedHours: number[] = [];
+      for (let i = 0; i < windowHours.length; i += stepHours) {
+        selectedHours.push(windowHours[i]);
+      }
+      hourField = selectedHours.join(',');
+    }
+
+    const dayMap: Record<string, number> = {
+      sun: 0, sunday: 0,
+      mon: 1, monday: 1,
+      tue: 2, tuesday: 2,
+      wed: 3, wednesday: 3,
+      thu: 4, thursday: 4,
+      fri: 5, friday: 5,
+      sat: 6, saturday: 6,
+    };
+
+    let activeDaysArr: string[] = [];
+    if (Array.isArray(s?.active_days)) {
+      activeDaysArr = s.active_days;
+    } else if (typeof s?.active_days === 'string') {
+      activeDaysArr = s.active_days.replace(/[{}"']/g, '').split(',').map((x) => x.trim()).filter(Boolean);
+    }
+
+    let dayField = '*';
+    if (activeDaysArr.length > 0 && activeDaysArr.length < 7) {
+      const dayNums = Array.from(
+        new Set(
+          activeDaysArr
+            .map((d) => dayMap[d.toLowerCase()])
+            .filter((n) => n !== undefined)
+        )
+      ).sort((a, b) => a - b);
+      if (dayNums.length > 0 && dayNums.length < 7) {
+        dayField = dayNums.join(',');
+      }
+    }
+
+    return `${minuteField} ${hourField} * * ${dayField}`;
   }
 
   // ===== Posting Schedules (engine) wiring =====
@@ -1581,10 +1661,26 @@ const { id } = Astro.params;
     const h = (winMins / 60).toFixed(1);
     const estPins = Math.floor(winMins / interval);
 
+    const checkedDays: string[] = [];
+    document.querySelectorAll('.f-sched-day-chk:checked').forEach((chk) => {
+      checkedDays.push((chk as HTMLInputElement).value);
+    });
+
+    const cronExpr = buildPortableCron({
+      interval_minutes: interval,
+      window_start: start,
+      window_end: end,
+      active_days: checkedDays.length > 0 ? checkedDays : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+    });
+
+    const perHourRuns = interval < 60
+      ? `${(60 / interval).toFixed(1).replace(/\.0$/, '')} runs/hr`
+      : `1 run / ${Math.round(interval / 60)} hrs`;
+
     const txtEl = document.getElementById('sched-cadence-text');
     const effEl = document.getElementById('sched-cadence-effective');
-    if (txtEl) txtEl.textContent = `At ${interval}m interval across ${h}h window, capacity is ~${estPins} pins/day.`;
-    if (effEl) effEl.textContent = `FastCron expression: every ${interval} minutes • Window & active days enforced server-side`;
+    if (txtEl) txtEl.textContent = `At ${interval}m interval across ${h}h window, capacity is ~${estPins} pins/day (${perHourRuns} active).`;
+    if (effEl) effEl.textContent = `Portable Cron: ${cronExpr} • Window & active days enforced server-side`;
   }
 
   function openScheduleModal(s?: any) {
@@ -1675,6 +1771,13 @@ const { id } = Astro.params;
       const d = await r.json();
       alert(JSON.stringify(d, null, 2));
       return;
+    }
+    if (act === 'pause' || act === 'resume') {
+      const sched = accountSchedules.find((x) => x.id === id);
+      if (!sched?.fastcron_job_id) {
+        alert('No FastCron job yet — press Sync Missing first');
+        return;
+      }
     }
     if (act === 'delete' && !confirm('Delete this schedule?')) return;
     const r = await fetch('/api/schedules/' + id + '/action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: act }) });

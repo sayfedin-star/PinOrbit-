@@ -55,33 +55,36 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     }
     if (action === 'run') {
       if (schedule.fastcron_job_id) {
-        const { getServerEnv } = await import('../../../../server/db/clients');
-        const { decryptToken } = await import('../../../../server/lib/token-crypto');
-        const env = getServerEnv(runtimeEnv);
-        let token: string | undefined;
-        if (schedule.fastcron_token_encrypted) {
-          const dec = await decryptToken(schedule.fastcron_token_encrypted, env.TOKEN_KEK);
-          if (dec) token = dec.trim();
-        }
-        if (!token && env.FASTCRON_API_TOKEN) token = env.FASTCRON_API_TOKEN.trim();
-        if (token) {
-          const res = await fastcronService.fastcronCall('cron_run', { id: schedule.fastcron_job_id }, token);
-          if (!res.success) throw new Error(res.error);
-          return new Response(JSON.stringify({ success: true, via: 'fastcron' }), { status: 200 });
-        }
+        try {
+          const { resolveScheduleToken } = await import('../../../../server/services/fastcron-service');
+          const token = await resolveScheduleToken(schedule, runtimeEnv);
+          if (token) {
+            const res = await fastcronService.fastcronCall('cron_run', { id: schedule.fastcron_job_id }, token);
+            if (res.success) {
+              return new Response(JSON.stringify({ success: true, via: 'fastcron', detail: res.data }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+            }
+          }
+        } catch {}
       }
       const base = (typeof process !== 'undefined' && process.env.DISPATCH_BASE_URL)
         ? process.env.DISPATCH_BASE_URL.replace(/\/$/, '')
         : 'https://pinorbit-v2.o-i.workers.dev';
-      const dispatchUrl = `${base}/api/internal/pinterest/dispatch-due-pin`;
+      const dispatchUrl = `${base}/api/internal/pinterest/dispatch-due-pin?schedule_id=${encodeURIComponent(schedule.id)}&dispatch_token=${encodeURIComponent(schedule.dispatch_token)}`;
       const res = await fetch(dispatchUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ schedule_id: schedule.id, dispatch_token: schedule.dispatch_token }),
+        method: 'GET',
         signal: AbortSignal.timeout(15000),
       });
-      const data = await res.json().catch(() => ({}));
-      return new Response(JSON.stringify({ success: res.ok, via: 'direct', ...data }), { status: res.ok ? 200 : res.status || 500, headers: { 'Content-Type': 'application/json' } });
+      const text = await res.text().catch(() => '');
+      let detail: any;
+      try {
+        detail = JSON.parse(text);
+      } catch {
+        detail = text.slice(0, 300);
+      }
+      return new Response(JSON.stringify({ success: res.ok, via: 'direct', status: res.status, detail }), {
+        status: res.ok ? 200 : res.status || 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
     if (action === 'clone') {
       const result = await clonePublishingSchedule(id, runtimeEnv);
