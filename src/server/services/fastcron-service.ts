@@ -1050,14 +1050,18 @@ export async function syncPublishingSchedule(schedule: any, runtimeEnv: Record<s
   } catch (e: any) {
     return { success: false, error: e.message };
   }
+  const base = (typeof process !== 'undefined' && process.env.DISPATCH_BASE_URL)
+    ? process.env.DISPATCH_BASE_URL.replace(/\/$/, '')
+    : 'https://pinorbit-v2.o-i.workers.dev';
+  const dispatchUrl = `${base}/api/internal/pinterest/dispatch-due-pin`;
   const cronExpr = buildPublishingCron(schedule);
   const jobName = `PinOrbit-pub-${schedule.id.slice(0, 8)}`;
-  const postData = JSON.stringify({ kind: 'pin.post', schedule_id: schedule.id, dispatch_token: schedule.dispatch_token });
+  const postData = JSON.stringify({ schedule_id: schedule.id, dispatch_token: schedule.dispatch_token });
   const jobParams: Record<string, any> = {
     name: jobName,
     expression: cronExpr,
     timezone: schedule.timezone || 'UTC',
-    url: webhookUrl,
+    url: dispatchUrl,
     httpMethod: 'POST',
     http_method: 'POST',
     httpHeaders: 'Content-Type: application/json',

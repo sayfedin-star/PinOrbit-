@@ -67,15 +67,18 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
           return new Response(JSON.stringify({ success: true, via: 'fastcron' }), { status: 200 });
         }
       }
-      const { data: wh } = await adminClient.from('account_webhooks').select('webhook_url').eq('id', schedule.webhook_id).eq('account_id', schedule.account_id).single();
-      let webhookUrl: string | null = wh?.webhook_url || null;
-      if (!webhookUrl) {
-        const { data: webhooks } = await adminClient.from('account_webhooks').select('webhook_url').eq('account_id', schedule.account_id).eq('is_active', true).limit(1);
-        if (webhooks && webhooks.length > 0) webhookUrl = webhooks[0].webhook_url;
-      }
-      if (!webhookUrl) throw new Error('No webhook URL found');
-      const res = await fetch(webhookUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: 'pin.post', schedule_id: schedule.id, dispatch_token: schedule.dispatch_token }), signal: AbortSignal.timeout(8000) });
-      return new Response(JSON.stringify({ success: res.ok, via: 'direct' }), { status: res.ok ? 200 : 500 });
+      const base = (typeof process !== 'undefined' && process.env.DISPATCH_BASE_URL)
+        ? process.env.DISPATCH_BASE_URL.replace(/\/$/, '')
+        : 'https://pinorbit-v2.o-i.workers.dev';
+      const dispatchUrl = `${base}/api/internal/pinterest/dispatch-due-pin`;
+      const res = await fetch(dispatchUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ schedule_id: schedule.id, dispatch_token: schedule.dispatch_token }),
+        signal: AbortSignal.timeout(15000),
+      });
+      const data = await res.json().catch(() => ({}));
+      return new Response(JSON.stringify({ success: res.ok, via: 'direct', ...data }), { status: res.ok ? 200 : res.status || 500, headers: { 'Content-Type': 'application/json' } });
     }
     if (action === 'clone') {
       const result = await clonePublishingSchedule(id, runtimeEnv);
