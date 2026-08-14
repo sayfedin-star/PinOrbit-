@@ -30,6 +30,9 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
       <span id="import-error-text">An error occurred during import processing.</span>
     </div>
 
+    <!-- Missing Boards Banner Container -->
+    <div id="import-missing-boards-banner" class="hidden"></div>
+
     <!-- Step 1: Target Account Selection -->
     <div class="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-4">
       <div class="flex items-center gap-3">
@@ -1082,6 +1085,51 @@ Keto Cauliflower Rice Bowl,https://images.unsplash.com/photo-1546069901-ba9599a7
     } else {
       showSuccess(`Successfully imported ${count} scheduled pins for ${selectedAccount.account_name}! All pins are set to 'pending' queue.`);
       document.getElementById('preview-section')?.classList.add('hidden');
+
+      // Check for missing boards from imported pins
+      const importedBoardNames = [...new Set(validPinsToCommit.map((p: any) => p.board_name).filter(Boolean))];
+      const existingBoardNames = new Set((accountBoards || []).map((b: any) => b.board_name));
+      const missingBoards = importedBoardNames.filter((name: string) => !existingBoardNames.has(name));
+
+      if (missingBoards.length > 0) {
+        const bannerEl = document.getElementById('import-missing-boards-banner');
+        if (bannerEl) {
+          bannerEl.innerHTML = `
+            <div class="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3.5 text-xs text-amber-600 dark:text-amber-400">
+              <p class="font-semibold mb-2">${missingBoards.length} boards not found in this account:</p>
+              <ul class="list-disc list-inside mb-2 text-[11px]">
+                ${missingBoards.slice(0, 5).map((name: string) => '<li>' + escapeHtml(name) + '</li>').join('')}
+                ${missingBoards.length > 5 ? '<li>...' + (missingBoards.length - 5) + ' more</li>' : ''}
+              </ul>
+              <button id="btn-create-missing-boards" class="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700">
+                Create ${missingBoards.length} missing board${missingBoards.length > 1 ? 's' : ''}
+              </button>
+            </div>
+          `;
+          bannerEl.classList.remove('hidden');
+
+          document.getElementById('btn-create-missing-boards')?.addEventListener('click', async () => {
+            let created = 0;
+            let failed = 0;
+            for (const boardName of missingBoards) {
+              try {
+                const r = await fetch('/api/boards/action', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ account_id: selectedAccount.id, action: 'create', board_name: boardName })
+                });
+                if (r.ok) created++;
+                else failed++;
+              } catch {
+                failed++;
+              }
+            }
+            showSuccess(`Created ${created} boards, ${failed} failed. Boards will sync via Make callback.`);
+            setTimeout(() => window.location.reload(), 1500);
+          });
+        }
+      }
+
       parsedRows = [];
       validPinsToCommit = [];
     }

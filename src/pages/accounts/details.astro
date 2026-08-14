@@ -45,6 +45,13 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
           <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           <span>Create Board</span>
         </button>
+        <button
+          id="btn-refresh-boards"
+          class="inline-flex items-center gap-1 rounded-xl border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground hover:bg-muted transition-all shadow-sm"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          <span>Refresh List</span>
+        </button>
         <a
           id="btn-import-posts"
           href="/imports"
@@ -1837,6 +1844,54 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
           hideWebhookForm();
           await refreshWebhooksList();
           await loadAllData();
+        }
+      }
+    });
+
+    // Board action listeners (Refresh list & Delete board)
+    document.getElementById('btn-refresh-boards')?.addEventListener('click', async () => {
+      if (!accountId) return;
+      try {
+        const r = await fetch('/api/boards/action', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ account_id: accountId, action: 'list' })
+        });
+        const d = await r.json();
+        if (r.ok) {
+          showFeedbackBanner('Board list refresh request sent. Boards will sync via Make callback.', 'success');
+          setTimeout(() => window.location.reload(), 1500);
+        } else {
+          alert(d.error || 'Failed to refresh boards');
+        }
+      } catch (e: any) {
+        alert('Failed to refresh boards: ' + e.message);
+      }
+    });
+
+    document.addEventListener('click', async (e) => {
+      const target = e.target as HTMLElement;
+      const deleteBtn = target.closest('.board-delete-btn');
+      if (deleteBtn && accountId) {
+        const boardId = deleteBtn.getAttribute('data-board-id');
+        const boardName = deleteBtn.getAttribute('data-board-name');
+        if (!boardId || !confirm(`Delete board "${boardName}"? This will remove it from Pinterest.`)) return;
+        
+        try {
+          const r = await fetch('/api/boards/action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ account_id: accountId, action: 'delete', board_id: boardId })
+          });
+          const d = await r.json();
+          if (r.ok) {
+            showFeedbackBanner(`Board "${boardName}" deletion request sent.`, 'success');
+            setTimeout(() => window.location.reload(), 1500);
+          } else {
+            alert(d.error || 'Failed to delete board');
+          }
+        } catch (e: any) {
+          alert('Failed to delete board: ' + e.message);
         }
       }
     });

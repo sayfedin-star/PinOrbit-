@@ -10,15 +10,25 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
       description="Board mappings per account used by Edge Function for automatic target board matching."
     />
 
-    <button
-      id="open-add-board-modal"
-      class="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground shadow-md hover:bg-primary/90 transition-all self-start sm:self-auto"
-    >
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-      </svg>
-      <span>Add Board</span>
-    </button>
+    <div class="flex items-center gap-2">
+      <button
+        id="btn-refresh-boards"
+        class="inline-flex items-center justify-center gap-1.5 rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs font-semibold text-foreground hover:bg-muted transition-all shadow-sm"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        <span>Refresh List</span>
+      </button>
+
+      <button
+        id="open-add-board-modal"
+        class="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground shadow-md hover:bg-primary/90 transition-all self-start sm:self-auto"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        <span>Add Board</span>
+      </button>
+    </div>
   </div>
 
   <!-- Global Success Notification Banner -->
@@ -297,6 +307,16 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
                         <span>Edit</span>
                       </button>
+                      <button
+                        data-board-id="${board.id}"
+                        data-board-name="${escapeHtml(board.board_name)}"
+                        data-account-id="${board.account_id || account.id}"
+                        class="board-delete-btn inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-500/10 transition-all"
+                        title="Delete board mapping"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                        <span>Delete</span>
+                      </button>
                     </div>
                   </div>
                 `
@@ -355,6 +375,15 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
                         <span>Edit</span>
+                      </button>
+                      <button
+                        data-board-id="${board.id}"
+                        data-board-name="${escapeHtml(board.board_name)}"
+                        data-account-id="${board.account_id || ''}"
+                        class="board-delete-btn inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-500/10 transition-all"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                        <span>Delete</span>
                       </button>
                     </div>
                   </div>
@@ -637,6 +666,59 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
 
     document.getElementById('dismiss-boards-banner')?.addEventListener('click', () => {
       document.getElementById('boards-success-banner')?.classList.add('hidden');
+    });
+
+    // Board action listeners (Refresh list & Delete board)
+    document.getElementById('btn-refresh-boards')?.addEventListener('click', async () => {
+      const activeAccount = currentAccounts.find((a) => a.is_active) || currentAccounts[0];
+      if (!activeAccount) {
+        alert('No active Pinterest account found to refresh boards.');
+        return;
+      }
+      try {
+        const r = await fetch('/api/boards/action', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ account_id: activeAccount.id, action: 'list' })
+        });
+        const d = await r.json();
+        if (r.ok) {
+          showSuccessBanner('Board list refresh request sent. Boards will sync via Make callback.');
+          setTimeout(() => window.location.reload(), 1500);
+        } else {
+          alert(d.error || 'Failed to refresh boards');
+        }
+      } catch (e: any) {
+        alert('Failed to refresh boards: ' + e.message);
+      }
+    });
+
+    document.addEventListener('click', async (e) => {
+      const target = e.target as HTMLElement;
+      const deleteBtn = target.closest('.board-delete-btn');
+      if (deleteBtn) {
+        const boardId = deleteBtn.getAttribute('data-board-id');
+        const boardName = deleteBtn.getAttribute('data-board-name');
+        const accId = deleteBtn.getAttribute('data-account-id') || currentAccounts[0]?.id;
+        if (!boardId || !accId || !confirm(`Delete board "${boardName}"? This will remove it from Pinterest.`)) return;
+
+        try {
+          const r = await fetch('/api/boards/action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ account_id: accId, action: 'delete', board_id: boardId })
+          });
+          const d = await r.json();
+          if (r.ok) {
+            showSuccessBanner(`Board "${boardName}" deletion request sent.`);
+            setTimeout(() => window.location.reload(), 1500);
+          } else {
+            alert(d.error || 'Failed to delete board');
+          }
+        } catch (e: any) {
+          alert('Failed to delete board: ' + e.message);
+        }
+      }
     });
   }
 
