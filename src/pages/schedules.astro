@@ -1,0 +1,121 @@
+---
+export const prerender = false;
+import Layout from '../layouts/Layout.astro';
+---
+<Layout title="Posting Schedules">
+  <div class="p-6 space-y-4">
+    <div class="flex items-center justify-between gap-2">
+      <h1 class="text-xl font-bold">Posting Schedules</h1>
+      <div class="flex gap-2">
+        <button id="btn-sync" class="px-3 py-1 rounded border">Sync Missing</button>
+        <button id="btn-refresh" class="px-3 py-1 rounded border">Refresh</button>
+      </div>
+    </div>
+    <div class="grid grid-cols-3 gap-4 text-sm">
+      <div class="border rounded p-3">Active: <b id="c-active">0</b></div>
+      <div class="border rounded p-3">Paused: <b id="c-paused">0</b></div>
+      <div class="border rounded p-3">Not synced / error: <b id="c-unsynced">0</b></div>
+    </div>
+    <table class="w-full text-xs border">
+      <thead>
+        <tr class="text-left border-b">
+          <th class="p-2"><input type="checkbox" id="chk-all" /></th>
+          <th class="p-2">Schedule</th>
+          <th class="p-2">Window / TZ</th>
+          <th class="p-2">Interval / Delay</th>
+          <th class="p-2">Days</th>
+          <th class="p-2">Status</th>
+          <th class="p-2">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+
+  <dialog id="drawer" class="rounded p-0 w-[560px] max-w-full">
+    <div class="p-4">
+      <h2 id="drawer-title" class="text-lg font-bold mb-2"></h2>
+      <pre id="drawer-body" class="text-xs overflow-auto max-h-[60vh]"></pre>
+      <div class="flex justify-end mt-2"><button id="btn-close-drawer" class="px-3 py-1 border rounded">Close</button></div>
+    </div>
+  </dialog>
+
+  <script>
+    const $ = (s: string) => document.querySelector(s) as HTMLElement;
+    const rowsEl = $('#rows');
+    let selected = new Set<string>();
+    let cache: any[] = [];
+    const esc = (v: any) => String(v ?? '').replace(/[&<>"]/g, (c) => (({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }) as any)[c]);
+
+    function rowHtml(s: any) {
+      const acc = s.accounts?.account_name || s.account_id;
+      return '<tr class="border-b">' +
+        '<td class="p-2"><input type="checkbox" data-chk="' + s.id + '" ' + (selected.has(s.id) ? 'checked' : '') + ' /></td>' +
+        '<td class="p-2"><b>' + esc(s.label || acc) + '</b><br/><span class="opacity-60">' + esc(acc) + '</span></td>' +
+        '<td class="p-2">' + esc(s.window_start) + '–' + esc(s.window_end) + '<br/>' + esc(s.timezone) + '</td>' +
+        '<td class="p-2">' + s.interval_minutes + 'm ±' + s.random_delay_minutes + 'm</td>' +
+        '<td class="p-2">' + esc((s.active_days || []).join(',')) + '</td>' +
+        '<td class="p-2">' + esc(s.status) + (s.fastcron_job_id ? '' : ' (no job)') + '</td>' +
+        '<td class="p-2"><button data-act="run" data-id="' + s.id + '">Run</button> ' +
+        '<button data-act="' + (s.status === 'paused' ? 'resume' : 'pause') + '" data-id="' + s.id + '">' + (s.status === 'paused' ? 'Resume' : 'Pause') + '</button> ' +
+        '<button data-act="logs" data-id="' + s.id + '">Logs</button> ' +
+        '<a href="/accounts/' + esc(s.account_id) + '" class="text-primary hover:underline">Open account</a></td></tr>';
+    }
+
+    async function load() {
+      const r = await fetch('/api/schedules');
+      const d = await r.json();
+      cache = Array.isArray(d) ? d : [];
+      $('#c-active').textContent = String(cache.filter((x) => x.status === 'active').length);
+      $('#c-paused').textContent = String(cache.filter((x) => x.status === 'paused').length);
+      $('#c-unsynced').textContent = String(cache.filter((x) => x.status !== 'active' && x.status !== 'paused').length);
+      rowsEl.innerHTML = cache.map(rowHtml).join('');
+      updateBulk();
+    }
+    function updateBulk() {
+      // bulk bar removed - read-only overview
+    }
+    function updateCadence() {
+      // cadence removed - modal no longer exists
+    }
+    function openModal(s: any) {
+      // modal removed - read-only overview
+    }
+    async function action(id: string, act: string) {
+      if (act === 'logs' || act === 'failures' || act === 'next') {
+        const r = await fetch('/api/schedules/' + id + '/fastcron?view=' + act);
+        const d = await r.json();
+        $('#drawer-title').textContent = act.toUpperCase();
+        $('#drawer-body').textContent = JSON.stringify(d, null, 2);
+        ($('#drawer') as any).showModal();
+        return;
+      }
+      if (act === 'delete' && !confirm('Delete schedule?')) return;
+      const r = await fetch('/api/schedules/' + id + '/action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: act }) });
+      const d = await r.json();
+      if (!r.ok) alert(d.error || 'Failed');
+      load();
+    }
+    document.addEventListener('click', (e) => {
+      const t = e.target as HTMLElement;
+      const act = t.getAttribute('data-act'); const id = t.getAttribute('data-id');
+      if (act && id) { action(id, act); return; }
+      const chk = t.getAttribute('data-chk');
+      if (chk) { if (selected.has(chk)) selected.delete(chk); else selected.add(chk); updateBulk(); }
+    });
+    $('#btn-refresh').addEventListener('click', load);
+    $('#btn-close-drawer').addEventListener('click', () => ($('#drawer') as any).close());
+    $('#btn-sync').addEventListener('click', async () => {
+      const r = await fetch('/api/schedules/sync-missing', { method: 'POST' });
+      const d = await r.json();
+      alert(JSON.stringify(d));
+      load();
+    });
+    $('#chk-all').addEventListener('change', (e) => {
+      const on = (e.target as HTMLInputElement).checked;
+      selected = new Set(on ? cache.map((x) => x.id) : []);
+      load();
+    });
+    load();
+  </script>
+</Layout>

@@ -28,6 +28,10 @@ export const PATCH: APIRoute = async ({ request, params, locals }) => {
   try {
     await assertWorkspaceAccess(schedulingClient, workspaceId, user.id, 'admin');
     const adminClient = dbClients.getSchedulingAdmin(runtimeEnv);
+    const { data: schedule } = await adminClient.from('posting_schedules').select('*').eq('id', id).single();
+    if (!schedule || schedule.workspace_id !== workspaceId) {
+      return new Response(JSON.stringify({ error: 'Schedule not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+    }
     const updateFields: Record<string, any> = {};
     const allowedFields = ['label', 'webhook_id', 'timezone', 'window_start', 'window_end', 'interval_minutes', 'random_delay_minutes', 'active_days', 'started_at', 'batch', 'status'];
     for (const field of allowedFields) {
@@ -59,7 +63,10 @@ export const DELETE: APIRoute = async ({ params, locals }) => {
   try {
     await assertWorkspaceAccess(schedulingClient, workspaceId, user.id, 'admin');
     const adminClient = dbClients.getSchedulingAdmin(runtimeEnv);
-    const { data: schedule } = await adminClient.from('posting_schedules').select('fastcron_job_id').eq('id', id).single();
+    const { data: schedule } = await adminClient.from('posting_schedules').select('*').eq('id', id).single();
+    if (!schedule || schedule.workspace_id !== workspaceId) {
+      return new Response(JSON.stringify({ error: 'Schedule not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+    }
     const result = await deletePublishingSchedule(id, schedule?.fastcron_job_id, runtimeEnv);
     if (!result.success) throw new Error(result.error);
     return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });

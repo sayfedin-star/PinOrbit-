@@ -23,8 +23,11 @@ export const GET: APIRoute = async ({ url, params, locals }) => {
   try {
     await assertWorkspaceAccess(schedulingClient, workspaceId, user.id);
     const adminClient = dbClients.getSchedulingAdmin(runtimeEnv);
-    const { data: schedule } = await adminClient.from('posting_schedules').select('fastcron_job_id, fastcron_token_encrypted').eq('id', id).single();
-    if (!schedule || !schedule.fastcron_job_id) {
+    const { data: schedule } = await adminClient.from('posting_schedules').select('fastcron_job_id, fastcron_token_encrypted, workspace_id').eq('id', id).single();
+    if (!schedule || schedule.workspace_id !== workspaceId) {
+      return new Response(JSON.stringify({ error: 'Schedule not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (!schedule.fastcron_job_id) {
       return new Response(JSON.stringify({ error: 'Job not configured' }), { status: 400 });
     }
 

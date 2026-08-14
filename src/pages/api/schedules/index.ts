@@ -6,7 +6,7 @@ import { assertWorkspaceAccess } from '../../../server/auth/workspace-guard';
 import { dbClients } from '../../../server/db/clients';
 import { syncPublishingSchedule } from '../../../server/services/fastcron-service';
 
-export const GET: APIRoute = async ({ locals }) => {
+export const GET: APIRoute = async ({ url, locals }) => {
   const user = locals.user;
   const schedulingClient = locals.supabase;
   const workspaceId = locals.activeWorkspaceId;
@@ -22,11 +22,19 @@ export const GET: APIRoute = async ({ locals }) => {
   try {
     await assertWorkspaceAccess(schedulingClient, workspaceId, user.id);
     const adminClient = dbClients.getSchedulingAdmin(runtimeEnv);
-    const { data, error } = await adminClient
-      .from('posting_schedules')
-      .select('*, accounts(account_name)')
-      .eq('workspace_id', workspaceId)
-      .order('created_at', { ascending: false });
+    let query = adminClient.from('posting_schedules').select('*, accounts(account_name)').eq('workspace_id', workspaceId);
+    
+    // Accept optional ?account_id= and verify it belongs to workspace
+    const account_id = url.searchParams.get('account_id');
+    if (account_id) {
+      const { data: account } = await adminClient.from('accounts').select('id, workspace_id').eq('id', account_id).maybeSingle();
+      if (!account || account.workspace_id !== workspaceId) {
+        return new Response(JSON.stringify({ error: 'Forbidden: account does not belong to the active workspace.' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+      }
+      query = query.eq('account_id', account_id);
+    }
+    
+    const { data, error } = await query.order('created_at', { ascending: false });
     if (error) throw error;
     return new Response(JSON.stringify(data || []), { status: 200, headers: { 'Content-Type': 'application/json' } });
   } catch (err: any) {
@@ -59,9 +67,15 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return new Response(JSON.stringify({ error: 'account_id is required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
   }
 
+  // SECURITY: Verify account belongs to workspace
+  const adminClient = dbClients.getSchedulingAdmin(runtimeEnv);
+  const { data: account } = await adminClient.from('accounts').select('id, workspace_id').eq('id', body.account_id).maybeSingle();
+  if (!account || account.workspace_id !== workspaceId) {
+    return new Response(JSON.stringify({ error: 'Forbidden: account does not belong to the active workspace.' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+  }
+
   try {
     await assertWorkspaceAccess(schedulingClient, workspaceId, user.id, 'admin');
-    const adminClient = dbClients.getSchedulingAdmin(runtimeEnv);
     const dispatch_token = crypto.randomUUID();
     const newRow = {
       workspace_id: workspaceId,
@@ -86,6 +100,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const syncResult = await syncPublishingSchedule(inserted, runtimeEnv);
     if (!syncResult.success) {
       await adminClient.from('posting_schedules').update({ status: 'error' }).eq('id', inserted.id);
+    } else {
+      await adminClient.from('posting_schedules').update({ status: 'active', fastcron_job_id: syncResult.job_id }).eq('id', inserted.id);
     }
     return new Response(JSON.stringify({ ...inserted, job_id: syncResult.job_id }), { status: 201, headers: { 'Content-Type': 'application/json' } });
   } catch (err: any) {
