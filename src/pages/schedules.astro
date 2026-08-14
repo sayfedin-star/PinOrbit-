@@ -59,7 +59,7 @@ import Layout from '../layouts/Layout.astro';
         '<td class="p-2"><button data-act="run" data-id="' + s.id + '">Run</button> ' +
         '<button data-act="' + (s.status === 'paused' ? 'resume' : 'pause') + '" data-id="' + s.id + '">' + (s.status === 'paused' ? 'Resume' : 'Pause') + '</button> ' +
         '<button data-act="logs" data-id="' + s.id + '">Logs</button> ' +
-        '<a href="/accounts/' + esc(s.account_id) + '" class="text-primary hover:underline">Open account</a></td></tr>';
+        '<a href="/accounts/details?id=' + esc(s.account_id) + '" class="text-primary hover:underline">Open account</a></td></tr>';
     }
 
     async function load() {
