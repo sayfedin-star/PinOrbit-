@@ -3,7 +3,9 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 import { validateUserSession } from '../../../server/auth/session';
 import { assertWorkspaceAccess } from '../../../server/auth/workspace-guard';
-import { dbClients } from '../../../server/db/clients';
+import { dbClients, getServerEnv } from '../../../server/db/clients';
+import { encryptToken, decryptToken } from '../../../server/lib/token-crypto';
+import { maskSecret } from '../../../server/services/webhook-secrets';
 import { syncPublishingSchedule } from '../../../server/services/fastcron-service';
 
 export const GET: APIRoute = async ({ url, locals }) => {
@@ -36,7 +38,31 @@ export const GET: APIRoute = async ({ url, locals }) => {
     
     const { data, error } = await query.order('created_at', { ascending: false });
     if (error) throw error;
-    return new Response(JSON.stringify(data || []), { status: 200, headers: { 'Content-Type': 'application/json' } });
+
+    const env = getServerEnv(runtimeEnv);
+    const sanitizedSchedules = await Promise.all((data || []).map(async (schedule: any) => {
+      const result: any = { ...schedule };
+      delete result.fastcron_token_encrypted;  // NEVER send ciphertext to client
+      
+      if (schedule.fastcron_token_encrypted) {
+        try {
+          const decrypted = await decryptToken(schedule.fastcron_token_encrypted, env.TOKEN_KEK);
+          if (decrypted) {
+            result.has_fastcron_token = true;
+            result.fastcron_token_masked = maskSecret(decrypted);  // Returns '••••XXXX'
+          } else {
+            result.has_fastcron_token = false;
+          }
+        } catch {
+          result.has_fastcron_token = false;
+        }
+      } else {
+        result.has_fastcron_token = false;
+      }
+      return result;
+    }));
+
+    return new Response(JSON.stringify(sanitizedSchedules), { status: 200, headers: { 'Content-Type': 'application/json' } });
   } catch (err: any) {
     return new Response(JSON.stringify({ error: err.message || 'Failed to fetch schedules' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
   }
@@ -76,6 +102,17 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   try {
     await assertWorkspaceAccess(schedulingClient, workspaceId, user.id, 'admin');
+
+    let fastcron_token_encrypted: string | null = null;
+    if (body.fastcron_token && typeof body.fastcron_token === 'string' && body.fastcron_token.trim().length > 0) {
+      try {
+        const env = getServerEnv(runtimeEnv);
+        fastcron_token_encrypted = await encryptToken(body.fastcron_token.trim(), env.TOKEN_KEK);
+      } catch (e: any) {
+        return new Response(JSON.stringify({ error: 'Failed to encrypt token: ' + e.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+      }
+    }
+
     const dispatch_token = crypto.randomUUID();
     const newRow = {
       workspace_id: workspaceId,
@@ -93,7 +130,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       status: 'not_synced',
       dispatch_token,
       fastcron_job_id: null,
-      fastcron_token_encrypted: body.fastcron_token_encrypted || null,
+      fastcron_token_encrypted: fastcron_token_encrypted,
     };
     const { data: inserted, error: insertErr } = await adminClient.from('posting_schedules').insert(newRow).select().single();
     if (insertErr || !inserted) throw insertErr || new Error('Insert failed');

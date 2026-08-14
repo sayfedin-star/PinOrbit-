@@ -3,7 +3,8 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 import { validateUserSession } from '../../../server/auth/session';
 import { assertWorkspaceAccess } from '../../../server/auth/workspace-guard';
-import { dbClients } from '../../../server/db/clients';
+import { dbClients, getServerEnv } from '../../../server/db/clients';
+import { encryptToken } from '../../../server/lib/token-crypto';
 import { syncPublishingSchedule, deletePublishingSchedule } from '../../../server/services/fastcron-service';
 
 export const PATCH: APIRoute = async ({ request, params, locals }) => {
@@ -36,6 +37,19 @@ export const PATCH: APIRoute = async ({ request, params, locals }) => {
     const allowedFields = ['label', 'webhook_id', 'timezone', 'window_start', 'window_end', 'interval_minutes', 'random_delay_minutes', 'active_days', 'started_at', 'batch', 'status'];
     for (const field of allowedFields) {
       if (body[field] !== undefined) updateFields[field] = body[field];
+    }
+    if (body.fastcron_token !== undefined) {
+      if (body.fastcron_token === null) {
+        updateFields.fastcron_token_encrypted = null;  // Clear override
+      } else if (typeof body.fastcron_token === 'string' && body.fastcron_token.trim().length > 0) {
+        try {
+          const env = getServerEnv(runtimeEnv);
+          updateFields.fastcron_token_encrypted = await encryptToken(body.fastcron_token.trim(), env.TOKEN_KEK);
+        } catch (e: any) {
+          return new Response(JSON.stringify({ error: 'Failed to encrypt token: ' + e.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+        }
+      }
+      // If empty string, do nothing (keep existing value)
     }
     if (Object.keys(updateFields).length === 0) {
       return new Response(JSON.stringify({ error: 'No valid fields to update' }), { status: 400, headers: { 'Content-Type': 'application/json' } });

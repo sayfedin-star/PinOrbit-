@@ -256,6 +256,11 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
       <h2 id="schedule-modal-title" class="text-lg font-bold">Add Posting Schedule</h2>
       <input type="hidden" id="f-sched-id" />
       <label class="block">Label<input id="f-sched-label" class="border rounded w-full p-2" /></label>
+      <label class="block">
+        FastCron API Token (Write-Only Override)
+        <input id="f-fc-token" type="password" class="border rounded w-full p-2" placeholder="Leave empty for default" autocomplete="off" />
+      </label>
+      <div id="fc-token-status" class="text-xs text-muted-foreground"></div>
       <label class="block">Channel<select id="f-channel" class="border rounded w-full p-2"></select></label>
       <div class="grid grid-cols-2 gap-2">
         <label class="block">Timezone<input id="f-sched-tz" class="border rounded w-full p-2" value="UTC" /></label>
@@ -2302,6 +2307,17 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
     (document.getElementById('schedule-modal-title') as HTMLElement).textContent = s ? 'Edit Posting Schedule' : 'Add Posting Schedule';
     (document.getElementById('f-sched-id') as HTMLInputElement).value = s?.id || '';
     (document.getElementById('f-sched-label') as HTMLInputElement).value = s?.label || '';
+    (document.getElementById('f-fc-token') as HTMLInputElement).value = '';
+
+    const statusEl = document.getElementById('fc-token-status');
+    if (statusEl) {
+      if (s?.has_fastcron_token && s?.fastcron_token_masked) {
+        statusEl.innerHTML = '<span class="text-emerald-600">Custom: ' + escapeHtml(s.fastcron_token_masked) + '</span>';
+      } else {
+        statusEl.innerHTML = '<span class="text-muted-foreground">Using default (environment)</span>';
+      }
+    }
+
     if (s?.webhook_id) (document.getElementById('f-channel') as HTMLSelectElement).value = s.webhook_id;
     (document.getElementById('f-sched-tz') as HTMLInputElement).value = s?.timezone || acc.timezone || 'UTC';
     (document.getElementById('f-sched-batch') as HTMLInputElement).value = String(s?.batch ?? 1);
@@ -2371,6 +2387,7 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
     document.getElementById('schedule-form')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const id = (document.getElementById('f-sched-id') as HTMLInputElement).value;
+      const fcToken = (document.getElementById('f-fc-token') as HTMLInputElement).value.trim();
       const body = {
         account_id: accountId,
         label: (document.getElementById('f-sched-label') as HTMLInputElement).value,
@@ -2383,6 +2400,7 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
         random_delay_minutes: Number((document.getElementById('f-sched-delay') as HTMLInputElement).value),
         active_days: ((document.getElementById('f-sched-days') as HTMLInputElement).value).split(',').map((x: string) => x.trim()).filter(Boolean),
         started_at: (document.getElementById('f-sched-started') as HTMLInputElement).value || null,
+        ...(fcToken.length > 0 ? { fastcron_token: fcToken } : {}),
       };
       const r = id
         ? await fetch('/api/schedules/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
