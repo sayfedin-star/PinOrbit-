@@ -1,6 +1,7 @@
 export const prerender = false;
 import type { APIRoute } from 'astro';
 import { dbClients, hasSchedulingSecretKey } from '../../../../server/db/clients';
+import { triggerBoardAction } from '../../../../server/services/fastcron-service';
 
 const json = (o: any, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { 'Content-Type': 'application/json' } });
 
@@ -81,9 +82,9 @@ async function handleDispatch(body: any, locals: any) {
     }
     if (!boardId) {
       if (account.auto_create_missing_boards && pin.board_name) {
-        const idem = `board.create:${accountId}:${String(pin.board_name).toLowerCase()}`;
+        const idem = `create:${accountId}:${String(pin.board_name).toLowerCase()}`;
         await admin.from('board_provisioning_requests').upsert({ workspace_id: workspaceId, account_id: accountId, board_name: pin.board_name, idempotency_key: idem, status: 'provisioning', webhook_id: hook.id }, { onConflict: 'idempotency_key' }).then(() => {});
-        await fetch(hook.webhook_url, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ event: 'board.create', idempotency_key: idem, account_id: accountId, workspace_id: workspaceId, board_name: pin.board_name, webhook_id: hook.id }), signal: AbortSignal.timeout(8000) }).catch(() => {});
+        await triggerBoardAction(accountId, 'create', { board_name: pin.board_name, workspace_id: workspaceId, webhook_id: hook.id, idempotency_key: idem }, runtimeEnv).catch(() => {});
       }
       await admin.from('pins').update({ status: 'pending', processing_started_at: null, updated_at: new Date().toISOString() }).eq('id', c.id);
       skipped++; continue;

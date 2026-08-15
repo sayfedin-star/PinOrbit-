@@ -108,7 +108,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
         status: insErr ? 'failed' : 'completed',
         error_message: insErr?.message || null,
         completed_at: new Date().toISOString(),
-      }).eq('idempotency_key', `board.create:${accId}:${String(bName).toLowerCase()}`).then(() => {});
+      }).eq('idempotency_key', `create:${accId}:${String(bName).toLowerCase()}`).then(() => {});
 
       return new Response(JSON.stringify({
         success: !insErr,
