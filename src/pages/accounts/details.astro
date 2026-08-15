@@ -253,16 +253,7 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
         </div>
         <div>
-          <div class="flex items-center gap-2">
-            <h3 class="text-sm font-bold text-foreground">Posting Schedules & Automation</h3>
-            <span id="sched-live-status" class="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
-              <span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span>Window Active</span>
-            </span>
-            <span id="sched-next-countdown" class="inline-flex items-center gap-1 rounded-full bg-primary/10 border border-primary/20 px-2.5 py-0.5 text-[11px] font-semibold text-primary">
-              Next Pin: ~2 mins
-            </span>
-          </div>
+          <h3 class="text-sm font-bold text-foreground">Posting Schedules & Automation</h3>
           <p class="text-xs text-muted-foreground">Manage multi-schedule posting engine for this account</p>
         </div>
       </div>
@@ -1466,8 +1457,6 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
     const delayElem = document.getElementById('sched-random-delay');
     const tzElem = document.getElementById('sched-timezone');
     const lastPubElem = document.getElementById('sched-last-published');
-    const statusElem = document.getElementById('sched-live-status');
-    const countdownElem = document.getElementById('sched-next-countdown');
     const activeDaysElem = document.getElementById('sched-active-days');
     const paceValElem = document.getElementById('sched-pace-val');
     const paceDescElem = document.getElementById('sched-pace-desc');
@@ -1569,55 +1558,6 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
     }
 
 
-
-    if (!acc.is_active) {
-      if (statusElem) {
-        statusElem.className = 'inline-flex items-center gap-1.5 rounded-full bg-rose-500/10 border border-rose-500/30 px-2.5 py-0.5 text-[11px] font-bold text-rose-500';
-        statusElem.innerHTML = `<span class="h-1.5 w-1.5 rounded-full bg-rose-500"></span><span>Account Deactivated</span>`;
-      }
-      if (countdownElem) {
-        countdownElem.textContent = 'Publishing Paused';
-      }
-    } else if (!accountSchedules || accountSchedules.length === 0) {
-      if (statusElem) {
-        statusElem.className = 'inline-flex items-center gap-1.5 rounded-full bg-zinc-500/10 border border-zinc-500/30 px-2.5 py-0.5 text-[11px] font-bold text-zinc-400';
-        statusElem.innerHTML = `<span class="h-1.5 w-1.5 rounded-full bg-zinc-400"></span><span>No schedules yet</span>`;
-      }
-      if (countdownElem) {
-        countdownElem.textContent = 'No schedules configured';
-      }
-    } else if (!isDayActive) {
-      if (statusElem) {
-        statusElem.className = 'inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 px-2.5 py-0.5 text-[11px] font-bold text-amber-600 dark:text-amber-400';
-        statusElem.innerHTML = `<span class="h-1.5 w-1.5 rounded-full bg-amber-500"></span><span>Day Off (${currentDayStr} Paused)</span>`;
-      }
-      if (countdownElem) {
-        countdownElem.textContent = 'Next Active Day: Tomorrow';
-      }
-    } else if (isInWindow) {
-      if (statusElem) {
-        statusElem.className = 'inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400';
-        statusElem.innerHTML = `<span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span><span>Window Active</span>`;
-      }
-      const activeSched = accountSchedules.find((s: any) => s.status === 'active');
-      if (activeSched && activeSched.cron_expression) {
-        const nextComputed = calculateNextExecution(activeSched.cron_expression, tz);
-        if (countdownElem) countdownElem.textContent = `Next Pin: ${nextComputed}`;
-      } else {
-        const intervalMins = activeSched?.interval_minutes || acc.posting_interval_minutes || 30;
-        if (countdownElem) {
-          countdownElem.textContent = `Next Pin: ~${intervalMins} mins`;
-        }
-      }
-    } else {
-      if (statusElem) {
-        statusElem.className = 'inline-flex items-center gap-1.5 rounded-full bg-blue-500/10 border border-blue-500/30 px-2.5 py-0.5 text-[11px] font-bold text-blue-500';
-        statusElem.innerHTML = `<span class="h-1.5 w-1.5 rounded-full bg-blue-500"></span><span>Window Closed (Overnight)</span>`;
-      }
-      if (countdownElem) {
-        countdownElem.textContent = `Resumes at ${startStr}`;
-      }
-    }
 
     // 5. Cadence Pace Analyzer & Quick Auto-Adjust Action
     const maxDaily = acc.max_pins_per_day || 20;

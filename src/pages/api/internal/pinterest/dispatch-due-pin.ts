@@ -90,7 +90,7 @@ async function handleDispatch(body: any, locals: any) {
       skipped++; continue;
     }
     const pushRes = await fetch(hook.webhook_url, {
-      method: 'POST', headers: { 'Content-Type': 'text/plain' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         event: 'pin.post',
         idempotency_key: `pin.post:${pin.id}:${pin.attempts}`,
