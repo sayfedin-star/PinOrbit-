@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { createServerClient, createBrowserClient } from '@supabase/ssr';
 import type { AstroCookies } from 'astro';
 import type { Account, Board, Pin, Log, AuditLog, AccountWebhook, ImportSession, DashboardKPIs, AccountPinStats, AccountWebhookSummary, PinDeliveryLog } from './types';
@@ -485,7 +485,7 @@ export async function getAccountWebhooks(accountId?: string, workspaceId?: strin
       // Find accounts for workspaceId
       const { data: accs } = await supabase.from('accounts').select('id').eq('workspace_id', workspaceId);
       if (accs && accs.length > 0) {
-        const accIds = accs.map((a) => a.id);
+        const accIds = accs.map((a: any) => a.id);
         query = query.in('account_id', accIds);
       } else {
         return [];

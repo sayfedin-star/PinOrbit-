@@ -1159,8 +1159,22 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
         getAccountWebhookSummary(accountId),
       ]);
 
-      const whs = await getAccountWebhooks(accountId);
-      activeAccountWebhooks = (whs || []).filter((w: any) => w.is_active);
+      const tableRows = document.getElementById('webhook-orchestration-rows');
+      if (tableRows) {
+        tableRows.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-muted-foreground animate-pulse">Loading webhook channels...</td></tr>';
+      }
+
+      try {
+        const whs = await getAccountWebhooks(accountId);
+        activeAccountWebhooks = whs || [];
+        renderWebhookCards();
+      } catch (whErr: any) {
+        activeAccountWebhooks = [];
+        if (tableRows) {
+          tableRows.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-rose-500 font-semibold">Failed to load webhooks: ${escapeHtml(whErr.message || 'Unknown error')}</td></tr>`;
+        }
+      }
+
       setupSchedulesListeners();
       await loadTokens();
       await loadSchedules();
@@ -1186,7 +1200,6 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
       renderHeader(currentAccount);
       renderKPIs(stats, currentAccount);
       renderScheduling(currentAccount);
-      renderWebhookSummary(whSummary);
       renderRecentLogs(logs);
 
       // Auto-reschedule pending pins to pre-computed pacing slots
@@ -2185,24 +2198,28 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
   }
 
   async function refreshWebhooksList() {
-    if (!currentAccount) return;
+    const tableRows = document.getElementById('webhook-orchestration-rows');
     const container = document.getElementById('webhooks-list-container');
-    if (!container) return;
-
-    container.innerHTML = '<div class="p-8 text-center text-xs text-muted-foreground animate-pulse">Loading account webhooks...</div>';
-
-    activeAccountWebhooks = await getAccountWebhooks(currentAccount.id);
-
-    if (!activeAccountWebhooks || activeAccountWebhooks.length === 0) {
-      container.innerHTML = renderEmptyStateHTML(
-        'No Webhooks Configured',
-        'Click "+ Add Webhook" above to create your first Make.com outbound channel.',
-        'inbox'
-      );
-      return;
+    if (tableRows) {
+      tableRows.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-muted-foreground animate-pulse">Loading webhook channels...</td></tr>';
+    }
+    if (container) {
+      container.innerHTML = '<div class="p-8 text-center text-xs text-muted-foreground animate-pulse">Loading account webhooks...</div>';
     }
 
-    renderWebhookCards();
+    try {
+      const whs = await getAccountWebhooks(accountId || currentAccount?.id || '');
+      activeAccountWebhooks = whs || [];
+      renderWebhookCards();
+    } catch (err: any) {
+      activeAccountWebhooks = [];
+      if (tableRows) {
+        tableRows.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-rose-500 font-semibold">Failed to load webhooks: ${escapeHtml(err.message || 'Unknown error')}</td></tr>`;
+      }
+      if (container) {
+        container.innerHTML = `<div class="p-4 text-center text-rose-500 text-xs">Failed to load webhooks: ${escapeHtml(err.message || 'Unknown error')}</div>`;
+      }
+    }
   }
 
   function renderWebhookCards() {
@@ -2214,7 +2231,7 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
     let totalCap = 0;
     let totalRem = 0;
 
-    activeAccountWebhooks.forEach((h) => {
+    (activeAccountWebhooks || []).forEach((h) => {
       const cap = h.monthly_capacity ?? 500;
       const rem = Math.max(0, cap - (h.monthly_usage ?? 0));
       if (h.is_active) {
@@ -2226,14 +2243,23 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
     if (combinedCapEl) {
       combinedCapEl.textContent = `Combined: ${totalRem.toLocaleString()} / ${totalCap.toLocaleString()} runs remaining`;
     }
-    if (combinedBarEl && totalCap > 0) {
-      const combinedPct = Math.min(100, Math.round((totalRem / totalCap) * 100));
+    if (combinedBarEl) {
+      const combinedPct = totalCap > 0 ? Math.min(100, Math.round((totalRem / totalCap) * 100)) : 0;
       combinedBarEl.style.width = `${combinedPct}%`;
     }
 
     if (tableRows) {
-      tableRows.innerHTML = activeAccountWebhooks.length === 0
-        ? '<tr><td colspan="5" class="p-4 text-center text-muted-foreground">No webhook channels configured. Click "+ Add Webhook" to add one.</td></tr>'
+      tableRows.innerHTML = (!activeAccountWebhooks || activeAccountWebhooks.length === 0)
+        ? `<tr>
+            <td colspan="5" class="p-6 text-center text-muted-foreground">
+              <div class="flex items-center justify-center gap-2">
+                <span>No channels yet —</span>
+                <button type="button" class="btn-open-add-webhook text-primary hover:underline font-semibold cursor-pointer">
+                  + Add Webhook
+                </button>
+              </div>
+            </td>
+          </tr>`
         : activeAccountWebhooks.map((hook) => {
             const masked = hook.webhook_url.length > 25
               ? hook.webhook_url.slice(0, 22) + '••••' + hook.webhook_url.slice(-4)
@@ -2256,7 +2282,7 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
                 <td class="p-2.5">
                   <div class="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
                     <span class="truncate max-w-[120px]" title="${escapeHtml(hook.webhook_url)}">${escapeHtml(masked)}</span>
-                    <button type="button" class="btn-copy-wh-url text-primary hover:text-primary/80 transition-colors p-0.5" data-url="${escapeHtml(hook.webhook_url)}" title="Copy Webhook URL">
+                    <button type="button" class="btn-copy-wh-url text-primary hover:text-primary/80 transition-colors p-0.5 cursor-pointer" data-url="${escapeHtml(hook.webhook_url)}" title="Copy Webhook URL">
                       <svg class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
                     </button>
                   </div>
@@ -2285,16 +2311,16 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
                 </td>
                 <td class="p-2.5 text-right">
                   <div class="flex items-center justify-end gap-1">
-                    <button type="button" data-wh-test="${hook.id}" class="btn-wh-ping-test rounded-lg border border-border bg-background p-1.5 text-xs hover:bg-muted text-foreground" title="Test Ping">
+                    <button type="button" data-wh-test="${hook.id}" class="btn-wh-ping-test rounded-lg border border-border bg-background p-1.5 text-xs hover:bg-muted text-foreground cursor-pointer" title="Test Ping">
                       <svg class="h-3.5 w-3.5 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
                     </button>
-                    <button type="button" data-webhook-action="edit" data-id="${hook.id}" class="rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-medium hover:bg-muted text-foreground" title="Edit Webhook">
+                    <button type="button" data-webhook-action="edit" data-id="${hook.id}" class="rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-medium hover:bg-muted text-foreground cursor-pointer" title="Edit Webhook">
                       Edit
                     </button>
-                    <button type="button" data-webhook-action="toggle-active" data-id="${hook.id}" data-active="${hook.is_active}" class="rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-medium hover:bg-muted text-foreground" title="${hook.is_active ? 'Disable' : 'Enable'} Webhook">
+                    <button type="button" data-webhook-action="toggle-active" data-id="${hook.id}" data-active="${hook.is_active}" class="rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-medium hover:bg-muted text-foreground cursor-pointer" title="${hook.is_active ? 'Disable' : 'Enable'} Webhook">
                       ${hook.is_active ? 'Disable' : 'Enable'}
                     </button>
-                    <button type="button" data-webhook-action="delete" data-id="${hook.id}" class="rounded-lg border border-rose-500/30 text-rose-500 bg-rose-500/5 px-2 py-1 text-[11px] font-semibold hover:bg-rose-500/15" title="Delete Webhook">
+                    <button type="button" data-webhook-action="delete" data-id="${hook.id}" class="rounded-lg border border-rose-500/30 text-rose-500 bg-rose-500/5 px-2 py-1 text-[11px] font-semibold hover:bg-rose-500/15 cursor-pointer" title="Delete Webhook">
                       Delete
                     </button>
                   </div>
@@ -2305,93 +2331,97 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
     }
 
     if (container) {
-      const cardsHtml = activeAccountWebhooks
-        .map((hook) => {
-          const masked = hook.webhook_url.length > 25
-            ? hook.webhook_url.slice(0, 22) + '••••' + hook.webhook_url.slice(-4)
-            : hook.webhook_url;
-          const remCap = Math.max(0, (hook.monthly_capacity ?? 500) - (hook.monthly_usage ?? 0));
-          const capPct = Math.min(100, Math.round((remCap / (hook.monthly_capacity || 500)) * 100));
+      const cardsHtml = (!activeAccountWebhooks || activeAccountWebhooks.length === 0)
+        ? renderEmptyStateHTML(
+            'No Webhooks Configured',
+            'Click "+ Add Webhook" above to create your first Make.com outbound channel.',
+            'inbox'
+          )
+        : activeAccountWebhooks.map((hook) => {
+            const masked = hook.webhook_url.length > 25
+              ? hook.webhook_url.slice(0, 22) + '••••' + hook.webhook_url.slice(-4)
+              : hook.webhook_url;
+            const remCap = Math.max(0, (hook.monthly_capacity ?? 500) - (hook.monthly_usage ?? 0));
+            const capPct = Math.min(100, Math.round((remCap / (hook.monthly_capacity || 500)) * 100));
 
-          return `
-            <div class="rounded-xl border border-border bg-card p-4 space-y-3 shadow-sm transition-all hover:border-primary/30">
-              <div class="flex items-center justify-between">
-                <div class="flex items-center gap-2">
-                  <span class="font-bold text-sm text-foreground">${escapeHtml(hook.label)}</span>
-                  ${
-                    hook.is_primary
-                      ? `<span class="rounded-full bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 text-[10px] font-bold">PRIMARY</span>`
-                      : ''
-                  }
-                  <span class="rounded-md bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">Priority ${hook.priority}</span>
+            return `
+              <div class="rounded-xl border border-border bg-card p-4 space-y-3 shadow-sm transition-all hover:border-primary/30">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <span class="font-bold text-sm text-foreground">${escapeHtml(hook.label)}</span>
+                    ${
+                      hook.is_primary
+                        ? `<span class="rounded-full bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 text-[10px] font-bold">PRIMARY</span>`
+                        : ''
+                    }
+                    <span class="rounded-md bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">Priority ${hook.priority}</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    ${renderStatusBadge(hook.is_active)}
+                  </div>
                 </div>
-                <div class="flex items-center gap-2">
-                  ${renderStatusBadge(hook.is_active)}
+
+                <div class="font-mono text-xs text-muted-foreground bg-muted/50 rounded-lg px-2.5 py-1.5 truncate" title="Masked Endpoint">
+                  ${escapeHtml(masked)}
+                </div>
+
+                <div class="space-y-1">
+                  <div class="flex items-center justify-between text-xs">
+                    <span class="text-muted-foreground font-medium">Monthly Capacity:</span>
+                    <span class="font-semibold text-foreground">${remCap} / ${hook.monthly_capacity} pins remaining</span>
+                  </div>
+                  <div class="h-2 w-full rounded-full bg-muted overflow-hidden">
+                    <div
+                      class="h-full rounded-full transition-all duration-300 ${remCap > 50 ? 'bg-emerald-500' : remCap > 0 ? 'bg-amber-500' : 'bg-rose-500'}"
+                      style="width: ${capPct}%"
+                    ></div>
+                  </div>
+                </div>
+
+                ${
+                  hook.last_failure_reason
+                    ? `<div class="rounded-lg bg-rose-500/10 border border-rose-500/20 p-2 text-[11px] text-rose-500 flex items-start gap-1.5">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                        <span>Failure Reason: ${escapeHtml(hook.last_failure_reason)}</span>
+                      </div>`
+                    : ''
+                }
+
+                <div class="flex items-center justify-between border-t border-border pt-2.5 text-xs">
+                  <span class="text-[11px] text-muted-foreground">
+                    ${hook.last_used_at ? 'Last used: ' + formatDate(hook.last_used_at) : 'Never used'}
+                  </span>
+                  <div class="flex items-center gap-2">
+                    ${
+                      !hook.is_primary
+                        ? `<button
+                            data-webhook-action="set-primary"
+                            data-id="${hook.id}"
+                            class="text-xs text-primary font-semibold hover:underline"
+                          >Set Primary</button>`
+                        : ''
+                    }
+                    <button
+                      data-webhook-action="toggle-active"
+                      data-id="${hook.id}"
+                      data-active="${hook.is_active}"
+                      class="text-xs text-muted-foreground hover:text-foreground font-medium"
+                    >${hook.is_active ? 'Deactivate' : 'Activate'}</button>
+                    <button
+                      data-webhook-action="edit"
+                      data-id="${hook.id}"
+                      class="rounded border border-border px-2 py-0.5 text-xs text-foreground hover:bg-muted font-medium"
+                    >Edit</button>
+                    <button
+                      data-webhook-action="delete"
+                      data-id="${hook.id}"
+                      class="rounded border border-rose-500/30 text-rose-500 bg-rose-500/5 px-2 py-0.5 text-xs font-semibold hover:bg-rose-500/15"
+                    >Delete</button>
+                  </div>
                 </div>
               </div>
-
-              <div class="font-mono text-xs text-muted-foreground bg-muted/50 rounded-lg px-2.5 py-1.5 truncate" title="Masked Endpoint">
-                ${escapeHtml(masked)}
-              </div>
-
-              <div class="space-y-1">
-                <div class="flex items-center justify-between text-xs">
-                  <span class="text-muted-foreground font-medium">Monthly Capacity:</span>
-                  <span class="font-semibold text-foreground">${remCap} / ${hook.monthly_capacity} pins remaining</span>
-                </div>
-                <div class="h-2 w-full rounded-full bg-muted overflow-hidden">
-                  <div
-                    class="h-full rounded-full transition-all duration-300 ${remCap > 50 ? 'bg-emerald-500' : remCap > 0 ? 'bg-amber-500' : 'bg-rose-500'}"
-                    style="width: ${capPct}%"
-                  ></div>
-                </div>
-              </div>
-
-              ${
-                hook.last_failure_reason
-                  ? `<div class="rounded-lg bg-rose-500/10 border border-rose-500/20 p-2 text-[11px] text-rose-500 flex items-start gap-1.5">
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                      <span>Failure Reason: ${escapeHtml(hook.last_failure_reason)}</span>
-                    </div>`
-                  : ''
-              }
-
-              <div class="flex items-center justify-between border-t border-border pt-2.5 text-xs">
-                <span class="text-[11px] text-muted-foreground">
-                  ${hook.last_used_at ? 'Last used: ' + formatDate(hook.last_used_at) : 'Never used'}
-                </span>
-                <div class="flex items-center gap-2">
-                  ${
-                    !hook.is_primary
-                      ? `<button
-                          data-webhook-action="set-primary"
-                          data-id="${hook.id}"
-                          class="text-xs text-primary font-semibold hover:underline"
-                        >Set Primary</button>`
-                      : ''
-                  }
-                  <button
-                    data-webhook-action="toggle-active"
-                    data-id="${hook.id}"
-                    data-active="${hook.is_active}"
-                    class="text-xs text-muted-foreground hover:text-foreground font-medium"
-                  >${hook.is_active ? 'Deactivate' : 'Activate'}</button>
-                  <button
-                    data-webhook-action="edit"
-                    data-id="${hook.id}"
-                    class="rounded border border-border px-2 py-0.5 text-xs text-foreground hover:bg-muted font-medium"
-                  >Edit</button>
-                  <button
-                    data-webhook-action="delete"
-                    data-id="${hook.id}"
-                    class="rounded border border-rose-500/30 text-rose-500 bg-rose-500/5 px-2 py-0.5 text-xs font-semibold hover:bg-rose-500/15"
-                  >Delete</button>
-                </div>
-              </div>
-            </div>
-          `;
-        })
-        .join('');
+            `;
+          }).join('');
 
       container.innerHTML = cardsHtml;
     }
@@ -2399,6 +2429,13 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
   }
 
   function bindWebhookCardListeners() {
+    document.querySelectorAll('.btn-open-add-webhook').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        openWebhooksModal();
+        showWebhookForm();
+      });
+    });
+
     document.querySelectorAll('.btn-copy-wh-url').forEach((btn) => {
       btn.addEventListener('click', (e) => {
         const url = (e.currentTarget as HTMLElement).getAttribute('data-url') || '';
@@ -3045,10 +3082,21 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
   function updateBatchButtonState() {
     const count = selectedScheduleIds.size;
     const badge = document.getElementById('batch-sel-count');
+    const btnBatch = document.getElementById('btn-sched-batch') as HTMLButtonElement | null;
     const btnEdit = document.getElementById('batch-act-edit') as HTMLButtonElement | null;
     if (badge) {
       badge.textContent = String(count);
       badge.classList.toggle('hidden', count === 0);
+    }
+    if (btnBatch) {
+      btnBatch.disabled = count === 0;
+      if (count === 0) {
+        btnBatch.title = 'Select rows first';
+        btnBatch.classList.add('opacity-50', 'cursor-not-allowed');
+      } else {
+        btnBatch.title = 'Batch actions';
+        btnBatch.classList.remove('opacity-50', 'cursor-not-allowed');
+      }
     }
     if (btnEdit) {
       btnEdit.disabled = count !== 1;
@@ -3155,6 +3203,8 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
           const isClosed = hm && (w0 <= w1 ? (hm < w0 || hm > w1) : (hm < w0 && hm > w1));
 
           let windowBadge = '';
+          let nextPinText = '';
+
           if (s.status === 'paused') {
             windowBadge = '<span class="inline-flex items-center gap-1 rounded-full bg-amber-500/10 text-amber-500 px-2 py-0.5 text-[10px] font-semibold">Paused</span>';
           } else if (s.cron_expression) {
@@ -3167,11 +3217,19 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
             windowBadge = '<span class="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 text-emerald-500 px-2 py-0.5 text-[10px] font-semibold"><span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>Active</span>';
           }
 
+          if (s.cron_expression) {
+            const nextComputed = calculateNextExecution(s.cron_expression, tz);
+            nextPinText = 'Next run: ' + nextComputed;
+          } else {
+            nextPinText = 'Next: ~' + Math.max(1, Math.round((s.interval_minutes || 36) / 2)) + 'm';
+          }
+
           const startedText = s.started_at
             ? (new Date(s.started_at) > new Date() ? 'Starts ' + String(s.started_at).slice(0, 10) : 'Started ' + String(s.started_at).slice(0, 10))
             : 'Immediate';
-          const lastDispText = s.last_dispatched_at ? 'Last: ' + new Date(s.last_dispatched_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Last: Never';
-          const nextPinText = 'Next: ~' + Math.max(1, Math.round((s.interval_minutes || 36) / 2)) + 'm';
+          const lastDispHtml = s.last_dispatched_at 
+            ? '<span>Last dispatch: ' + escapeHtml(new Date(s.last_dispatched_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })) + '</span>' 
+            : '<span title="No successful dispatch yet">Last dispatch: never</span>';
 
           const tokenDisplay = s.token_name
             ? escapeHtml(s.token_name) + ' (' + escapeHtml(s.fastcron_token_masked || '') + ')'
@@ -3189,7 +3247,7 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
               '<div class="flex flex-wrap items-center gap-1.5 pt-1 text-[10px] text-muted-foreground">' +
                 windowBadge +
                 '<span>•</span><span>' + escapeHtml(startedText) + '</span>' +
-                '<span>•</span><span>' + escapeHtml(lastDispText) + '</span>' +
+                '<span>•</span>' + lastDispHtml +
                 '<span>•</span><span class="text-primary font-medium">' + escapeHtml(nextPinText) + '</span>' +
               '</div>' +
             '</td>' +
@@ -3558,9 +3616,11 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
     const batchMenu = document.getElementById('sched-batch-menu');
     batchBtn?.addEventListener('click', (e) => {
       e.stopPropagation();
+      if (selectedScheduleIds.size === 0) return;
       batchMenu?.classList.toggle('hidden');
     });
     document.addEventListener('click', () => batchMenu?.classList.add('hidden'));
+    updateBatchButtonState();
 
     document.getElementById('batch-act-select-page')?.addEventListener('click', () => {
       document.querySelectorAll('.sched-row-chk').forEach(c => {

@@ -1311,7 +1311,7 @@ export async function triggerBoardAction(accountId: string, action: 'create' | '
   try {
     const res = await fetch(webhookUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(8000),
     });
