@@ -176,6 +176,56 @@ ROUTER on: action
         </div>
       </div>
 
+      <!-- Make Module Numbers Configuration (Persisted in localStorage) -->
+      <div class="space-y-3 p-4 rounded-xl border border-border bg-muted/30 shadow-sm">
+        <div class="flex items-center justify-between border-b border-border pb-2">
+          <div class="flex items-center gap-2">
+            <span class="flex h-5 w-5 items-center justify-center rounded bg-primary/10 text-primary font-bold text-[10px]">#</span>
+            <span class="text-xs font-bold text-foreground uppercase tracking-wider">Make Module Numbers</span>
+          </div>
+          <span class="text-[11px] text-muted-foreground">Injected live into callback templates below</span>
+        </div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+          <div>
+            <label for="input-mod-webhook" class="block font-semibold text-foreground text-[11px] mb-1">Webhook # (W)</label>
+            <input
+              id="input-mod-webhook"
+              type="text"
+              value="2"
+              class="w-full rounded-lg border border-border bg-background py-1.5 px-2.5 text-xs font-mono text-foreground focus:border-primary focus:outline-none"
+            />
+          </div>
+          <div>
+            <label for="input-mod-create" class="block font-semibold text-foreground text-[11px] mb-1">Create # (C)</label>
+            <input
+              id="input-mod-create"
+              type="text"
+              value="3"
+              class="w-full rounded-lg border border-border bg-background py-1.5 px-2.5 text-xs font-mono text-foreground focus:border-primary focus:outline-none"
+            />
+          </div>
+          <div>
+            <label for="input-mod-list" class="block font-semibold text-foreground text-[11px] mb-1">List # (L)</label>
+            <input
+              id="input-mod-list"
+              type="text"
+              value="8"
+              class="w-full rounded-lg border border-border bg-background py-1.5 px-2.5 text-xs font-mono text-foreground focus:border-primary focus:outline-none"
+            />
+          </div>
+          <div>
+            <label for="input-mod-delete" class="block font-semibold text-foreground text-[11px] mb-1">Delete # (D)</label>
+            <input
+              id="input-mod-delete"
+              type="text"
+              value="11"
+              class="w-full rounded-lg border border-border bg-background py-1.5 px-2.5 text-xs font-mono text-foreground focus:border-primary focus:outline-none"
+            />
+          </div>
+        </div>
+      </div>
+
       <!-- Common Headers Box -->
       <div class="space-y-2 p-4 rounded-xl border border-border bg-muted/20">
         <div class="flex items-center justify-between">
@@ -188,7 +238,7 @@ ROUTER on: action
             <label class="font-bold text-muted-foreground text-[10px]">TARGET INGEST ENDPOINT</label>
             <div class="flex items-center gap-1.5 mt-1">
               <input id="input-ingest-url" type="text" readonly class="w-full rounded-lg border border-border bg-background py-1.5 px-2 text-xs font-mono text-foreground select-all focus:outline-none" />
-              <button type="button" id="btn-copy-ingest-url" class="rounded-lg border border-border bg-background px-2 py-1.5 text-xs font-semibold hover:bg-muted text-foreground cursor-pointer shrink-0">Copy</button>
+              <button type="button" id="btn-copy-ingest-url" class="rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold hover:bg-muted text-foreground cursor-pointer shrink-0">Copy</button>
             </div>
           </div>
 
@@ -197,7 +247,7 @@ ROUTER on: action
             <div class="flex items-center gap-1.5 mt-1">
               <input id="input-ingest-secret" type="password" readonly value="••••••••••••••••••••••••" class="w-full rounded-lg border border-border bg-background py-1.5 px-2 text-xs font-mono text-foreground select-all focus:outline-none" />
               <button type="button" id="btn-reveal-secret" class="rounded-lg border border-primary/30 bg-primary/10 px-2 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 cursor-pointer shrink-0">Reveal</button>
-              <button type="button" id="btn-copy-secret" class="rounded-lg border border-border bg-background px-2 py-1.5 text-xs font-semibold hover:bg-muted text-foreground cursor-pointer shrink-0">Copy</button>
+              <button type="button" id="btn-copy-secret" class="rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold hover:bg-muted text-foreground cursor-pointer shrink-0">Copy</button>
             </div>
           </div>
         </div>
@@ -218,18 +268,7 @@ ROUTER on: action
             </div>
             <button type="button" class="btn-copy-payload text-xs font-semibold text-primary hover:underline cursor-pointer" data-target="code-create-payload">📋 Copy JSON</button>
           </div>
-          <pre id="code-create-payload" class="rounded-lg border border-border bg-background p-3 font-mono text-xs text-foreground overflow-x-auto"><code>&#123;
-  "event": "board.created",
-  "workspace_id": "&#123;&#123;workspace_id&#125;&#125;",
-  "account_id": "&#123;&#123;account_id&#125;&#125;",
-  "board_name": "&#123;&#123;name&#125;&#125;",
-  "board_id": "&#123;&#123;id&#125;&#125;",
-  "pin_count": "&#123;&#123;pin_count&#125;&#125;",
-  "follower_count": "&#123;&#123;follower_count&#125;&#125;",
-  "board_created_at": "&#123;&#123;created_at&#125;&#125;",
-  "board_pins_modified_at": "&#123;&#123;board_pins_modified_at&#125;&#125;",
-  "idempotency_key": "create:&#123;&#123;account_id&#125;&#125;:&#123;&#123;name&#125;&#125;"
-&#125;</code></pre>
+          <pre id="code-create-payload" class="rounded-lg border border-border bg-background p-3 font-mono text-xs text-foreground overflow-x-auto"><code></code></pre>
         </div>
 
         <!-- LIST Route -->
@@ -237,7 +276,7 @@ ROUTER on: action
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
               <span class="rounded bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 text-[10px] font-bold">ROUTE 2: LIST</span>
-              <span class="text-xs font-bold text-foreground">boards.list Callback Body (Per Bundle HTTP)</span>
+              <span class="text-xs font-bold text-foreground">board.created Callback Body (Per Bundle HTTP)</span>
             </div>
             <button type="button" class="btn-copy-payload text-xs font-semibold text-primary hover:underline cursor-pointer" data-target="code-list-payload">📋 Copy JSON</button>
           </div>
@@ -247,18 +286,7 @@ ROUTER on: action
             🚫 <strong>Configuration Warning:</strong> <code>map()</code> inside JSON body = <code>InvalidConfigurationError</code>; per-bundle HTTP is the supported pattern. Make's Pinterest "List Boards" outputs an iterator of bundles; connect the HTTP module directly after it without mapping arrays.
           </div>
 
-          <pre id="code-list-payload" class="rounded-lg border border-border bg-background p-3 font-mono text-xs text-foreground overflow-x-auto"><code>&#123;
-  "event": "boards.list",
-  "workspace_id": "&#123;&#123;workspace_id&#125;&#125;",
-  "account_id": "&#123;&#123;account_id&#125;&#125;",
-  "board_name": "&#123;&#123;name&#125;&#125;",
-  "board_id": "&#123;&#123;id&#125;&#125;",
-  "pin_count": "&#123;&#123;pin_count&#125;&#125;",
-  "follower_count": "&#123;&#123;follower_count&#125;&#125;",
-  "board_created_at": "&#123;&#123;created_at&#125;&#125;",
-  "board_pins_modified_at": "&#123;&#123;board_pins_modified_at&#125;&#125;",
-  "idempotency_key": "list:&#123;&#123;account_id&#125;&#125;:&#123;&#123;id&#125;&#125;"
-&#125;</code></pre>
+          <pre id="code-list-payload" class="rounded-lg border border-border bg-background p-3 font-mono text-xs text-foreground overflow-x-auto"><code></code></pre>
         </div>
 
         <!-- DELETE Route -->
@@ -270,12 +298,7 @@ ROUTER on: action
             </div>
             <button type="button" class="btn-copy-payload text-xs font-semibold text-primary hover:underline cursor-pointer" data-target="code-delete-payload">📋 Copy JSON</button>
           </div>
-          <pre id="code-delete-payload" class="rounded-lg border border-border bg-background p-3 font-mono text-xs text-foreground overflow-x-auto"><code>&#123;
-  "event": "board.deleted",
-  "workspace_id": "&#123;&#123;workspace_id&#125;&#125;",
-  "account_id": "&#123;&#123;account_id&#125;&#125;",
-  "board_id": "&#123;&#123;board_id&#125;&#125;"
-&#125;</code></pre>
+          <pre id="code-delete-payload" class="rounded-lg border border-border bg-background p-3 font-mono text-xs text-foreground overflow-x-auto"><code></code></pre>
         </div>
       </div>
     </div>
@@ -372,7 +395,7 @@ ROUTER on: action
       <div class="flex items-center justify-between">
         <div>
           <h4 class="text-xs font-bold uppercase tracking-wider text-foreground">Supported Board Callback Events</h4>
-          <p class="text-xs text-muted-foreground mt-0.5">Ingest router handles these 3 event types automatically.</p>
+          <p class="text-xs text-muted-foreground mt-0.5">Ingest router handles board events automatically.</p>
         </div>
         <button type="button" id="btn-copy-all-events" class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold hover:bg-muted text-foreground transition-all cursor-pointer">
           📋 Copy Events List
@@ -384,7 +407,7 @@ ROUTER on: action
           id="input-all-events"
           type="text"
           readonly
-          value="board.created, boards.list, board.deleted"
+          value="board.created, board.deleted"
           class="w-full rounded-lg border border-border bg-muted/30 py-2 px-3 font-mono text-xs font-bold text-foreground select-all focus:outline-none"
         />
       </div>
@@ -474,6 +497,102 @@ ROUTER on: action
     }, 6000);
   }
 
+  function renderPayloadTemplates() {
+    const inputW = document.getElementById('input-mod-webhook') as HTMLInputElement | null;
+    const inputC = document.getElementById('input-mod-create') as HTMLInputElement | null;
+    const inputL = document.getElementById('input-mod-list') as HTMLInputElement | null;
+    const inputD = document.getElementById('input-mod-delete') as HTMLInputElement | null;
+
+    const w = inputW?.value.trim() || '2';
+    const c = inputC?.value.trim() || '3';
+    const l = inputL?.value.trim() || '8';
+    const d = inputD?.value.trim() || '11';
+
+    // Persist to localStorage
+    try {
+      localStorage.setItem('pinorbit_mod_webhook', w);
+      localStorage.setItem('pinorbit_mod_create', c);
+      localStorage.setItem('pinorbit_mod_list', l);
+      localStorage.setItem('pinorbit_mod_delete', d);
+    } catch (e) {
+      console.warn('localStorage not available:', e);
+    }
+
+    // 1. CREATE Payload
+    const createPayload = JSON.stringify({
+      event: "board.created",
+      workspace_id: `{{${w}.workspace_id}}`,
+      account_id: `{{${w}.account_id}}`,
+      board_name: `{{${c}.name}}`,
+      board_id: `{{${c}.id}}`,
+      pin_count: `{{${c}.pin_count}}`,
+      follower_count: `{{${c}.follower_count}}`,
+      board_created_at: `{{${c}.created_at}}`,
+      board_pins_modified_at: `{{${c}.board_pins_modified_at}}`,
+      idempotency_key: `create:{{${w}.account_id}}:{{${c}.name}}`,
+    }, null, 2);
+
+    // 2. LIST Payload (event: "board.created", per-bundle)
+    const listPayload = JSON.stringify({
+      event: "board.created",
+      workspace_id: `{{${w}.workspace_id}}`,
+      account_id: `{{${w}.account_id}}`,
+      board_name: `{{${l}.name}}`,
+      board_id: `{{${l}.id}}`,
+      pin_count: `{{${l}.pin_count}}`,
+      follower_count: `{{${l}.follower_count}}`,
+      board_created_at: `{{${l}.created_at}}`,
+      board_pins_modified_at: `{{${l}.board_pins_modified_at}}`,
+      idempotency_key: `list:{{${w}.account_id}}:{{${l}.id}}`,
+    }, null, 2);
+
+    // 3. DELETE Payload
+    const deletePayload = JSON.stringify({
+      event: "board.deleted",
+      workspace_id: `{{${w}.workspace_id}}`,
+      account_id: `{{${w}.account_id}}`,
+      board_id: `{{${w}.board_id}}`,
+    }, null, 2);
+
+    const createCodeEl = document.getElementById('code-create-payload')?.querySelector('code');
+    const listCodeEl = document.getElementById('code-list-payload')?.querySelector('code');
+    const deleteCodeEl = document.getElementById('code-delete-payload')?.querySelector('code');
+
+    if (createCodeEl) createCodeEl.textContent = createPayload;
+    if (listCodeEl) listCodeEl.textContent = listPayload;
+    if (deleteCodeEl) deleteCodeEl.textContent = deletePayload;
+  }
+
+  function initModuleNumbers() {
+    const inputW = document.getElementById('input-mod-webhook') as HTMLInputElement | null;
+    const inputC = document.getElementById('input-mod-create') as HTMLInputElement | null;
+    const inputL = document.getElementById('input-mod-list') as HTMLInputElement | null;
+    const inputD = document.getElementById('input-mod-delete') as HTMLInputElement | null;
+
+    try {
+      if (inputW && localStorage.getItem('pinorbit_mod_webhook')) {
+        inputW.value = localStorage.getItem('pinorbit_mod_webhook')!;
+      }
+      if (inputC && localStorage.getItem('pinorbit_mod_create')) {
+        inputC.value = localStorage.getItem('pinorbit_mod_create')!;
+      }
+      if (inputL && localStorage.getItem('pinorbit_mod_list')) {
+        inputL.value = localStorage.getItem('pinorbit_mod_list')!;
+      }
+      if (inputD && localStorage.getItem('pinorbit_mod_delete')) {
+        inputD.value = localStorage.getItem('pinorbit_mod_delete')!;
+      }
+    } catch (e) {
+      console.warn('localStorage read error:', e);
+    }
+
+    [inputW, inputC, inputL, inputD].forEach((input) => {
+      input?.addEventListener('input', renderPayloadTemplates);
+    });
+
+    renderPayloadTemplates();
+  }
+
   async function init() {
     const isAuth = await requireAuth();
     if (!isAuth) return;
@@ -501,6 +620,7 @@ ROUTER on: action
       ingestInput.value = `${window.location.origin}/api/internal/pinterest/ingest`;
     }
 
+    initModuleNumbers();
     setupEventListeners();
     await loadData();
   }
@@ -787,14 +907,15 @@ ROUTER on: action
       }
     });
 
-    // Copy Payload Buttons
+    // Copy Payload Buttons (copies the rendered text)
     document.querySelectorAll('.btn-copy-payload').forEach((btn) => {
       btn.addEventListener('click', (e) => {
         const targetId = (e.currentTarget as HTMLElement).getAttribute('data-target');
         if (!targetId) return;
         const codeEl = document.getElementById(targetId);
-        if (codeEl) {
-          navigator.clipboard.writeText(codeEl.textContent || '');
+        const textToCopy = codeEl?.querySelector('code')?.textContent || codeEl?.textContent || '';
+        if (textToCopy) {
+          navigator.clipboard.writeText(textToCopy);
           showFeedback('Callback JSON body copied to clipboard.', 'success');
         }
       });
