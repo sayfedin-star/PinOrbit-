@@ -6,6 +6,7 @@ import type {
   ScheduleSyncResponse,
   TriggerSyncResponse,
 } from '../../lib/types';
+import type { PostingSchedule } from '../types/scheduling';
 
 export const FASTCRON_BASE = 'https://www.fastcron.com/api/v1';
 export const DISPATCH_ENDPOINT_URL = process.env.DISPATCH_BASE_URL || 'https://pinorbit-v2.o-i.workers.dev/api/internal/pinterest/daily-dispatch';

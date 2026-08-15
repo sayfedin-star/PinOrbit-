@@ -2311,7 +2311,8 @@ const editedPinsSession = new Map<string, Partial<Pin>>();
 
 export async function bulkDeletePins(
   pinIds: string[],
-  accountId?: string
+  accountId?: string,
+  changedBy: string = 'system'
 ): Promise<{ count: number; error: string | null }> {
   if (!pinIds || pinIds.length === 0) return { count: 0, error: null };
 
@@ -2336,7 +2337,7 @@ export async function bulkDeletePins(
         action: 'BULK_DELETE',
         old_data: { count: pinIds.length, pin_ids: pinIds },
         new_data: null,
-        changed_by: 'admin',
+        changed_by: changedBy || 'system',
       });
     } catch (e) {
       console.warn('Audit log notice:', e);
@@ -2364,7 +2365,8 @@ export async function bulkDeletePins(
 export async function bulkEditPins(
   pinIds: string[],
   updates: { board_name?: string; scheduled_for?: string | null },
-  accountId?: string
+  accountId?: string,
+  changedBy: string = 'system'
 ): Promise<{ count: number; error: string | null }> {
   if (!pinIds || pinIds.length === 0) return { count: 0, error: null };
 
@@ -2403,7 +2405,7 @@ export async function bulkEditPins(
         action: 'BULK_EDIT',
         old_data: null,
         new_data: { count: pinIds.length, updates: payload, pin_ids: pinIds },
-        changed_by: 'admin',
+        changed_by: changedBy || 'system',
       });
     } catch (e) {
       console.warn('Audit log notice:', e);
@@ -2430,7 +2432,8 @@ export async function bulkEditPins(
 
 export async function bulkRetryPinsNow(
   pinIds: string[],
-  accountId?: string
+  accountId?: string,
+  changedBy: string = 'system'
 ): Promise<{ count: number; error: string | null }> {
   if (!pinIds || pinIds.length === 0) return { count: 0, error: null };
 
@@ -2480,7 +2483,7 @@ export async function bulkRetryPinsNow(
         action: 'BULK_RETRY_NOW',
         old_data: null,
         new_data: { count: pinIds.length, pin_ids: pinIds },
-        changed_by: 'admin',
+        changed_by: changedBy || 'system',
       });
     } catch (e) {
       console.warn('Audit log notice:', e);
@@ -2507,7 +2510,8 @@ export async function bulkRetryPinsNow(
 
 export async function bulkCancelPins(
   pinIds: string[],
-  accountId?: string
+  accountId?: string,
+  changedBy: string = 'system'
 ): Promise<{ count: number; error: string | null }> {
   if (!pinIds || pinIds.length === 0) return { count: 0, error: null };
 
@@ -2562,7 +2566,7 @@ export async function bulkCancelPins(
         action: 'BULK_CANCEL',
         old_data: null,
         new_data: { count: pinIds.length, pin_ids: pinIds },
-        changed_by: 'admin',
+        changed_by: changedBy || 'system',
       });
     } catch (e) {
       console.warn('Audit log notice:', e);
@@ -2721,7 +2725,8 @@ export async function bulkCreateMissingBoardsViaWebhook(params: {
 export async function updateAccountAutoBoardSettings(
   accountId: string,
   autoCreate: boolean,
-  webhookId?: string | null
+  webhookId?: string | null,
+  changedBy: string = 'system'
 ): Promise<{ success: boolean; error: string | null }> {
   if (!supabase) {
     const acc = mockAccounts.find((a) => a.id === accountId);
@@ -2749,7 +2754,7 @@ export async function updateAccountAutoBoardSettings(
       action: 'UPDATE_AUTO_BOARD_SETTINGS',
       old_data: null,
       new_data: { auto_create_missing_boards: autoCreate, board_creation_webhook_id: webhookId },
-      changed_by: 'admin',
+      changed_by: changedBy || 'system',
     });
 
     return { success: true, error: null };

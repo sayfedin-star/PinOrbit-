@@ -1,11 +1,11 @@
 export const prerender = false;
 
 import type { APIRoute } from 'astro';
-import { validateUserSession } from '../../../server/auth/session';
 import { assertWorkspaceAccess } from '../../../server/auth/workspace-guard';
-import { dbClients, getServerEnv, isKnownDefaultKek, isProductionEnv } from '../../../server/db/clients';
+import { dbClients, isKnownDefaultKek, isProductionEnv } from '../../../server/db/clients';
 import { encryptToken, resolveTokenKek } from '../../../server/lib/token-crypto';
 import { syncPublishingSchedule, deletePublishingSchedule } from '../../../server/services/fastcron-service';
+import type { PostingSchedule } from '../../../server/types/scheduling';
 
 export const PATCH: APIRoute = async ({ request, params, locals }) => {
   const user = locals.user;

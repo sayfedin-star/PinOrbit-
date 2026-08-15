@@ -64,26 +64,69 @@ export const POST: APIRoute = async ({ request, locals }) => {
     );
   }
 
-  // 3. Delete snapshots older than 180 days with strict tenant isolation
+  // 3. Dynamic Retention Cleanup & Orphan Sweep
   try {
-    const cutoff = new Date(Date.now() - 180 * 86400000).toISOString().split('T')[0];
-    const client = dbClients.getAnalytics(runtimeEnv);
+    const schedulingAdmin = dbClients.getSchedulingAdmin(runtimeEnv);
+    const analyticsClient = dbClients.getAnalytics(runtimeEnv);
 
-    const { count, error } = await client
+    // Read workspace retention settings (with fallbacks)
+    const { data: wsSettings } = await schedulingAdmin
+      .from('workspace_retention_settings')
+      .select('retention_posted_days, processing_timeout_minutes')
+      .eq('workspace_id', workspaceId)
+      .maybeSingle();
+
+    const retentionPostedDays = wsSettings?.retention_posted_days ?? 30;
+    const processingTimeoutMinutes = wsSettings?.processing_timeout_minutes ?? 45;
+
+    // Purge posted pins older than workspace retention days
+    const postedCutoff = new Date(Date.now() - retentionPostedDays * 86400000).toISOString();
+    const { count: deletedPinsCount, error: pinDeleteErr } = await schedulingAdmin
+      .from('pins')
+      .delete()
+      .eq('workspace_id', workspaceId)
+      .eq('status', 'posted')
+      .lt('posted_at', postedCutoff);
+
+    if (pinDeleteErr) throw pinDeleteErr;
+
+    // Sweep orphaned processing pins back to pending
+    const sweepCutoff = new Date(Date.now() - processingTimeoutMinutes * 60000).toISOString();
+    const { count: sweptPinsCount, error: sweepErr } = await schedulingAdmin
+      .from('pins')
+      .update({
+        status: 'pending',
+        processing_started_at: null,
+        claimed_at: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('workspace_id', workspaceId)
+      .eq('status', 'processing')
+      .lt('claimed_at', sweepCutoff)
+      .lt('attempts', 2);
+
+    if (sweepErr) throw sweepErr;
+
+    // Analytics snapshot cleanup
+    const snapshotCutoff = new Date(Date.now() - 180 * 86400000).toISOString().split('T')[0];
+    const { count: deletedSnapshotsCount, error: snapErr } = await analyticsClient
       .from('top_pins_snapshots')
       .delete()
       .eq('workspace_id', workspaceId)
-      .lt('window_end', cutoff);
+      .lt('window_end', snapshotCutoff);
 
-    if (error) {
-      throw error;
-    }
+    if (snapErr) throw snapErr;
 
     return new Response(
       JSON.stringify({
         success: true,
-        deleted_count: count ?? 0,
-        cutoff_date: cutoff,
+        workspace_id: workspaceId,
+        retention_posted_days: retentionPostedDays,
+        processing_timeout_minutes: processingTimeoutMinutes,
+        deleted_pins_count: deletedPinsCount ?? 0,
+        swept_pins_count: sweptPinsCount ?? 0,
+        deleted_snapshots_count: deletedSnapshotsCount ?? 0,
+        posted_cutoff: postedCutoff,
       }),
       {
         status: 200,

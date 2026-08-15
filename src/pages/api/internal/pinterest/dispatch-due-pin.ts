@@ -41,10 +41,17 @@ async function handleDispatch(body: any, locals: any) {
   const accountId = schedule.account_id;
   const workspaceId = schedule.workspace_id;
 
-  // 2) Stale lock recovery
-  const staleCut = new Date(Date.now() - 10 * 60000).toISOString();
-  await admin.from('pins').update({ status: 'pending', processing_started_at: null, updated_at: new Date().toISOString() })
-    .eq('status', 'processing').lt('processing_started_at', staleCut).then(() => {});
+  // 2) Stale lock recovery & orphan sweep (per-workspace processing_timeout_minutes)
+  const { data: wsSettings } = await admin
+    .from('workspace_retention_settings')
+    .select('processing_timeout_minutes')
+    .eq('workspace_id', workspaceId)
+    .maybeSingle();
+
+  const processingTimeoutMinutes = wsSettings?.processing_timeout_minutes ?? 45;
+  const staleCut = new Date(Date.now() - processingTimeoutMinutes * 60000).toISOString();
+  await admin.from('pins').update({ status: 'pending', processing_started_at: null, claimed_at: null, updated_at: new Date().toISOString() })
+    .eq('status', 'processing').eq('workspace_id', workspaceId).lt('claimed_at', staleCut).lt('attempts', 2).then(() => {});
 
   // 3) Account + daily cap
   const { data: account } = await admin.from('accounts').select('*').eq('id', accountId).maybeSingle();
@@ -59,12 +66,16 @@ async function handleDispatch(body: any, locals: any) {
   if (rpcErr) return json({ success: false, error: 'claim RPC failed: ' + rpcErr.message }, 500);
   if (!claimed || claimed.length === 0) return json({ success: true, dispatched: false, reason: 'no_due_pins' });
 
+  // Ensure claimed_at is set for claimed pins
+  const claimedIds = claimed.map((c: any) => c.id);
+  await admin.from('pins').update({ claimed_at: new Date().toISOString() }).in('id', claimedIds).then(() => {});
+
   // 5) Webhook channel (schedule's channel first, then any with capacity)
   const { data: hooks } = await admin.from('account_webhooks').select('*').eq('account_id', accountId).eq('is_active', true).order('priority', { ascending: true });
   const hook = (hooks || []).find((h: any) => h.id === schedule.webhook_id && (h.remaining_capacity ?? 0) > 0)
     || (hooks || []).find((h: any) => (h.remaining_capacity ?? 0) > 0);
   if (!hook?.webhook_url) {
-    for (const c of claimed) await admin.from('pins').update({ status: 'pending', processing_started_at: null, updated_at: new Date().toISOString() }).eq('id', c.id);
+    for (const c of claimed) await admin.from('pins').update({ status: 'pending', processing_started_at: null, claimed_at: null, updated_at: new Date().toISOString() }).eq('id', c.id);
     return json({ success: true, dispatched: false, reason: 'no_webhook_capacity' });
   }
 
