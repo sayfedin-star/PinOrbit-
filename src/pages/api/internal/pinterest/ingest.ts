@@ -81,6 +81,23 @@ export const POST: APIRoute = async ({ request, locals }) => {
       return new Response(JSON.stringify({ success: true, handled: 'pin_posted' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
+    // Helper coercers for enriched board fields
+    const parseCoerceInt = (val: any): number | null => {
+      if (val === undefined || val === null || val === '') return null;
+      const n = parseInt(String(val), 10);
+      return Number.isNaN(n) ? 0 : n;
+    };
+
+    const parseCoerceDate = (val: any): string | null => {
+      if (!val || typeof val !== 'string') return null;
+      try {
+        const d = new Date(val);
+        return Number.isNaN(d.getTime()) ? null : d.toISOString();
+      } catch {
+        return null;
+      }
+    };
+
     // B) board.created
     if (ev === 'board.created') {
       const accId = payload.account_id;
@@ -95,6 +112,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
         return new Response(JSON.stringify({ success: false, error: 'Account does not belong to workspace.' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
       }
 
+      const pinCount = parseCoerceInt(payload.pin_count);
+      const followerCount = parseCoerceInt(payload.follower_count);
+      const boardCreatedAt = parseCoerceDate(payload.board_created_at || payload.created_at);
+      const boardPinsModifiedAt = parseCoerceDate(payload.board_pins_modified_at || payload.pins_modified_at);
+      const nowIso = new Date().toISOString();
+
       const { data: upsertedBoard, error: insErr } = await admin.from('boards').upsert({
         account_id: accId,
         workspace_id: acc.workspace_id,
@@ -102,7 +125,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
         board_id: bId,
         pinterest_board_id: bId,
         created_via: 'webhook_auto_create',
-      }, { onConflict: 'account_id, board_id' }).select('id, board_id, board_name').single();
+        pin_count: pinCount,
+        follower_count: followerCount,
+        board_created_at: boardCreatedAt,
+        board_pins_modified_at: boardPinsModifiedAt,
+        last_synced_at: nowIso,
+      }, { onConflict: 'account_id, board_id' }).select('id, board_id, board_name, pin_count, follower_count, last_synced_at').single();
 
       await admin.from('board_provisioning_requests').update({
         status: insErr ? 'failed' : 'completed',
@@ -121,7 +149,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
     // C) boards.list
     if (ev === 'boards.list') {
       const accId = payload.account_id;
-      const rawBoards = Array.isArray(payload.boards) ? payload.boards : [];
+      // Support both array payload.boards and per-bundle individual board payload
+      const rawBoards = Array.isArray(payload.boards)
+        ? payload.boards
+        : (payload.board_id || payload.id || payload.board_name || payload.name)
+        ? [payload]
+        : [];
+
       if (!accId) {
         return new Response(JSON.stringify({ success: false, error: 'account_id required.' }), { status: 422, headers: { 'Content-Type': 'application/json' } });
       }
@@ -133,11 +167,17 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
       let syncedCount = 0;
       const errors: string[] = [];
+      const nowIso = new Date().toISOString();
 
       for (const b of rawBoards) {
         const bId = String(b.id || b.board_id || '');
         const bName = String(b.name || b.board_name || '');
         if (!bId) continue;
+
+        const pinCount = parseCoerceInt(b.pin_count);
+        const followerCount = parseCoerceInt(b.follower_count);
+        const boardCreatedAt = parseCoerceDate(b.board_created_at || b.created_at);
+        const boardPinsModifiedAt = parseCoerceDate(b.board_pins_modified_at || b.pins_modified_at);
 
         const { error: upErr } = await admin.from('boards').upsert({
           account_id: accId,
@@ -146,6 +186,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
           pinterest_board_id: bId,
           board_name: bName || 'Untitled Board',
           created_via: 'webhook_sync',
+          pin_count: pinCount,
+          follower_count: followerCount,
+          board_created_at: boardCreatedAt,
+          board_pins_modified_at: boardPinsModifiedAt,
+          last_synced_at: nowIso,
         }, { onConflict: 'account_id, board_id' });
 
         if (upErr) {

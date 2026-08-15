@@ -1,6 +1,5 @@
 ---
 import Layout from '../../layouts/Layout.astro';
-import SectionHeader from '../../components/ui/SectionHeader.astro';
 
 export const prerender = false;
 ---
@@ -14,7 +13,7 @@ export const prerender = false;
         <span>/</span>
         <a id="link-account-details-crumb" href="/accounts/details" class="hover:text-foreground transition-colors">Account Details</a>
         <span>/</span>
-        <span class="text-foreground">Board Pipeline Kit</span>
+        <span class="text-foreground font-bold">Board Pipeline Kit</span>
       </div>
       <a id="btn-back-details" href="/accounts/details" class="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
@@ -202,6 +201,10 @@ ROUTER on: action
             </div>
           </div>
         </div>
+
+        <div class="rounded-lg border border-amber-500/30 bg-amber-500/10 p-2.5 text-[11px] text-amber-700 dark:text-amber-300">
+          <strong>⚠️ Header Security Warning:</strong> Pass the secret strictly inside the <code>x-ingest-secret</code> HTTP header in the Make HTTP module headers section. Do NOT pass secrets as query parameters.
+        </div>
       </div>
 
       <!-- Route Payloads -->
@@ -211,7 +214,7 @@ ROUTER on: action
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
               <span class="rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 px-2 py-0.5 text-[10px] font-bold">ROUTE 1: CREATE</span>
-              <span class="text-xs font-bold text-foreground">board.created Callback Body</span>
+              <span class="text-xs font-bold text-foreground">board.created Callback Body (Enriched)</span>
             </div>
             <button type="button" class="btn-copy-payload text-xs font-semibold text-primary hover:underline cursor-pointer" data-target="code-create-payload">📋 Copy JSON</button>
           </div>
@@ -219,26 +222,42 @@ ROUTER on: action
   "event": "board.created",
   "workspace_id": "&#123;&#123;workspace_id&#125;&#125;",
   "account_id": "&#123;&#123;account_id&#125;&#125;",
-  "board_name": "&#123;&#123;board_name&#125;&#125;",
-  "board_id": "&#123;&#123;CreateBoard.id&#125;&#125;",
-  "idempotency_key": "create:&#123;&#123;account_id&#125;&#125;:&#123;&#123;board_name&#125;&#125;"
+  "board_name": "&#123;&#123;name&#125;&#125;",
+  "board_id": "&#123;&#123;id&#125;&#125;",
+  "pin_count": "&#123;&#123;pin_count&#125;&#125;",
+  "follower_count": "&#123;&#123;follower_count&#125;&#125;",
+  "board_created_at": "&#123;&#123;created_at&#125;&#125;",
+  "board_pins_modified_at": "&#123;&#123;board_pins_modified_at&#125;&#125;",
+  "idempotency_key": "create:&#123;&#123;account_id&#125;&#125;:&#123;&#123;name&#125;&#125;"
 &#125;</code></pre>
         </div>
 
         <!-- LIST Route -->
-        <div class="rounded-xl border border-border bg-muted/10 p-4 space-y-2">
+        <div class="rounded-xl border border-border bg-muted/10 p-4 space-y-3">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
               <span class="rounded bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 text-[10px] font-bold">ROUTE 2: LIST</span>
-              <span class="text-xs font-bold text-foreground">boards.list Callback Body</span>
+              <span class="text-xs font-bold text-foreground">boards.list Callback Body (Per Bundle HTTP)</span>
             </div>
             <button type="button" class="btn-copy-payload text-xs font-semibold text-primary hover:underline cursor-pointer" data-target="code-list-payload">📋 Copy JSON</button>
           </div>
+
+          <!-- Red warning against map() -->
+          <div class="rounded-lg border border-rose-500/30 bg-rose-500/10 p-2.5 text-[11px] text-rose-600 dark:text-rose-400 font-semibold">
+            🚫 <strong>Configuration Warning:</strong> <code>map()</code> inside JSON body = <code>InvalidConfigurationError</code>; per-bundle HTTP is the supported pattern. Make's Pinterest "List Boards" outputs an iterator of bundles; connect the HTTP module directly after it without mapping arrays.
+          </div>
+
           <pre id="code-list-payload" class="rounded-lg border border-border bg-background p-3 font-mono text-xs text-foreground overflow-x-auto"><code>&#123;
   "event": "boards.list",
   "workspace_id": "&#123;&#123;workspace_id&#125;&#125;",
   "account_id": "&#123;&#123;account_id&#125;&#125;",
-  "boards": &#123;&#123;map(ListBoards; &#123;id: id, name: name&#125;)&#125;&#125;
+  "board_name": "&#123;&#123;name&#125;&#125;",
+  "board_id": "&#123;&#123;id&#125;&#125;",
+  "pin_count": "&#123;&#123;pin_count&#125;&#125;",
+  "follower_count": "&#123;&#123;follower_count&#125;&#125;",
+  "board_created_at": "&#123;&#123;created_at&#125;&#125;",
+  "board_pins_modified_at": "&#123;&#123;board_pins_modified_at&#125;&#125;",
+  "idempotency_key": "list:&#123;&#123;account_id&#125;&#125;:&#123;&#123;id&#125;&#125;"
 &#125;</code></pre>
         </div>
 
@@ -261,7 +280,94 @@ ROUTER on: action
       </div>
     </div>
 
-    <!-- CARD 4: Supported Events Row & Documentation -->
+    <!-- CARD 4: RECOVERY PROCEDURE (Ordered) -->
+    <div class="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-4">
+      <div class="flex items-center gap-2.5 border-b border-border pb-3">
+        <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-500">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+        </div>
+        <div>
+          <h3 class="text-sm font-bold text-foreground">Recovery Procedure</h3>
+          <p class="text-xs text-muted-foreground">Step-by-step procedure to synchronize real Pinterest boards and purge staged records</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5 text-xs">
+        <div class="flex items-start gap-3 p-3.5 rounded-xl border border-border bg-muted/20">
+          <div class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-xs">1</div>
+          <div class="space-y-1">
+            <h4 class="font-bold text-foreground">Press Refresh List</h4>
+            <p class="text-muted-foreground text-[11px]">Triggers the Make "List Boards" scenario. Real Pinterest board IDs (e.g. <code>842032…</code>) are upserted into the database alongside live metrics (<code>pin_count</code>, <code>follower_count</code>, <code>board_created_at</code>, <code>last_synced_at</code>).</p>
+          </div>
+        </div>
+
+        <div class="flex items-start gap-3 p-3.5 rounded-xl border border-border bg-muted/20">
+          <div class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold text-xs">2</div>
+          <div class="space-y-1">
+            <h4 class="font-bold text-foreground">Press "Purge staged"</h4>
+            <p class="text-muted-foreground text-[11px]">Click the <strong>Purge staged (pin_bd_*)</strong> button on the Boards page to clean up local mock rows created during previews or staging without calling Pinterest.</p>
+          </div>
+        </div>
+
+        <div class="flex items-start gap-3 p-3.5 rounded-xl border border-border bg-muted/20">
+          <div class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-xs">3</div>
+          <div class="space-y-1">
+            <h4 class="font-bold text-foreground">Delete now works with real IDs</h4>
+            <p class="text-muted-foreground text-[11px]">Once real Pinterest IDs are mapped, deleting a board safely dispatches the <code>delete</code> action to Pinterest via Make, removing it from both Pinterest and PinOrbit.</p>
+          </div>
+        </div>
+
+        <div class="flex items-start gap-3 p-3.5 rounded-xl border border-border bg-muted/20">
+          <div class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500 font-bold text-xs">4</div>
+          <div class="space-y-1">
+            <h4 class="font-bold text-foreground">Re-link pins automatically</h4>
+            <p class="text-muted-foreground text-[11px]">If pins were previously attached to staged rows, the scheduler links them to the verified real board names automatically upon ingest.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CARD 5: COMMON MISTAKES CARD -->
+    <div class="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-4">
+      <div class="flex items-center gap-2.5 border-b border-border pb-3">
+        <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-500/10 text-rose-500">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        </div>
+        <div>
+          <h3 class="text-sm font-bold text-foreground">Common Configuration Mistakes</h3>
+          <p class="text-xs text-muted-foreground">Avoid these frequent Make.com scenario setup pitfalls</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+        <div class="p-3 rounded-xl border border-rose-500/20 bg-rose-500/5 space-y-1">
+          <div class="font-bold text-rose-600 dark:text-rose-400">1. <code>map()</code> in JSON body</div>
+          <p class="text-muted-foreground text-[11px]">Never write <code>map()</code> in the HTTP body text. Ingest accepts per-bundle HTTP requests directly from Pinterest "List Boards".</p>
+        </div>
+
+        <div class="p-3 rounded-xl border border-rose-500/20 bg-rose-500/5 space-y-1">
+          <div class="font-bold text-rose-600 dark:text-rose-400">2. Secret in query params</div>
+          <p class="text-muted-foreground text-[11px]">Do not append <code>?secret=...</code> to the ingest URL. Secrets must be placed in the HTTP header: <code>x-ingest-secret</code>.</p>
+        </div>
+
+        <div class="p-3 rounded-xl border border-rose-500/20 bg-rose-500/5 space-y-1">
+          <div class="font-bold text-rose-600 dark:text-rose-400">3. List Pins vs List Boards</div>
+          <p class="text-muted-foreground text-[11px]">Select the Pinterest module <strong>"List Boards"</strong>, NOT "List Pins". "List Pins" returns pin entities which will fail board validation.</p>
+        </div>
+
+        <div class="p-3 rounded-xl border border-rose-500/20 bg-rose-500/5 space-y-1">
+          <div class="font-bold text-rose-600 dark:text-rose-400">4. Deleting staged IDs on Pinterest</div>
+          <p class="text-muted-foreground text-[11px]">Staged mock IDs (<code>pin_bd_*</code>) do not exist on Pinterest. Use <strong>"Remove local"</strong> or <strong>"Purge staged"</strong> instead of dispatching remote deletes.</p>
+        </div>
+
+        <div class="p-3 rounded-xl border border-rose-500/20 bg-rose-500/5 space-y-1 md:col-span-2">
+          <div class="font-bold text-rose-600 dark:text-rose-400">5. Router values with <code>[]</code></div>
+          <p class="text-muted-foreground text-[11px]">When defining filters on Make's Router module, compare <code>action</code> equals <code>create</code>, <code>list</code>, or <code>delete</code> directly. Do not append array brackets <code>create[]</code> or quotes.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- CARD 6: Supported Events Row & Documentation -->
     <div class="rounded-2xl border border-border bg-card p-5 shadow-sm space-y-3">
       <div class="flex items-center justify-between">
         <div>

@@ -1,0 +1,5 @@
+ALTER TABLE public.boards ADD COLUMN IF NOT EXISTS pin_count INTEGER;
+ALTER TABLE public.boards ADD COLUMN IF NOT EXISTS follower_count INTEGER;
+ALTER TABLE public.boards ADD COLUMN IF NOT EXISTS board_created_at TIMESTAMPTZ;
+ALTER TABLE public.boards ADD COLUMN IF NOT EXISTS board_pins_modified_at TIMESTAMPTZ;
+ALTER TABLE public.boards ADD COLUMN IF NOT EXISTS last_synced_at TIMESTAMPTZ;

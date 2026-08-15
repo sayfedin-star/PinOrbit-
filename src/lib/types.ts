@@ -93,6 +93,11 @@ export interface Board {
   pinterest_board_id?: string | null;
   created_via?: 'manual' | 'webhook_auto_create' | string;
   created_via_webhook_id?: string | null;
+  pin_count?: number | null;
+  follower_count?: number | null;
+  board_created_at?: string | null;
+  board_pins_modified_at?: string | null;
+  last_synced_at?: string | null;
 }
 
 export interface Pin {

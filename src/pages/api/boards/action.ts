@@ -30,15 +30,15 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (!account_id) {
     return new Response(JSON.stringify({ error: 'account_id is required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
   }
-  if (!action || !['create', 'list', 'delete'].includes(action)) {
-    return new Response(JSON.stringify({ error: 'Invalid action (must be create|list|delete)' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+  if (!action || !['create', 'list', 'delete', 'delete_local'].includes(action)) {
+    return new Response(JSON.stringify({ error: 'Invalid action (must be create|list|delete|delete_local)' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
   }
 
   // Validate action-specific fields
   if (action === 'create' && (!board_name || typeof board_name !== 'string')) {
     return new Response(JSON.stringify({ error: 'board_name is required for create action' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
   }
-  if (action === 'delete' && (!board_id || typeof board_id !== 'string')) {
+  if (['delete', 'delete_local'].includes(action) && (!board_id || typeof board_id !== 'string')) {
     return new Response(JSON.stringify({ error: 'board_id is required for delete action' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
   }
 
@@ -50,6 +50,20 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const { data: account } = await adminClient.from('accounts').select('id, workspace_id').eq('id', account_id).maybeSingle();
     if (!account || account.workspace_id !== workspaceId) {
       return new Response(JSON.stringify({ error: 'Forbidden: account does not belong to the active workspace.' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    // Handle delete_local: DB row deletion ONLY, no Pinterest/Make webhook dispatch
+    if (action === 'delete_local') {
+      const { error: delErr } = await adminClient
+        .from('boards')
+        .delete()
+        .eq('account_id', account_id)
+        .or(`board_id.eq.${board_id},id.eq.${board_id},pinterest_board_id.eq.${board_id}`);
+
+      if (delErr) {
+        return new Response(JSON.stringify({ error: delErr.message || 'Failed to delete local board' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({ success: true, deleted_local: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
     // Build extra payload
