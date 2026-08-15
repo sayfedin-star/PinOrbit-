@@ -89,7 +89,7 @@ async function handleDispatch(body: any, locals: any) {
       await admin.from('pins').update({ status: 'pending', processing_started_at: null, updated_at: new Date().toISOString() }).eq('id', c.id);
       skipped++; continue;
     }
-    await fetch(hook.webhook_url, {
+    const pushRes = await fetch(hook.webhook_url, {
       method: 'POST', headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify({
         event: 'pin.post',
@@ -99,7 +99,15 @@ async function handleDispatch(body: any, locals: any) {
         board_name: pin.board_name, board_id: boardId,
       }),
       signal: AbortSignal.timeout(8000),
-    }).catch(() => {});
+    }).catch(() => null);
+
+    if (pushRes && pushRes.ok) {
+      hook.executions_used = (hook.executions_used ?? 0) + 1;
+      await admin.from('account_webhooks').update({
+        executions_used: hook.executions_used,
+        last_used_at: new Date().toISOString(),
+      }).eq('id', hook.id).then(() => {});
+    }
     dispatched++;
   }
 

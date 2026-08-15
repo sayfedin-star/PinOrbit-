@@ -1375,6 +1375,23 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
 
     const initials = (acc.account_name || 'AC').slice(0, 2).toUpperCase();
 
+    // Compute schedule badge
+    let scheduleBadgeHtml = '';
+    if (!accountSchedules || accountSchedules.length === 0) {
+      scheduleBadgeHtml = `<span class="inline-flex items-center gap-1 rounded-full bg-zinc-500/10 border border-zinc-500/30 px-2.5 py-0.5 text-[11px] font-bold text-zinc-400"><span class="h-1.5 w-1.5 rounded-full bg-zinc-400"></span>No schedules yet</span>`;
+    } else {
+      const activeSched = accountSchedules.find((s: any) => s.status === 'active');
+      if (!activeSched) {
+        scheduleBadgeHtml = `<span class="inline-flex items-center gap-1 rounded-full bg-amber-500/10 border border-amber-500/30 px-2.5 py-0.5 text-[11px] font-bold text-amber-600 dark:text-amber-400"><span class="h-1.5 w-1.5 rounded-full bg-amber-500"></span>Schedules Paused</span>`;
+      } else if (activeSched.cron_expression) {
+        const nextTime = calculateNextExecution(activeSched.cron_expression, acc.timezone || activeSched.timezone || 'UTC');
+        scheduleBadgeHtml = `<span class="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400"><span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>Next Pin: ${nextTime}</span>`;
+      } else {
+        const intMins = activeSched.interval_minutes || acc.posting_interval_minutes || 30;
+        scheduleBadgeHtml = `<span class="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400"><span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>Next Pin: ~${intMins}m</span>`;
+      }
+    }
+
     // Only update the account info section — buttons are static HTML
     infoContainer.classList.remove('animate-pulse');
     infoContainer.innerHTML = `
@@ -1385,6 +1402,7 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
         <div class="flex items-center gap-2.5">
           <h1 class="text-xl font-bold text-foreground">${escapeHtml(acc.account_name)}</h1>
           ${renderStatusBadge(acc.is_active)}
+          ${scheduleBadgeHtml}
         </div>
         <p class="text-xs text-muted-foreground mt-0.5 flex flex-wrap items-center gap-2">
           <span>Registered ${formatDate(acc.created_at)} • ${acc.boards_count || 0} linked boards</span>
@@ -1560,6 +1578,14 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
       if (countdownElem) {
         countdownElem.textContent = 'Publishing Paused';
       }
+    } else if (!accountSchedules || accountSchedules.length === 0) {
+      if (statusElem) {
+        statusElem.className = 'inline-flex items-center gap-1.5 rounded-full bg-zinc-500/10 border border-zinc-500/30 px-2.5 py-0.5 text-[11px] font-bold text-zinc-400';
+        statusElem.innerHTML = `<span class="h-1.5 w-1.5 rounded-full bg-zinc-400"></span><span>No schedules yet</span>`;
+      }
+      if (countdownElem) {
+        countdownElem.textContent = 'No schedules configured';
+      }
     } else if (!isDayActive) {
       if (statusElem) {
         statusElem.className = 'inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 px-2.5 py-0.5 text-[11px] font-bold text-amber-600 dark:text-amber-400';
@@ -1573,9 +1599,15 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
         statusElem.className = 'inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400';
         statusElem.innerHTML = `<span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span><span>Window Active</span>`;
       }
-      const intervalMins = acc.posting_interval_minutes || 30;
-      if (countdownElem) {
-        countdownElem.textContent = `Next Pin: ~${intervalMins} mins`;
+      const activeSched = accountSchedules.find((s: any) => s.status === 'active');
+      if (activeSched && activeSched.cron_expression) {
+        const nextComputed = calculateNextExecution(activeSched.cron_expression, tz);
+        if (countdownElem) countdownElem.textContent = `Next Pin: ${nextComputed}`;
+      } else {
+        const intervalMins = activeSched?.interval_minutes || acc.posting_interval_minutes || 30;
+        if (countdownElem) {
+          countdownElem.textContent = `Next Pin: ~${intervalMins} mins`;
+        }
       }
     } else {
       if (statusElem) {
@@ -2307,22 +2339,25 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
     const combinedBarEl = document.getElementById('wh-combined-capacity-bar');
 
     let totalCap = 0;
+    let totalUsed = 0;
     let totalRem = 0;
 
     (activeAccountWebhooks || []).forEach((h) => {
       const cap = h.monthly_capacity ?? 500;
-      const rem = Math.max(0, cap - (h.monthly_usage ?? 0));
+      const used = h.executions_used ?? h.monthly_usage ?? 0;
+      const rem = Math.max(0, cap - used);
       if (h.is_active) {
         totalCap += cap;
+        totalUsed += used;
         totalRem += rem;
       }
     });
 
     if (combinedCapEl) {
-      combinedCapEl.textContent = `Combined: ${totalRem.toLocaleString()} / ${totalCap.toLocaleString()} runs remaining`;
+      combinedCapEl.textContent = `Combined: ${totalUsed.toLocaleString()} / ${totalCap.toLocaleString()} runs (${totalRem.toLocaleString()} remaining)`;
     }
     if (combinedBarEl) {
-      const combinedPct = totalCap > 0 ? Math.min(100, Math.round((totalRem / totalCap) * 100)) : 0;
+      const combinedPct = totalCap > 0 ? Math.min(100, Math.round((totalUsed / totalCap) * 100)) : 0;
       combinedBarEl.style.width = `${combinedPct}%`;
     }
 
@@ -2343,10 +2378,10 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
               ? hook.webhook_url.slice(0, 22) + '••••' + hook.webhook_url.slice(-4)
               : hook.webhook_url;
             const monthlyCap = hook.monthly_capacity ?? 500;
-            const monthlyUsage = hook.monthly_usage ?? 0;
+            const monthlyUsage = hook.executions_used ?? hook.monthly_usage ?? 0;
             const remCap = Math.max(0, monthlyCap - monthlyUsage);
             const usedPct = monthlyCap > 0 ? ((monthlyUsage / monthlyCap) * 100).toFixed(1) : '0.0';
-            const remPct = Math.min(100, Math.round((remCap / monthlyCap) * 100));
+            const usedBarPct = Math.min(100, Math.round((monthlyUsage / monthlyCap) * 100));
 
             return `
               <tr class="border-b border-border hover:bg-muted/30 transition-colors">
@@ -2372,7 +2407,7 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
                       <span class="text-[10px] text-muted-foreground font-mono">${usedPct}%</span>
                     </div>
                     <div class="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                      <div class="h-full rounded-full ${remCap > 50 ? 'bg-emerald-500' : remCap > 0 ? 'bg-amber-500' : 'bg-rose-500'}" style="width: ${remPct}%"></div>
+                      <div class="h-full rounded-full ${usedBarPct > 80 ? 'bg-rose-500' : usedBarPct > 50 ? 'bg-amber-500' : 'bg-primary'}" style="width: ${usedBarPct}%"></div>
                     </div>
                   </div>
                 </td>
@@ -3398,6 +3433,10 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
         }).join('');
 
     updateBatchButtonState();
+    if (currentAccount) {
+      renderHeader(currentAccount);
+      renderScheduling(currentAccount);
+    }
   }
 
   function populateChannelSelect() {

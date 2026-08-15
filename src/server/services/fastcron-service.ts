@@ -1395,6 +1395,23 @@ export async function triggerBoardAction(
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(8000),
     });
+
+    if (res.ok && resolvedWebhookId) {
+      const { data: curHook } = await schedulingClient
+        .from('account_webhooks')
+        .select('executions_used')
+        .eq('id', resolvedWebhookId)
+        .maybeSingle();
+
+      await schedulingClient
+        .from('account_webhooks')
+        .update({
+          executions_used: (curHook?.executions_used ?? 0) + 1,
+          last_used_at: new Date().toISOString(),
+        })
+        .eq('id', resolvedWebhookId);
+    }
+
     return {
       success: res.ok,
       status: res.status,

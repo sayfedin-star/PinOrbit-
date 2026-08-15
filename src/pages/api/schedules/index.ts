@@ -36,15 +36,31 @@ export const GET: APIRoute = async ({ url, locals }) => {
       query = query.eq('account_id', account_id);
     }
     
-    const { data, error } = await query.order('created_at', { ascending: false });
-    if (error) throw error;
+    let { data, error } = await query.order('created_at', { ascending: false });
+    if (error) {
+      // Fallback query without joins in case foreign key relationships are unlinked
+      let basicQuery = adminClient.from('posting_schedules').select('*').eq('workspace_id', workspaceId);
+      if (account_id) basicQuery = basicQuery.eq('account_id', account_id);
+      const { data: basicData, error: basicError } = await basicQuery.order('created_at', { ascending: false });
+      if (basicError) throw basicError;
+      data = basicData;
+    }
+
+    // Fetch account_webhooks map for robust label resolution
+    const { data: webhooksData } = await adminClient.from('account_webhooks').select('id, label');
+    const webhookMap = new Map<string, string>();
+    (webhooksData || []).forEach((w: any) => {
+      if (w.id && w.label) webhookMap.set(w.id, w.label);
+    });
 
     const kek = await resolveTokenKek(runtimeEnv);
     const sanitizedSchedules = await Promise.all((data || []).map(async (schedule: any) => {
       const result: any = { ...schedule };
       delete result.fastcron_token_encrypted;  // NEVER send ciphertext to client
       
-      result.webhook_label = schedule.account_webhooks?.label || null;
+      result.webhook_label = schedule.webhook_id
+        ? (webhookMap.get(schedule.webhook_id) || schedule.account_webhooks?.label || 'Channel')
+        : 'Auto';
       if (schedule.fastcron_tokens) {
         result.token_name = schedule.fastcron_tokens.name;
         result.fastcron_token_masked = schedule.fastcron_tokens.token_masked;

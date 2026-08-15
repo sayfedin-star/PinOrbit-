@@ -31,6 +31,7 @@ export interface AccountWebhook {
   monthly_capacity: number;
   monthly_usage: number;
   remaining_capacity: number;
+  executions_used?: number;
   priority: number;
   is_active: boolean;
   is_primary: boolean;
