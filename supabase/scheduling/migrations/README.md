@@ -24,6 +24,7 @@ This directory contains versioned SQL migrations for Project 1 (Scheduling & Aut
 | 9 | `20260818000000_fastcron_tokens_and_schedule_meta.sql` | `fastcron_tokens` table, 5 RLS policies, metadata columns | 20260816000000 | Applied (Manually via Supabase MCP) |
 | 10 | `20260819000000_posting_schedules_cron_expression.sql` | `cron_expression` column on `posting_schedules` | 20260816000000 | Applied (Manually via Supabase MCP) |
 | 11 | `20260820000000_scheduling_perf_indexes.sql` | Foreign key & status lookup performance indexes | 20260816000000, 20260815000000 | Applied (Manually via Supabase MCP) |
+| 12 | `20260821000000_accounts_board_webhook.sql` | `board_webhook_id` on `accounts` table for dedicated board webhooks | 20260808000001 | Applied (Manually via Supabase MCP) |
 
 ---
 

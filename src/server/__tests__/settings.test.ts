@@ -21,10 +21,13 @@ vi.mock('../db/analytics', () => ({
 }));
 
 vi.mock('../db/clients', () => ({
+  isProductionEnv: vi.fn().mockReturnValue(false),
+  isKnownDefaultIngestSecret: vi.fn().mockReturnValue(false),
+  isKnownDefaultKek: vi.fn().mockReturnValue(false),
   getServerEnv: vi.fn().mockImplementation((runtimeEnv?: any) => ({
     INGEST_SECRET_KEY: 'test_ingest_key',
     FASTCRON_API_TOKEN: runtimeEnv && 'FASTCRON_API_TOKEN' in runtimeEnv ? runtimeEnv.FASTCRON_API_TOKEN : 'default_fastcron_token_12345',
-    TOKEN_KEK: 'pinorbit_dev_token_kek_00000000',
+    TOKEN_KEK: 'test_kek_valid_length_32_bytes_ok',
   })),
 }));
 

@@ -6,7 +6,6 @@ import type {
   ScheduleSyncResponse,
   TriggerSyncResponse,
 } from '../../lib/types';
-import type { PostingSchedule } from '../types/scheduling';
 
 export const FASTCRON_BASE = 'https://www.fastcron.com/api/v1';
 export const DISPATCH_ENDPOINT_URL = process.env.DISPATCH_BASE_URL || 'https://pinorbit-v2.o-i.workers.dev/api/internal/pinterest/daily-dispatch';
@@ -574,9 +573,6 @@ export const fastcronService = {
                                 (storedTopPinsId != null && jId === storedTopPinsId);
 
             if (isDispatchUrl && matchesConnection && !isStoredJob) {
-              console.log(
-                `[FastCron] Removing orphan duplicate job ${jId} for connection ${connectionId}`
-              );
               await this.fastcronCall('cron_delete', { id: jId }, token);
             }
           }
@@ -1015,82 +1011,8 @@ export const fastcronService = {
 import { dbClients } from '../db/clients';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-export function buildPortableCron(s: {
-  interval_minutes?: number;
-  window_start?: string;
-  window_end?: string;
-  active_days?: string[] | string;
-}): string {
-  const interval = Math.max(1, s?.interval_minutes || 36);
-  const startH = parseInt(String(s?.window_start || '09:00').slice(0, 2), 10) || 0;
-  const endH = parseInt(String(s?.window_end || '21:00').slice(0, 2), 10) || 0;
-
-  // 1. Build window hours list (explicit comma list, NO / in hours)
-  const windowHours: number[] = [];
-  if (startH <= endH) {
-    for (let h = startH; h <= endH; h++) windowHours.push(h);
-  } else {
-    for (let h = startH; h <= 23; h++) windowHours.push(h);
-    for (let h = 0; h <= endH; h++) windowHours.push(h);
-  }
-  if (windowHours.length === 0) windowHours.push(startH);
-
-  let minuteField = '0';
-  let hourField = '';
-
-  if (interval < 60) {
-    if (60 % interval === 0) {
-      minuteField = `*/${interval}`;
-    } else {
-      const mins: number[] = [];
-      for (let m = 0; m < 60; m += interval) mins.push(m);
-      minuteField = mins.join(',');
-    }
-    hourField = windowHours.join(',');
-  } else {
-    minuteField = '0';
-    const stepHours = Math.max(1, Math.round(interval / 60));
-    const selectedHours: number[] = [];
-    for (let i = 0; i < windowHours.length; i += stepHours) {
-      selectedHours.push(windowHours[i]);
-    }
-    hourField = selectedHours.join(',');
-  }
-
-  // 2. Active days (0=Sun .. 6=Sat)
-  const dayMap: Record<string, number> = {
-    sun: 0, sunday: 0,
-    mon: 1, monday: 1,
-    tue: 2, tuesday: 2,
-    wed: 3, wednesday: 3,
-    thu: 4, thursday: 4,
-    fri: 5, friday: 5,
-    sat: 6, saturday: 6,
-  };
-
-  let activeDaysArr: string[] = [];
-  if (Array.isArray(s?.active_days)) {
-    activeDaysArr = s.active_days;
-  } else if (typeof s?.active_days === 'string') {
-    activeDaysArr = s.active_days.replace(/[{}"']/g, '').split(',').map((x) => x.trim()).filter(Boolean);
-  }
-
-  let dayField = '*';
-  if (activeDaysArr.length > 0 && activeDaysArr.length < 7) {
-    const dayNums = Array.from(
-      new Set(
-        activeDaysArr
-          .map((d) => dayMap[d.toLowerCase()])
-          .filter((n) => n !== undefined)
-      )
-    ).sort((a, b) => a - b);
-    if (dayNums.length > 0 && dayNums.length < 7) {
-      dayField = dayNums.join(',');
-    }
-  }
-
-  return `${minuteField} ${hourField} * * ${dayField}`;
-}
+import { buildPortableCron } from './scheduling-logic';
+export { buildPortableCron };
 
 async function resolveWebhookUrlForSchedule(schedulingClient: SupabaseClient, schedule: any): Promise<string> {
   // First try schedule.webhook_id row in account_webhooks

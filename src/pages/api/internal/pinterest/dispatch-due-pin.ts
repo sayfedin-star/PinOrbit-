@@ -2,6 +2,12 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 import { dbClients, hasSchedulingSecretKey } from '../../../../server/db/clients';
 import { triggerBoardAction } from '../../../../server/services/fastcron-service';
+import {
+  checkScheduleWindow,
+  clampProcessingTimeoutMinutes,
+  buildPinPostIdempotencyKey,
+  buildBoardCreateIdempotencyKey,
+} from '../../../../server/services/scheduling-logic';
 
 const json = (o: any, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { 'Content-Type': 'application/json' } });
 
@@ -22,20 +28,9 @@ async function handleDispatch(body: any, locals: any) {
   if (schedule.started_at && new Date(schedule.started_at).getTime() > Date.now()) return json({ success: true, dispatched: false, reason: 'not_started' });
 
   // Timezone-aware window and active days enforcement (skipped when explicit cron_expression is configured)
-  if (!schedule.cron_expression) {
-    const tz = schedule.timezone || 'UTC';
-    const now = new Date();
-    let day = '', hm = '';
-    try {
-      const parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(now);
-      day = parts.find(p => p.type === 'weekday')?.value || '';
-      hm = (parts.find(p => p.type === 'hour')?.value || '00') + ':' + (parts.find(p => p.type === 'minute')?.value || '00');
-    } catch {}
-    if (day && (schedule.active_days || []).length && !schedule.active_days.includes(day))
-      return json({ success: true, dispatched: false, reason: 'day_off' });
-    const w0 = String(schedule.window_start || '09:00').slice(0,5), w1 = String(schedule.window_end || '21:00').slice(0,5);
-    if (hm && (w0 <= w1 ? (hm < w0 || hm > w1) : (hm < w0 && hm > w1)))
-      return json({ success: true, dispatched: false, reason: 'window_closed' });
+  const windowCheck = checkScheduleWindow(schedule);
+  if (!windowCheck.allowed) {
+    return json({ success: true, dispatched: false, reason: windowCheck.reason });
   }
 
   const accountId = schedule.account_id;
@@ -48,7 +43,7 @@ async function handleDispatch(body: any, locals: any) {
     .eq('workspace_id', workspaceId)
     .maybeSingle();
 
-  const processingTimeoutMinutes = wsSettings?.processing_timeout_minutes ?? 45;
+  const processingTimeoutMinutes = clampProcessingTimeoutMinutes(wsSettings?.processing_timeout_minutes);
   const staleCut = new Date(Date.now() - processingTimeoutMinutes * 60000).toISOString();
   await admin.from('pins').update({ status: 'pending', processing_started_at: null, claimed_at: null, updated_at: new Date().toISOString() })
     .eq('status', 'processing').eq('workspace_id', workspaceId).lt('claimed_at', staleCut).lt('attempts', 2).then(() => {});
@@ -97,7 +92,7 @@ async function handleDispatch(body: any, locals: any) {
     }
     if (!boardId) {
       if (account.auto_create_missing_boards && pin.board_name) {
-        const idem = `create:${accountId}:${String(pin.board_name).toLowerCase()}`;
+        const idem = buildBoardCreateIdempotencyKey(accountId, pin.board_name);
         await admin.from('board_provisioning_requests').upsert({ workspace_id: workspaceId, account_id: accountId, board_name: pin.board_name, idempotency_key: idem, status: 'provisioning', webhook_id: hook.id }, { onConflict: 'idempotency_key' }).then(() => {});
         await triggerBoardAction(accountId, 'create', { board_name: pin.board_name, workspace_id: workspaceId, webhook_id: hook.id, idempotency_key: idem }, runtimeEnv).catch(() => {});
       }
@@ -108,7 +103,7 @@ async function handleDispatch(body: any, locals: any) {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         event: 'pin.post',
-        idempotency_key: `pin.post:${pin.id}:${pin.attempts}`,
+        idempotency_key: buildPinPostIdempotencyKey(pin.id, pin.attempts),
         pin_id: pin.id, workspace_id: workspaceId, account_id: accountId,
         title: pin.title, description: pin.description, image_url: pin.image_url, link: pin.link,
         board_name: pin.board_name, board_id: boardId,

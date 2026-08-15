@@ -21,11 +21,23 @@ vi.mock('../db/clients', () => {
   };
 
   return {
+    isProductionEnv: vi.fn().mockReturnValue(false),
+    isKnownDefaultIngestSecret: vi.fn().mockReturnValue(false),
+    isKnownDefaultKek: vi.fn().mockReturnValue(false),
     getServerEnv: vi.fn().mockReturnValue({
       INGEST_SECRET_KEY: 'env_secret_default_999',
     }),
     dbClients: {
       getAnalytics: vi.fn().mockReturnValue(mockAnalytics),
+      getSchedulingAdmin: vi.fn().mockReturnValue({
+        from: vi.fn().mockReturnValue({
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+            }),
+          }),
+        }),
+      }),
       getConfig: vi.fn().mockReturnValue({
         INGEST_SECRET_KEY: 'env_secret_default_999',
       }),
@@ -102,7 +114,7 @@ describe('Pinterest Ingestion Validation Sequence & Security Suite (V19 Strict M
     expect(json.error).toContain('connection_id is required');
   });
 
-  it('B3 Step 3: Returns HTTP 404 if connection is absent or deleted in Project 3', async () => {
+  it('B3 Step 3: Returns HTTP 401 if connection is absent or deleted in Project 3', async () => {
     mockAnalyticsClient.from.mockReturnValue({
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
@@ -112,16 +124,19 @@ describe('Pinterest Ingestion Validation Sequence & Security Suite (V19 Strict M
 
     const req = new Request('http://localhost:4321/api/internal/pinterest/ingest', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-ingest-secret': 'env_secret_default_999',
+      },
       body: JSON.stringify({ connection_id: 'nonexistent-conn-id' }),
     });
     const res = await ingestHandler({
       request: req,
       locals: { runtime: { env: mockRuntimeEnv } },
     } as any);
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(401);
     const json = await res.json();
-    expect(json.error).toContain('not found or has been deleted');
+    expect(json.error).toContain('Invalid connection or unauthorized');
   });
 
   it('B3 Step 4: Returns HTTP 409 { success: false, error: "connection_disabled" } when analytics_enabled is false', async () => {
@@ -144,7 +159,7 @@ describe('Pinterest Ingestion Validation Sequence & Security Suite (V19 Strict M
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-ingest-secret': 'valid_secret',
+        'x-ingest-secret': 'env_secret_default_999',
       },
       body: JSON.stringify({ connection_id: mockConnId }),
     });
@@ -287,7 +302,7 @@ describe('Pinterest Ingestion Validation Sequence & Security Suite (V19 Strict M
         'Content-Type': 'application/json',
         'x-ingest-secret': 'global_secret',
       },
-      body: JSON.stringify({ connection_id: mockConnId }),
+      body: JSON.stringify({ connection_id: mockConnId, workspace_id: mockWsId }),
     });
     const globalRes = await ingestHandler({
       request: globalReq,
@@ -302,7 +317,7 @@ describe('Pinterest Ingestion Validation Sequence & Security Suite (V19 Strict M
         'Content-Type': 'application/json',
         'x-ingest-secret': 'ws_override_secret',
       },
-      body: JSON.stringify({ connection_id: mockConnId }),
+      body: JSON.stringify({ connection_id: mockConnId, workspace_id: mockWsId }),
     });
     const wsRes = await ingestHandler({
       request: wsReq,
@@ -353,6 +368,7 @@ describe('Pinterest Ingestion Validation Sequence & Security Suite (V19 Strict M
         connection_id: mockConnId,
         workspace_id: mockWsId,
       }),
+      expect.anything(),
       expect.anything()
     );
   });
@@ -375,9 +391,9 @@ describe('Pinterest Ingestion Validation Sequence & Security Suite (V19 Strict M
       }),
     });
 
-    mockKvStore.set('ingest_secret:global', 'authorized_global_secret');
-
     const wrongWsId = '99999999-9999-9999-9999-999999999999';
+    mockKvStore.set('ingest_secret:global', 'authorized_global_secret');
+    mockKvStore.set(`ingest_secret:ws:${wrongWsId}`, 'authorized_global_secret');
     const req = new Request('http://localhost:4321/api/internal/pinterest/ingest', {
       method: 'POST',
       headers: {
@@ -410,6 +426,7 @@ describe('Pinterest Ingestion Validation Sequence & Security Suite (V19 Strict M
         connection_id: mockConnId,
         workspace_id: mockWsId,
       }),
+      expect.anything(),
       expect.anything()
     );
 

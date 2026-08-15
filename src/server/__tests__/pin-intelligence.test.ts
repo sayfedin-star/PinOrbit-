@@ -5,6 +5,7 @@ import { POST as postRetentionHandler } from '../../pages/api/internal/pinterest
 import { analyticsDb } from '../db/analytics';
 import { dbClients } from '../db/clients';
 import { getEffectiveSecret } from '../services/webhook-secrets';
+import type { PinLeaderboardItem } from '../../lib/types';
 
 vi.mock('../db/analytics', () => ({
   analyticsDb: {
@@ -26,24 +27,39 @@ vi.mock('../services/webhook-secrets', () => ({
   getEffectiveSecret: vi.fn().mockResolvedValue({ value: 'valid_test_secret_123', source: 'workspace' }),
 }));
 
-vi.mock('../db/clients', () => ({
-  dbClients: {
-    getAnalytics: vi.fn().mockReturnValue({
-      from: vi.fn().mockReturnValue({
-        delete: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            lt: vi.fn().mockResolvedValue({ count: 15, error: null }),
-          }),
-          lt: vi.fn().mockResolvedValue({ count: 15, error: null }),
-        }),
+vi.mock('../db/clients', () => {
+  const createQueryBuilder = () => {
+    const q: any = {
+      select: vi.fn(() => q),
+      delete: vi.fn(() => q),
+      update: vi.fn(() => q),
+      eq: vi.fn(() => q),
+      lt: vi.fn(() => q),
+      then: (resolve: any, reject: any) =>
+        Promise.resolve({ data: { retention_posted_days: 30, processing_timeout_minutes: 45 }, count: 15, error: null }).then(resolve, reject),
+      maybeSingle: vi.fn().mockResolvedValue({ data: { retention_posted_days: 30, processing_timeout_minutes: 45 }, error: null }),
+    };
+    return q;
+  };
+
+  return {
+    isProductionEnv: vi.fn().mockReturnValue(false),
+    isKnownDefaultIngestSecret: vi.fn().mockReturnValue(false),
+    isKnownDefaultKek: vi.fn().mockReturnValue(false),
+    dbClients: {
+      getAnalytics: vi.fn().mockReturnValue({
+        from: vi.fn(() => createQueryBuilder()),
       }),
+      getSchedulingAdmin: vi.fn().mockReturnValue({
+        from: vi.fn(() => createQueryBuilder()),
+      }),
+      getConfig: vi.fn().mockReturnValue({}),
+    },
+    getServerEnv: vi.fn().mockReturnValue({
+      INGEST_SECRET_KEY: 'valid_test_secret_123',
     }),
-    getConfig: vi.fn().mockReturnValue({}),
-  },
-  getServerEnv: vi.fn().mockReturnValue({
-    INGEST_SECRET_KEY: 'valid_test_secret_123',
-  }),
-}));
+  };
+});
 
 describe('Pin Intelligence & Retention Suite (V26.1)', () => {
   const workspaceId = '00000000-0000-0000-0000-000000000001';
@@ -404,8 +420,8 @@ describe('Pin Intelligence & Retention Suite (V26.1)', () => {
       expect(res.status).toBe(200);
       const json = await res.json();
       expect(json.success).toBe(true);
-      expect(json.deleted_count).toBe(15);
-      expect(json.cutoff_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(json.deleted_pins_count).toBe(15);
+      expect(json.posted_cutoff).toMatch(/^\d{4}-\d{2}-\d{2}/);
     });
   });
 });

@@ -142,6 +142,7 @@ vi.mock('../../server/services/pinner-analytics-service', () => ({
 vi.mock('../../server/services/webhook-secrets', () => ({
   regenerate: vi.fn().mockResolvedValue('new_secret_val_123'),
   getSecretStatus: vi.fn().mockResolvedValue({ secret: 'test_sec', source: 'global', hasOverride: false }),
+  getSecretStatusMasked: vi.fn().mockResolvedValue({ masked: '••••1234', source: 'global', hasOverride: false }),
   getSecretForWorkspace: vi.fn().mockResolvedValue({ secret: 'test_sec', source: 'global', hasOverride: false }),
   getEffectiveSecret: vi.fn().mockResolvedValue({ value: 'test_sec', source: 'global' }),
   removeWorkspaceOverride: vi.fn().mockResolvedValue(true),

@@ -15,7 +15,7 @@ flowchart TD
     subgraph API_Funnels [API Funnels: Server-Side Astro Endpoints]
         SchedulesAPI[/api/schedules & /api/schedules/bulk]
         BoardsAPI[/api/boards/action]
-        TokensAPI[/api/fastcron-tokens]
+        TokensAPI[/api/tokens, /api/tokens/id, /api/fastcron-tokens/id/ping]
         RetentionAPI[/api/internal/pinterest/cleanup-retention]
     end
 
@@ -56,7 +56,7 @@ flowchart TD
     DispatchEndpoint --> ScheduleGuard --> AccountCapGuard --> OrphanSweep --> AtomicClaim
     AtomicClaim -->|Ticket Push application/json| Bridge_Layer
     Bridge_Layer --> PinterestAPI
-    Bridge_Layer -->|Callback event: pin.posted / board.created| IngestEndpoint
+    Bridge_Layer -->|Callback event: pin.posted / pin.failed / board.created / boards.list / board.deleted| IngestEndpoint
     IngestEndpoint --> SecretAuth --> IdempotencyDedupe --> Database_Layer
 ```
 
@@ -90,41 +90,24 @@ flowchart TD
 
 ---
 
-## 3. Database Migrations & Versioning
+## 3. Database Migrations & Versioning (Project 1: Scheduling Authority `eygdoetdwqllvsxpvoex`)
 
-All migrations must be applied sequentially in chronological order matching the filenames in `supabase/migrations/`:
+All migrations must be applied sequentially in chronological order matching the filenames in `supabase/scheduling/migrations/`:
 
 | Order | Migration Filename | Core Responsibilities |
 |---|---|---|
-| 1 | `20260803000000_create_pinorbit_schema.sql` | Baseline PinOrbit schema, accounts, pins, boards, logs |
-| 2 | `20260803_account_scheduling.sql` | Account schedule interval & window baseline |
-| 3 | `20260803_add_scheduled_for_to_pins.sql` | `scheduled_for` column on pins table |
-| 4 | `20260803_audit_logging.sql` | `audit_log` table with RLS |
-| 5 | `20260803_multi_webhooks.sql` | `account_webhooks` multi-channel table |
-| 6 | `20260803_secure_admin_actions.sql` | Secure admin functions and permissions |
-| 7 | `20260804_account_active_days.sql` | Active days array for scheduling |
-| 8 | `20260804_account_posting_interval.sql` | Pacing intervals |
-| 9 | `20260804_account_random_delay.sql` | Random delay jitter for scheduling |
-| 10 | `20260804_board_auto_provisioning.sql` | `board_provisioning_requests` table |
-| 11 | `20260804_performance_indexes_and_relationships.sql` | Foreign key performance indexes |
-| 12 | `20260804_pins_retry_system.sql` | `retry_count`, `next_retry_at`, `max_retries` |
-| 13 | `20260804_scheduler_mvp_schema.sql` | Scheduler queue constraints |
-| 14 | `20260804_setup_pg_cron.sql` | pg_cron scheduling foundations |
-| 15 | `20260805_competitor_intelligence.sql` | Competitor tracking & snapshot tables |
-| 16 | `20260805_fix_pacing_engine.sql` | Pacing calculation logic fixes |
-| 17 | `20260805_optimize_cron_logs_indexes.sql` | Log index optimizations |
-| 18 | `20260805_precomputed_pacing_engine.sql` | Fast pacing precomputation |
-| 19 | `20260805_setup_competitor_cron.sql` | Competitor daily ingestion job |
-| 20 | `20260806190000_production_master_security_and_rollups.sql` | Master RLS policies & rollup views |
-| 21 | `20260806194000_add_workspaces_mvp.sql` | Multi-tenant `workspaces` and `workspace_memberships` |
-| 22 | `20260807040000_db_retention_and_queue_cleanup.sql` | Queue cleanup procedures |
-| 23 | `20260807050000_account_timezones_and_posting_slots.sql` | Account timezone definitions |
-| 24 | `20260807060000_pins_slimming_and_pin_delivery_logs.sql` | Pin record slimming and delivery logs |
-| 25 | `20260809233000_add_fastcron_token_to_analytics_connections.sql` | Analytics connection token fields |
-| 26 | `20260818000000_fastcron_tokens_and_schedule_meta.sql` | `fastcron_tokens` table & `posting_schedules` meta |
-| 27 | `20260822000000_boards_enrichment.sql` | Board metrics: `pin_count`, `follower_count`, `last_synced_at` |
-| 28 | `20260823000000_webhook_execution_counters.sql` | `executions_used` counters for webhook rate monitoring |
-| 29 | `20260824000000_pins_claimed_at_and_ws_timeouts.sql` | `claimed_at`, `workspace_retention_settings`, timeout sweep |
+| 1 | `20260808000000_init_scheduling_tenants_and_auth.sql` | Workspaces, memberships, auth tables, baseline schema |
+| 2 | `20260808000001_init_scheduling_accounts_boards_pins.sql` | Accounts, boards, pins, account_webhooks |
+| 3 | `20260808000002_init_scheduling_delivery_audit_logs.sql` | Logs, delivery queue, audit records |
+| 4 | `20260812000000_harden_membership_bootstrap_and_tier_config_writes.sql` | Membership bootstrap RPCs, tier write security |
+| 5 | `20260814000000_workspace_retention_settings.sql` | Workspace retention configurations & timeout settings |
+| 6 | `20260815000000_publishing_engine_v2.sql` | Auto-board provisioning, atomic dispatch RPCs (`claim_due_pins_simple`) |
+| 7 | `20260816000000_posting_schedules.sql` | `posting_schedules` core table & RLS policies |
+| 8 | `20260817000000_posting_schedules_status_extend.sql` | Extend check constraints for statuses (`not_synced`, `error`) |
+| 9 | `20260818000000_fastcron_tokens_and_schedule_meta.sql` | `fastcron_tokens` table, 5 RLS policies, metadata columns |
+| 10 | `20260819000000_posting_schedules_cron_expression.sql` | `cron_expression` column on `posting_schedules` |
+| 11 | `20260820000000_scheduling_perf_indexes.sql` | Foreign key & status lookup performance indexes |
+| 12 | `20260821000000_accounts_board_webhook.sql` | `board_webhook_id` on `accounts` for dedicated board webhooks |
 
 ---
 
@@ -135,7 +118,7 @@ All migrations must be applied sequentially in chronological order matching the 
 >
 > It dynamically renders verbatim JSON templates for:
 > - **Route 1 (Board Creation):** `board.created`
-> - **Route 2 (Board Listing & Sync):** `board.created` (per-item bundle iterator)
+> - **Route 2 (Board Listing & Sync):** `board.created` (per-item bundle iterator) or `boards.list` (bulk array payload)
 > - **Route 3 (Board Deletion):** `board.deleted`
 > - **Publish Webhooks (Pin Posting):** `pin.posted` (success) & `pin.failed` (error handler route)
 
@@ -145,10 +128,13 @@ All migrations must be applied sequentially in chronological order matching the 
 
 1. **No Rate-Limiter Middleware on Dispatch Endpoints:**
    - *Risk:* Ingestion and dispatch routes receive unthrottled requests.
-   - *Mitigation:* Dispatch endpoints require secret UUID tokens (`dispatch_token`) and ingest routes validate `x-ingest-secret`. Invalid calls immediately terminate with lightweight HTTP 401/403/404 responses before running database operations.
-2. **FastCron Free-Tier GET Query String Identity:**
-   - *Risk:* Free-tier cron runners only trigger HTTP GET requests without custom request headers.
-   - *Mitigation:* Dispatch endpoints accept authenticated credentials via query string (`schedule_id` + `dispatch_token`) matching server-stored values.
-3. **External Network Timeouts:**
+   - *Mitigation:* Dispatch endpoints require secret UUID tokens (`dispatch_token`) scoped per schedule and ingest routes validate `x-ingest-secret`. Invalid calls immediately terminate with lightweight HTTP 401/403/404 responses before running database operations.
+2. **FastCron Token Resolution Order:**
+   - *Hierarchy:* Schedule embedded token (`fastcron_token_encrypted`) $\rightarrow$ Schedule Token Row (`fastcron_tokens`) $\rightarrow$ Workspace Default Token (`is_default = true`) $\rightarrow$ Environment Fallback (`FASTCRON_API_TOKEN`).
+   - *Mitigation:* Pure evaluator `evaluateTokenCandidates` guarantees deterministic fallback without leaking unencrypted keys.
+3. **Workspace Retention & Timeout Clamp Bounds:**
+   - *Ranges:* `retention_posted_days` clamped strictly between 1–365 days (default 30); `processing_timeout_minutes` clamped strictly between 5–240 minutes (default 45).
+   - *Mitigation:* Server-side clamp helpers in `src/server/services/scheduling-logic.ts` enforce bounds across settings endpoints, orphan recovery sweeps, and retention purge routines.
+4. **External Network Timeouts:**
    - *Risk:* Downstream Make.com or Pinterest latency could block worker threads.
    - *Mitigation:* All outgoing HTTP requests employ strict `AbortSignal.timeout(8000)` timeouts wrapped in `try/catch` fallbacks to ensure fail-safe operation.

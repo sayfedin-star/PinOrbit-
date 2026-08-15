@@ -3,6 +3,7 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 import { assertWorkspaceAccess } from '../../../server/auth/workspace-guard';
 import { dbClients } from '../../../server/db/clients';
+import { clampRetentionPostedDays, clampProcessingTimeoutMinutes } from '../../../server/services/scheduling-logic';
 
 export const GET: APIRoute = async ({ request, locals }) => {
   const user = locals.user;
@@ -111,15 +112,12 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
       .eq('workspace_id', workspaceId)
       .maybeSingle();
 
-    let rawDays = body.retention_posted_days !== undefined ? Number(body.retention_posted_days) : (existing?.retention_posted_days ?? 30);
-    let rawTimeout = body.processing_timeout_minutes !== undefined ? Number(body.processing_timeout_minutes) : (existing?.processing_timeout_minutes ?? 45);
-
-    if (isNaN(rawDays)) rawDays = 30;
-    if (isNaN(rawTimeout)) rawTimeout = 45;
+    const rawDays = body.retention_posted_days !== undefined ? body.retention_posted_days : existing?.retention_posted_days;
+    const rawTimeout = body.processing_timeout_minutes !== undefined ? body.processing_timeout_minutes : existing?.processing_timeout_minutes;
 
     // Clamp ranges: days 1–365, minutes 5–240
-    const clampedRetentionDays = Math.max(1, Math.min(365, Math.round(rawDays)));
-    const clampedProcessingTimeoutMinutes = Math.max(5, Math.min(240, Math.round(rawTimeout)));
+    const clampedRetentionDays = clampRetentionPostedDays(rawDays);
+    const clampedProcessingTimeoutMinutes = clampProcessingTimeoutMinutes(rawTimeout);
 
     const { data: saved, error: upsertErr } = await adminClient
       .from('workspace_retention_settings')

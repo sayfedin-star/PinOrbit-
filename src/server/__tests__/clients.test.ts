@@ -40,7 +40,7 @@ describe('PinOrbit v2 Multi-Project Server Architecture', () => {
 
     await expect(
       assertWorkspaceAccess(mockSupabase, 'ws-123', 'user-456')
-    ).rejects.toThrow('Forbidden: User user-456 is not a member of workspace ws-123.');
+    ).rejects.toThrow('Forbidden: Access Denied.');
   });
 
   it('assertWorkspaceAccess returns workspace context when membership is verified', async () => {

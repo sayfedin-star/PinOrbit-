@@ -21,6 +21,9 @@ vi.mock('../db/clients', () => {
   };
 
   return {
+    isProductionEnv: vi.fn().mockReturnValue(false),
+    isKnownDefaultIngestSecret: vi.fn().mockReturnValue(false),
+    isKnownDefaultKek: vi.fn().mockReturnValue(false),
     getServerEnv: vi.fn().mockReturnValue({
       INGEST_SECRET_KEY: 'correct_secret_key_123',
     }),

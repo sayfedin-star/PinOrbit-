@@ -28,7 +28,7 @@ describe('Phase 3 — Server-Only Multi-Project Access & Authorization Guards', 
 
     await expect(
       competitorsService.getCompetitors(mockSchedulingClient, 'unauthorized-user', 'ws-123')
-    ).rejects.toThrow('Forbidden: User unauthorized-user is not a member of workspace ws-123.');
+    ).rejects.toThrow('Forbidden: Access Denied.');
   });
 
   it('competitorsService.getCompetitors passes workspaceId to competitorsDb when authorized', async () => {
@@ -102,7 +102,7 @@ describe('Phase 3 — Server-Only Multi-Project Access & Authorization Guards', 
 
     await expect(
       analyticsService.getImportHistory(mockSchedulingClient, 'attacker-user', 'ws-foreign')
-    ).rejects.toThrow('Forbidden: User attacker-user is not a member of workspace ws-foreign.');
+    ).rejects.toThrow('Forbidden: Access Denied.');
   });
 
   it('analyticsService.getImportHistory passes workspaceId when membership is validated', async () => {
@@ -164,6 +164,6 @@ describe('Phase 3 — Server-Only Multi-Project Access & Authorization Guards', 
 
     await expect(
       queueService.cancelPin(mockSchedulingClient, 'bad-user', 'ws-123', 'pin-999')
-    ).rejects.toThrow('Forbidden: User bad-user is not a member of workspace ws-123.');
+    ).rejects.toThrow('Forbidden: Access Denied.');
   });
 });

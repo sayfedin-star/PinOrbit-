@@ -476,23 +476,23 @@ if (intelConnId) {
     };
 
     // 1. Best Rank Delta
-    let rankDeltaInfo = { text: '', type: 'none' as const };
+    let rankDeltaInfo: { text: string; type: 'up' | 'down' | 'none' } = { text: '', type: 'none' };
     if (prevP && lastP) {
       const rPrev = Number(prevP.rank_position || 0);
       const rLast = Number(lastP.rank_position || 0);
       const rankDelta = rPrev - rLast; // lower number is better
-      if (rankDelta > 0) rankDeltaInfo = { text: `▲ ${rankDelta}`, type: 'up' as const };
-      else if (rankDelta < 0) rankDeltaInfo = { text: `▼ ${Math.abs(rankDelta)}`, type: 'down' as const };
+      if (rankDelta > 0) rankDeltaInfo = { text: `▲ ${rankDelta}`, type: 'up' };
+      else if (rankDelta < 0) rankDeltaInfo = { text: `▼ ${Math.abs(rankDelta)}`, type: 'down' };
     }
 
     // 7. Engagement Rate pp change
-    let erPpInfo = { text: '', type: 'none' as const };
+    let erPpInfo: { text: string; type: 'up' | 'down' | 'none' } = { text: '', type: 'none' };
     if (prevP && lastP) {
       const erPrev = Number(prevP.engagement_rate || 0);
       const erLast = Number(lastP.engagement_rate || 0);
       const pp = (erLast - erPrev) * 100;
-      if (pp > 0.005) erPpInfo = { text: `▲ ${pp.toFixed(2)} pp`, type: 'up' as const };
-      else if (pp < -0.005) erPpInfo = { text: `▼ ${Math.abs(pp).toFixed(2)} pp`, type: 'down' as const };
+      if (pp > 0.005) erPpInfo = { text: `▲ ${pp.toFixed(2)} pp`, type: 'up' };
+      else if (pp < -0.005) erPpInfo = { text: `▼ ${Math.abs(pp).toFixed(2)} pp`, type: 'down' };
     }
 
     const cards = [

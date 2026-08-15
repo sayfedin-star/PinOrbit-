@@ -4,7 +4,6 @@ import type { APIRoute } from 'astro';
 import { dbClients, isKnownDefaultIngestSecret, isProductionEnv } from '../../../../server/db/clients';
 import { getEffectiveSecret } from '../../../../server/services/webhook-secrets';
 import { pinnerETL } from '../../../../server/services/pinner-etl';
-import type { PinnerIngestPayload } from '../../../../lib/types';
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const runtimeEnv = (locals as { runtime?: { env?: Record<string, any> }; runtimeEnv?: Record<string, any> })?.runtime?.env || (locals as { runtimeEnv?: Record<string, any> })?.runtimeEnv || {};

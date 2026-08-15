@@ -3,7 +3,6 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 import { assertWorkspaceAccess } from '../../../server/auth/workspace-guard';
 import { dbClients } from '../../../server/db/clients';
-import type { PostingSchedule } from '../../../server/types/scheduling';
 import {
   pausePublishingSchedule,
   resumePublishingSchedule,

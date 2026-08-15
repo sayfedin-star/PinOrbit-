@@ -3,6 +3,7 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 import { dbClients, isKnownDefaultIngestSecret, isProductionEnv } from '../../../../server/db/clients';
 import { getEffectiveSecret } from '../../../../server/services/webhook-secrets';
+import { clampRetentionPostedDays, clampProcessingTimeoutMinutes } from '../../../../server/services/scheduling-logic';
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const runtimeEnv = (locals as { runtime?: { env?: Record<string, any> }; runtimeEnv?: Record<string, any> })?.runtime?.env || (locals as { runtimeEnv?: Record<string, any> })?.runtimeEnv || {};
@@ -76,8 +77,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
       .eq('workspace_id', workspaceId)
       .maybeSingle();
 
-    const retentionPostedDays = wsSettings?.retention_posted_days ?? 30;
-    const processingTimeoutMinutes = wsSettings?.processing_timeout_minutes ?? 45;
+    const retentionPostedDays = clampRetentionPostedDays(wsSettings?.retention_posted_days);
+    const processingTimeoutMinutes = clampProcessingTimeoutMinutes(wsSettings?.processing_timeout_minutes);
 
     // Purge posted pins older than workspace retention days
     const postedCutoff = new Date(Date.now() - retentionPostedDays * 86400000).toISOString();
