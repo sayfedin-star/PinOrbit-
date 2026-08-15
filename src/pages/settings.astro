@@ -61,6 +61,28 @@ if (supabase && currentWorkspace) {
     currentRole = 'owner';
   }
 }
+
+// Fetch retention settings for current workspace
+let retentionSettings = { retention_posted_days: 30, processing_timeout_minutes: 45, is_default: true };
+if (supabase && currentWorkspace) {
+  try {
+    const { data: retData } = await supabase
+      .from('workspace_retention_settings')
+      .select('retention_posted_days, processing_timeout_minutes')
+      .eq('workspace_id', currentWorkspace.id)
+      .maybeSingle();
+
+    if (retData) {
+      retentionSettings = {
+        retention_posted_days: retData.retention_posted_days ?? 30,
+        processing_timeout_minutes: retData.processing_timeout_minutes ?? 45,
+        is_default: false,
+      };
+    }
+  } catch (err) {
+    console.warn('Error fetching retention settings:', err);
+  }
+}
 ---
 
 <Layout title="Workspace Settings" description="Manage workspace details, team memberships, quick links, and system preferences.">
@@ -140,7 +162,86 @@ if (supabase && currentWorkspace) {
       </div>
     </div>
 
-    <!-- Card 2: Quick Links -->
+    <!-- Card 2: Retention & Recovery -->
+    <div class="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-6" id="retention-settings-card">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/60 pb-5">
+        <div class="flex items-start gap-3">
+          <div class="h-10 w-10 rounded-xl bg-primary/10 border border-primary/20 text-primary flex items-center justify-center text-lg shrink-0 mt-0.5 shadow-sm">
+            🗄️
+          </div>
+          <div>
+            <div class="flex items-center gap-2.5">
+              <h3 class="text-base font-bold text-foreground">Retention & Recovery</h3>
+              <span id="retention-default-badge" class={`rounded-full bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400 ${retentionSettings.is_default ? '' : 'hidden'}`}>
+                Using safe defaults (30 / 45)
+              </span>
+            </div>
+            <p class="text-xs text-muted-foreground mt-1">
+              Per-workspace cleanup & self-healing thresholds — see ARCHITECTURE.md decision log
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <form id="retention-settings-form" class="space-y-6" data-workspace-id={currentWorkspace?.id}>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="space-y-2">
+            <label for="retention-posted-days" class="block text-xs font-bold uppercase tracking-wider text-foreground">
+              Posted pins retention (days)
+            </label>
+            <input
+              type="number"
+              id="retention-posted-days"
+              name="retention_posted_days"
+              min="1"
+              max="365"
+              value={retentionSettings.retention_posted_days}
+              data-initial-value={retentionSettings.retention_posted_days}
+              class="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-xs font-semibold text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+              required
+            />
+            <p class="text-[11px] text-muted-foreground">
+              Posted pins older than this are purged by cleanup-retention.
+            </p>
+          </div>
+
+          <div class="space-y-2">
+            <label for="processing-timeout-minutes" class="block text-xs font-bold uppercase tracking-wider text-foreground">
+              Processing orphan timeout (minutes)
+            </label>
+            <input
+              type="number"
+              id="processing-timeout-minutes"
+              name="processing_timeout_minutes"
+              min="5"
+              max="240"
+              value={retentionSettings.processing_timeout_minutes}
+              data-initial-value={retentionSettings.processing_timeout_minutes}
+              class="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-xs font-semibold text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+              required
+            />
+            <p class="text-[11px] text-muted-foreground">
+              Processing pins older than this are re-queued automatically.
+            </p>
+          </div>
+        </div>
+
+        <div id="retention-status-msg" class="hidden rounded-xl p-3 text-xs font-semibold"></div>
+
+        <div class="flex items-center justify-end gap-3 pt-2">
+          <button
+            type="submit"
+            id="btn-save-retention"
+            disabled
+            class="rounded-xl bg-primary px-5 py-2.5 text-xs font-bold text-primary-foreground shadow-md hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Save Retention Settings
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Card 3: Quick Links -->
     <div class="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-4">
       <div>
         <h3 class="text-sm font-bold text-foreground uppercase tracking-wider">Quick Navigation Links</h3>
@@ -283,5 +384,99 @@ if (supabase && currentWorkspace) {
         }
       }
     });
+  });
+
+  // Retention & Recovery Form Logic
+  const retentionForm = document.getElementById('retention-settings-form') as HTMLFormElement | null;
+  const daysInput = document.getElementById('retention-posted-days') as HTMLInputElement | null;
+  const timeoutInput = document.getElementById('processing-timeout-minutes') as HTMLInputElement | null;
+  const saveBtn = document.getElementById('btn-save-retention') as HTMLButtonElement | null;
+  const statusMsg = document.getElementById('retention-status-msg');
+  const defaultBadge = document.getElementById('retention-default-badge');
+
+  function checkRetentionDirty() {
+    if (!daysInput || !timeoutInput || !saveBtn) return;
+    const initialDays = daysInput.getAttribute('data-initial-value') || '30';
+    const initialTimeout = timeoutInput.getAttribute('data-initial-value') || '45';
+
+    const isDirty = daysInput.value !== initialDays || timeoutInput.value !== initialTimeout;
+    saveBtn.disabled = !isDirty;
+  }
+
+  daysInput?.addEventListener('input', checkRetentionDirty);
+  timeoutInput?.addEventListener('input', checkRetentionDirty);
+
+  retentionForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!daysInput || !timeoutInput || !saveBtn || !retentionForm) return;
+
+    const days = parseInt(daysInput.value, 10);
+    const timeout = parseInt(timeoutInput.value, 10);
+
+    if (isNaN(days) || days < 1 || days > 365) {
+      if (statusMsg) {
+        statusMsg.className = 'rounded-xl p-3 text-xs font-semibold bg-rose-500/10 text-rose-500 border border-rose-500/20';
+        statusMsg.textContent = 'Posted pins retention must be between 1 and 365 days.';
+        statusMsg.classList.remove('hidden');
+      }
+      return;
+    }
+
+    if (isNaN(timeout) || timeout < 5 || timeout > 240) {
+      if (statusMsg) {
+        statusMsg.className = 'rounded-xl p-3 text-xs font-semibold bg-rose-500/10 text-rose-500 border border-rose-500/20';
+        statusMsg.textContent = 'Processing orphan timeout must be between 5 and 240 minutes.';
+        statusMsg.classList.remove('hidden');
+      }
+      return;
+    }
+
+    const workspaceId = retentionForm.getAttribute('data-workspace-id');
+    saveBtn.disabled = true;
+    const origText = saveBtn.textContent;
+    saveBtn.textContent = 'Saving...';
+
+    if (statusMsg) statusMsg.classList.add('hidden');
+
+    try {
+      const res = await fetch('/api/settings/retention', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workspace_id: workspaceId,
+          retention_posted_days: days,
+          processing_timeout_minutes: timeout,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to save settings');
+
+      daysInput.setAttribute('data-initial-value', String(data.retention_posted_days));
+      timeoutInput.setAttribute('data-initial-value', String(data.processing_timeout_minutes));
+      daysInput.value = String(data.retention_posted_days);
+      timeoutInput.value = String(data.processing_timeout_minutes);
+
+      defaultBadge?.classList.add('hidden');
+
+      if (statusMsg) {
+        statusMsg.className = 'rounded-xl p-3 text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20';
+        statusMsg.textContent = 'Retention & recovery settings saved successfully.';
+        statusMsg.classList.remove('hidden');
+        setTimeout(() => {
+          statusMsg.classList.add('hidden');
+        }, 4000);
+      }
+    } catch (err: any) {
+      if (statusMsg) {
+        statusMsg.className = 'rounded-xl p-3 text-xs font-semibold bg-rose-500/10 text-rose-500 border border-rose-500/20';
+        statusMsg.textContent = err.message || 'Error updating retention settings';
+        statusMsg.classList.remove('hidden');
+      }
+      saveBtn.disabled = false;
+    } finally {
+      saveBtn.textContent = origText;
+      checkRetentionDirty();
+    }
   });
 </script>
