@@ -410,7 +410,7 @@ export async function getAccounts(workspaceId?: string): Promise<Account[]> {
     try {
       let query = supabase
         .from('accounts')
-        .select('*, boards(id), account_webhooks(id, label, is_active, is_primary)')
+        .select('*, boards(id), account_webhooks!account_webhooks_account_id_fkey(id, label, is_active, is_primary)')
         .order('created_at', { ascending: false });
 
       if (workspaceId) {
@@ -1389,6 +1389,7 @@ export async function getAccountDetails(accountId: string): Promise<Account | nu
 
     resultAcc = {
       ...acc,
+      board_webhook_id: acc.board_webhook_id || null,
       boards_count: boards.length,
       webhooks_count: hooks.length,
       active_webhooks_count: hooks.filter((h) => h.is_active).length,
@@ -1397,17 +1398,78 @@ export async function getAccountDetails(accountId: string): Promise<Account | nu
     };
   } else {
     try {
+      // 1. Attempt rich select with explicit foreign key disambiguation
+      let raw: any = null;
+      let hooks: any[] = [];
+      let isFallback = false;
+
       const { data: accData, error: accError } = await supabase
         .from('accounts')
-        .select('*, boards(id), account_webhooks(id, label, is_active, is_primary)')
+        .select('*, boards(id), account_webhooks!account_webhooks_account_id_fkey(id, label, is_active, is_primary)')
         .eq('id', accountId)
         .maybeSingle();
 
-      if (!accError && accData) {
-        const raw = accData as RawAccount;
-        const hooks = raw.account_webhooks || [];
-        const primaryHook = hooks.find((h) => h.is_primary);
+      if (accError || !accData) {
+        if (accError) {
+          console.warn(`Supabase getAccountDetails rich query failed for ${accountId}, attempting fallback:`, accError);
+        }
+        // Fallback: plain select without embedded relations to guarantee resilience
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from('accounts')
+          .select('*')
+          .eq('id', accountId)
+          .maybeSingle();
 
+        if (fallbackError) {
+          console.error(`Supabase getAccountDetails fallback error for ${accountId}:`, fallbackError);
+          throw new Error(fallbackError.message || 'Database error fetching account');
+        }
+
+        if (!fallbackData) {
+          return null;
+        }
+
+        raw = fallbackData;
+        isFallback = true;
+      } else {
+        raw = accData;
+        hooks = raw.account_webhooks || [];
+      }
+
+      // If fallback was invoked or relation arrays were absent, compute/fetch related counts
+      let boardsCount = raw.boards ? raw.boards.length : 0;
+      let webhooksCount = hooks.length;
+      let activeWebhooksCount = hooks.filter((h: any) => h.is_active).length;
+      const primaryHook = hooks.find((h: any) => h.is_primary);
+      let primaryWebhookLabel = primaryHook ? primaryHook.label : (raw.primary_webhook_label || 'None');
+
+      if (isFallback || !raw.boards) {
+        try {
+          const { count: bCount } = await supabase
+            .from('boards')
+            .select('id', { count: 'exact', head: true })
+            .eq('account_id', accountId);
+          boardsCount = bCount || 0;
+        } catch {}
+      }
+
+      if (isFallback || hooks.length === 0) {
+        try {
+          const { data: whList } = await supabase
+            .from('account_webhooks')
+            .select('id, label, is_active, is_primary')
+            .eq('account_id', accountId);
+          if (whList && whList.length > 0) {
+            webhooksCount = whList.length;
+            activeWebhooksCount = whList.filter((h: any) => h.is_active).length;
+            const p = whList.find((h: any) => h.is_primary);
+            primaryWebhookLabel = p ? p.label : (whList[0]?.label || 'None');
+          }
+        } catch {}
+      }
+
+      let lastPublishedAt: string | null = null;
+      try {
         const { data: lastPin } = await supabase
           .from('pins')
           .select('posted_at')
@@ -1417,21 +1479,21 @@ export async function getAccountDetails(accountId: string): Promise<Account | nu
           .order('posted_at', { ascending: false })
           .limit(1)
           .maybeSingle();
+        lastPublishedAt = lastPin ? lastPin.posted_at : null;
+      } catch {}
 
-        resultAcc = {
-          ...raw,
-          boards_count: raw.boards ? raw.boards.length : 0,
-          webhooks_count: hooks.length,
-          active_webhooks_count: hooks.filter((h) => h.is_active).length,
-          primary_webhook_label: primaryHook ? primaryHook.label : 'None',
-          last_published_at: lastPin ? lastPin.posted_at : null,
-        };
-      } else {
-        resultAcc = mockAccounts.find((a) => a.id === accountId) || null;
-      }
-    } catch (err) {
-      console.warn(`Supabase getAccountDetails error for ${accountId}:`, err);
-      resultAcc = mockAccounts.find((a) => a.id === accountId) || null;
+      resultAcc = {
+        ...raw,
+        board_webhook_id: raw.board_webhook_id || null,
+        boards_count: boardsCount,
+        webhooks_count: webhooksCount,
+        active_webhooks_count: activeWebhooksCount,
+        primary_webhook_label: primaryWebhookLabel,
+        last_published_at: lastPublishedAt,
+      };
+    } catch (err: any) {
+      console.error(`Supabase getAccountDetails error for ${accountId}:`, err);
+      throw err;
     }
   }
 

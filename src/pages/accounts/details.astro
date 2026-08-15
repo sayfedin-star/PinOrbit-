@@ -1349,8 +1349,17 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
       await rescheduleAccountPendingPins(accountId);
 
       await loadRecentPins();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error loading account details:', err);
+      showFeedbackBanner(err.message || 'Database error loading account details', 'error');
+      const headerInfo = document.getElementById('account-header-info');
+      if (headerInfo) {
+        headerInfo.innerHTML = renderEmptyStateHTML(
+          'Error Loading Account',
+          `Database error: ${escapeHtml(err.message || 'Failed to query account details.')}`,
+          'alert-circle'
+        );
+      }
     }
   }
 
