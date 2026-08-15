@@ -468,18 +468,26 @@ export const prerender = false;
 
               <button
                 type="button"
-                class="btn-delete-board inline-flex items-center gap-1 rounded-lg border ${
-                  isStaged
-                    ? 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20'
-                    : 'border-rose-500/30 bg-rose-500/5 text-rose-600 hover:bg-rose-500/15'
-                } px-2.5 py-1 text-xs font-semibold cursor-pointer transition-all"
+                class="btn-remove-local-board inline-flex items-center gap-1 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 px-2.5 py-1 text-xs font-semibold cursor-pointer transition-all"
                 data-id="${board.id}"
                 data-boardid="${escapeHtml(board.board_id)}"
                 data-name="${escapeHtml(board.board_name)}"
-                data-staged="${isStaged ? 'true' : 'false'}"
+                title="Remove local mapping only without touching Pinterest"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                <span>Remove local</span>
+              </button>
+
+              <button
+                type="button"
+                class="btn-delete-board inline-flex items-center gap-1 rounded-lg border border-rose-500/30 bg-rose-500/5 text-rose-600 hover:bg-rose-500/15 px-2.5 py-1 text-xs font-semibold cursor-pointer transition-all"
+                data-id="${board.id}"
+                data-boardid="${escapeHtml(board.board_id)}"
+                data-name="${escapeHtml(board.board_name)}"
+                title="Trigger real board deletion on Pinterest via Make"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                <span>${isStaged ? 'Remove local' : 'Delete'}</span>
+                <span>Delete</span>
               </button>
             </div>
           </td>
@@ -535,68 +543,76 @@ export const prerender = false;
       });
     });
 
-    // Delete Board (delete_local for staged pin_bd_* vs real Pinterest delete)
+    // Remove local board (DB only, no Pinterest call)
+    document.querySelectorAll('.btn-remove-local-board').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        const el = e.currentTarget as HTMLElement;
+        const dbId = el.getAttribute('data-id') || '';
+        const remoteBoardId = el.getAttribute('data-boardid') || '';
+        const name = el.getAttribute('data-name') || '';
+
+        if (!confirm(`Remove local board mapping "${name}" (${remoteBoardId})? Removes the mapping only; Pinterest is NOT touched.`)) {
+          return;
+        }
+
+        showFeedback(`Removing local board mapping "${name}"...`, 'info');
+        try {
+          const res = await fetch('/api/boards/action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              account_id: accountId,
+              action: 'delete_local',
+              board_id: remoteBoardId || dbId,
+            }),
+          });
+          const d = await res.json();
+          if (!res.ok) {
+            showFeedback(d.error || 'Failed to remove local board', 'error');
+            return;
+          }
+          showFeedback(`Board mapping "${name}" removed locally.`, 'success');
+          await loadData();
+        } catch (err: any) {
+          showFeedback(err.message || 'Error removing local board', 'error');
+        }
+      });
+    });
+
+    // Delete Board (Pinterest + callback trigger)
     document.querySelectorAll('.btn-delete-board').forEach((btn) => {
       btn.addEventListener('click', async (e) => {
         const el = e.currentTarget as HTMLElement;
         const dbId = el.getAttribute('data-id') || '';
         const remoteBoardId = el.getAttribute('data-boardid') || '';
         const name = el.getAttribute('data-name') || '';
-        const isStaged = el.getAttribute('data-staged') === 'true' || remoteBoardId.startsWith('pin_bd_');
 
-        if (isStaged) {
-          if (!confirm(`Remove local staged board "${name}" (${remoteBoardId})? This removes the local record only without calling Pinterest.`)) {
-            return;
-          }
-          showFeedback(`Removing local staged board "${name}"...`, 'info');
-          try {
-            const res = await fetch('/api/boards/action', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                account_id: accountId,
-                action: 'delete_local',
-                board_id: remoteBoardId || dbId,
-              }),
-            });
-            const d = await res.json();
-            if (!res.ok) {
-              showFeedback(d.error || 'Failed to remove local board', 'error');
-              return;
-            }
-            showFeedback(`Staged board "${name}" removed locally.`, 'success');
-            await loadData();
-          } catch (err: any) {
-            showFeedback(err.message || 'Error removing local board', 'error');
-          }
-        } else {
-          if (!confirm(`Are you sure you want to delete board "${name}"? This triggers real deletion on Pinterest and removes it from the queue.`)) {
+        if (!confirm(`Are you sure you want to delete board "${name}"? This triggers real deletion on Pinterest and removes it from the queue.`)) {
+          return;
+        }
+
+        showFeedback(`Dispatching delete action for "${name}"...`, 'info');
+
+        try {
+          const res = await fetch('/api/boards/action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              account_id: accountId,
+              action: 'delete',
+              board_id: remoteBoardId || dbId,
+            }),
+          });
+          const d = await res.json();
+          if (!res.ok) {
+            showFeedback(d.error || 'Failed to dispatch board deletion', 'error');
             return;
           }
 
-          showFeedback(`Dispatching delete action for "${name}"...`, 'info');
-
-          try {
-            const res = await fetch('/api/boards/action', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                account_id: accountId,
-                action: 'delete',
-                board_id: remoteBoardId || dbId,
-              }),
-            });
-            const d = await res.json();
-            if (!res.ok) {
-              showFeedback(d.error || 'Failed to dispatch board deletion', 'error');
-              return;
-            }
-
-            showFeedback(`Board "${name}" deletion request dispatched to Make.`, 'success');
-            await loadData();
-          } catch (err: any) {
-            showFeedback(err.message || 'Error deleting board', 'error');
-          }
+          showFeedback(`Board "${name}" deletion request dispatched to Make.`, 'success');
+          await loadData();
+        } catch (err: any) {
+          showFeedback(err.message || 'Error deleting board', 'error');
         }
       });
     });
