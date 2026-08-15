@@ -47,6 +47,42 @@ import Layout from '../../layouts/Layout.astro';
     </div>
   </div>
 
+  <!-- Status Filter Tabs -->
+  <div class="mb-3 flex items-center justify-between">
+    <div id="filter-tabs-container" class="inline-flex rounded-xl border border-border bg-card p-1 text-xs font-medium shadow-sm">
+      <button
+        data-filter="all"
+        class="tab-status-btn rounded-lg px-3.5 py-1.5 transition-colors bg-primary text-primary-foreground font-semibold cursor-pointer"
+      >
+        All
+      </button>
+      <button
+        data-filter="pending"
+        class="tab-status-btn rounded-lg px-3.5 py-1.5 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+      >
+        Pending
+      </button>
+      <button
+        data-filter="retrying"
+        class="tab-status-btn rounded-lg px-3.5 py-1.5 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+      >
+        Retrying
+      </button>
+      <button
+        data-filter="posted"
+        class="tab-status-btn rounded-lg px-3.5 py-1.5 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+      >
+        Posted
+      </button>
+      <button
+        data-filter="failed"
+        class="tab-status-btn rounded-lg px-3.5 py-1.5 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+      >
+        Failed
+      </button>
+    </div>
+  </div>
+
   <!-- Filter Bar -->
   <div class="mb-4 rounded-xl border border-border bg-card p-4 shadow-sm space-y-3">
     <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 text-xs">
@@ -656,9 +692,35 @@ import Layout from '../../layouts/Layout.astro';
     if (nextBtn) nextBtn.disabled = page >= totalPages;
   }
 
+  function updateStatusTabsUI() {
+    document.querySelectorAll('.tab-status-btn').forEach((btn) => {
+      const f = btn.getAttribute('data-filter');
+      if (f === filterStatus) {
+        btn.className = 'tab-status-btn rounded-lg px-3.5 py-1.5 transition-colors bg-primary text-primary-foreground font-semibold cursor-pointer';
+      } else {
+        btn.className = 'tab-status-btn rounded-lg px-3.5 py-1.5 text-muted-foreground hover:text-foreground transition-colors cursor-pointer';
+      }
+    });
+    const statusSelect = document.getElementById('filter-status-select') as HTMLSelectElement | null;
+    if (statusSelect) statusSelect.value = filterStatus;
+  }
+
   function setupEventListeners() {
+    document.querySelectorAll('.tab-status-btn').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        const filterVal = (e.currentTarget as HTMLElement).getAttribute('data-filter') || 'all';
+        filterStatus = filterVal;
+        updateStatusTabsUI();
+        currentPage = 1;
+        selectedPinIds.clear();
+        isGlobalSelectAll = false;
+        fetchAndRenderPins();
+      });
+    });
+
     document.getElementById('filter-status-select')?.addEventListener('change', (e) => {
       filterStatus = (e.target as HTMLSelectElement).value;
+      updateStatusTabsUI();
       currentPage = 1;
       selectedPinIds.clear();
       isGlobalSelectAll = false;
@@ -702,6 +764,7 @@ import Layout from '../../layouts/Layout.astro';
       filterSearch = '';
       filterDateFrom = '';
       filterDateTo = '';
+      updateStatusTabsUI();
       currentPage = 1;
       selectedPinIds.clear();
       isGlobalSelectAll = false;

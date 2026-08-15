@@ -1,0 +1,666 @@
+---
+import Layout from '../../layouts/Layout.astro';
+
+export const prerender = false;
+---
+
+<Layout title="Account Boards — Pinterest Board Mappings" description="Manage Pinterest board mappings, trigger board actions, and monitor linked pin distribution for this account.">
+  <div class="max-w-6xl mx-auto space-y-6 pb-12">
+    <!-- Breadcrumb & Back Link -->
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+        <a href="/accounts" class="hover:text-foreground transition-colors">Accounts</a>
+        <span>/</span>
+        <a id="link-account-details-crumb" href="/accounts/details" class="hover:text-foreground transition-colors">Account Details</a>
+        <span>/</span>
+        <span class="text-foreground font-bold">Boards</span>
+      </div>
+      <a id="btn-back-details" href="/accounts/details" class="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        <span>&larr; Back to Account Details</span>
+      </a>
+    </div>
+
+    <!-- Global Feedback Banner -->
+    <div id="boards-feedback-banner" class="hidden rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3.5 text-xs text-emerald-600 dark:text-emerald-400 flex items-center justify-between shadow-sm">
+      <div class="flex items-center gap-2.5">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+        </svg>
+        <span id="boards-feedback-text">Operation completed.</span>
+      </div>
+      <button id="close-boards-feedback" class="font-bold opacity-70 hover:opacity-100">&times;</button>
+    </div>
+
+    <!-- Header Control Card -->
+    <div class="rounded-2xl border border-border bg-card p-6 shadow-sm">
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <!-- Account Info -->
+        <div class="flex items-center gap-3.5">
+          <div id="account-avatar-box" class="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-500/10 text-indigo-500 font-bold text-base flex-shrink-0">
+            PA
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h1 id="boards-account-name" class="text-xl font-bold tracking-tight text-foreground">Loading Account...</h1>
+              <span id="boards-count-badge" class="rounded-full bg-primary/10 border border-primary/20 px-2.5 py-0.5 text-xs font-bold text-primary">0 boards</span>
+            </div>
+            <p class="text-xs text-muted-foreground mt-0.5 font-mono">
+              Account ID: <span id="boards-account-id" class="font-semibold text-foreground">---</span>
+            </p>
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            id="btn-refresh-boards-list"
+            class="inline-flex items-center gap-1.5 rounded-xl border border-border bg-background px-3.5 py-2 text-xs font-semibold text-foreground hover:bg-muted transition-all shadow-sm cursor-pointer"
+            title="Send list trigger to Pinterest via Make.com scenario"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            <span>Refresh List</span>
+          </button>
+
+          <button
+            type="button"
+            id="btn-open-add-board"
+            class="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition-all shadow-sm cursor-pointer"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span>+ Add Board</span>
+          </button>
+
+          <a
+            id="btn-link-board-pipeline"
+            href="/accounts/board-pipeline"
+            class="inline-flex items-center gap-1.5 rounded-xl border border-indigo-500/30 bg-indigo-500/10 px-3.5 py-2 text-xs font-semibold text-indigo-500 hover:bg-indigo-500/20 transition-all shadow-sm"
+            title="Open Make.com Board Pipeline Scenario Kit"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            <span>Board Pipeline Kit &rarr;</span>
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Boards Table Card -->
+    <div class="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+      <div class="border-b border-border bg-muted/40 px-6 py-3.5 flex items-center justify-between">
+        <h2 class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Account Board Mappings</h2>
+        <span id="boards-table-count" class="text-xs font-medium text-muted-foreground">0 boards loaded</span>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs">
+          <thead>
+            <tr class="text-left border-b border-border text-muted-foreground bg-muted/20">
+              <th class="p-3.5 font-semibold">ICON</th>
+              <th class="p-3.5 font-semibold">BOARD NAME</th>
+              <th class="p-3.5 font-semibold">PINTEREST BOARD ID</th>
+              <th class="p-3.5 font-semibold">ADDED DATE</th>
+              <th class="p-3.5 font-semibold text-center">LINKED PINS</th>
+              <th class="p-3.5 font-semibold text-right">ACTIONS</th>
+            </tr>
+          </thead>
+          <tbody id="account-boards-rows">
+            <tr>
+              <td colspan="6" class="p-8 text-center text-muted-foreground animate-pulse">Loading board mappings...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Add Board Modal -->
+  <div id="add-board-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" aria-modal="true" role="dialog">
+    <div class="relative w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-5 z-10">
+      <div class="flex items-center justify-between border-b border-border pb-4">
+        <h3 class="text-base font-bold text-foreground">Add Pinterest Board Mapping</h3>
+        <button id="close-add-board-modal" class="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground">&times;</button>
+      </div>
+
+      <div id="add-board-error" class="hidden rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-500"></div>
+
+      <form id="add-board-form" class="space-y-4 text-xs">
+        <div class="space-y-1.5">
+          <label for="input-add-board-name" class="block font-semibold text-foreground">Board Name *</label>
+          <input
+            id="input-add-board-name"
+            type="text"
+            required
+            placeholder="e.g. Healthy Dinner Ideas"
+            class="w-full rounded-xl border border-border bg-background py-2.5 px-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+          />
+        </div>
+
+        <div class="space-y-1.5">
+          <label for="input-add-board-id" class="block font-semibold text-foreground">Pinterest Board ID *</label>
+          <input
+            id="input-add-board-id"
+            type="text"
+            required
+            placeholder="e.g. 1092837465"
+            class="w-full rounded-xl border border-border bg-background py-2.5 px-3 text-xs font-mono text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+          />
+          <p class="text-[11px] text-muted-foreground">The remote Pinterest board ID from Pinterest or Make sync.</p>
+        </div>
+
+        <div class="space-y-1.5">
+          <label for="select-add-board-channel" class="block font-semibold text-foreground">Target Board Channel (Optional)</label>
+          <select
+            id="select-add-board-channel"
+            class="w-full rounded-xl border border-border bg-background py-2.5 px-3 text-xs text-foreground focus:border-primary focus:outline-none"
+          >
+            <option value="">Assigned Account Default</option>
+          </select>
+        </div>
+
+        <div class="flex items-center justify-end gap-3 border-t border-border pt-4">
+          <button
+            type="button"
+            id="cancel-add-board-btn"
+            class="rounded-xl border border-border px-4 py-2 text-xs font-medium text-muted-foreground hover:bg-muted"
+          >
+            Cancel
+          </button>
+          <button
+            id="submit-add-board-btn"
+            type="submit"
+            class="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow hover:bg-primary/90"
+          >
+            <span>Create Board Mapping</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: Edit Board Modal -->
+  <div id="edit-board-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" aria-modal="true" role="dialog">
+    <div class="relative w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-5 z-10">
+      <div class="flex items-center justify-between border-b border-border pb-4">
+        <h3 class="text-base font-bold text-foreground">Edit Pinterest Board Mapping</h3>
+        <button id="close-edit-board-modal" class="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground">&times;</button>
+      </div>
+
+      <div id="edit-board-error" class="hidden rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-500"></div>
+
+      <form id="edit-board-form" class="space-y-4 text-xs">
+        <input type="hidden" id="edit-target-db-id" />
+
+        <div class="space-y-1.5">
+          <label for="input-edit-board-name" class="block font-semibold text-foreground">Board Name *</label>
+          <input
+            id="input-edit-board-name"
+            type="text"
+            required
+            class="w-full rounded-xl border border-border bg-background py-2.5 px-3 text-xs text-foreground focus:border-primary focus:outline-none"
+          />
+        </div>
+
+        <div class="space-y-1.5">
+          <label for="input-edit-board-id" class="block font-semibold text-foreground">Pinterest Board ID *</label>
+          <input
+            id="input-edit-board-id"
+            type="text"
+            required
+            class="w-full rounded-xl border border-border bg-background py-2.5 px-3 text-xs font-mono text-foreground focus:border-primary focus:outline-none"
+          />
+        </div>
+
+        <div class="flex items-center justify-end gap-3 border-t border-border pt-4">
+          <button
+            type="button"
+            id="cancel-edit-board-btn"
+            class="rounded-xl border border-border px-4 py-2 text-xs font-medium text-muted-foreground hover:bg-muted"
+          >
+            Cancel
+          </button>
+          <button
+            id="submit-edit-board-btn"
+            type="submit"
+            class="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow hover:bg-primary/90"
+          >
+            <span>Save Changes</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</Layout>
+
+<script>
+  import { requireAuth } from '../../lib/auth';
+  import {
+    getAccountDetails,
+    getAccountBoards,
+    getAccountWebhooks,
+    getAccountPins,
+    createBoard,
+    updateBoard,
+  } from '../../lib/supabase';
+  import { formatDate, escapeHtml } from '../../lib/ui-helpers';
+  import type { Account, Board, AccountWebhook } from '../../lib/types';
+
+  let accountId = '';
+  let currentAccount: Account | null = null;
+  let currentBoards: Board[] = [];
+  let currentWebhooks: AccountWebhook[] = [];
+  let pinCountsByBoard: Record<string, number> = {};
+
+  function showFeedback(msg: string, type: 'success' | 'error' | 'info' = 'success') {
+    const banner = document.getElementById('boards-feedback-banner');
+    const text = document.getElementById('boards-feedback-text');
+    if (!banner || !text) return;
+
+    banner.className = `mb-4 rounded-xl border p-3.5 text-xs flex items-center justify-between shadow-sm ${
+      type === 'error'
+        ? 'border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400'
+        : type === 'info'
+        ? 'border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400'
+        : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+    }`;
+    text.textContent = msg;
+    banner.classList.remove('hidden');
+
+    setTimeout(() => {
+      banner.classList.add('hidden');
+    }, 6000);
+  }
+
+  async function init() {
+    const isAuth = await requireAuth();
+    if (!isAuth) return;
+
+    const urlParams = new URLSearchParams(window.location.search);
+    accountId = urlParams.get('id') || '';
+
+    if (!accountId) {
+      showFeedback('No account ID specified in URL query (?id=...)', 'error');
+      return;
+    }
+
+    // Set link targets
+    const backBtn = document.getElementById('btn-back-details') as HTMLAnchorElement | null;
+    const crumbLink = document.getElementById('link-account-details-crumb') as HTMLAnchorElement | null;
+    const pipelineLink = document.getElementById('btn-link-board-pipeline') as HTMLAnchorElement | null;
+
+    if (backBtn) backBtn.href = `/accounts/details?id=${encodeURIComponent(accountId)}`;
+    if (crumbLink) crumbLink.href = `/accounts/details?id=${encodeURIComponent(accountId)}`;
+    if (pipelineLink) pipelineLink.href = `/accounts/board-pipeline?id=${encodeURIComponent(accountId)}`;
+
+    const idDisplay = document.getElementById('boards-account-id');
+    if (idDisplay) idDisplay.textContent = accountId;
+
+    setupEventListeners();
+    await loadData();
+  }
+
+  async function loadData() {
+    try {
+      const [acc, boards, webhooks, pinsRes] = await Promise.all([
+        getAccountDetails(accountId),
+        getAccountBoards(accountId),
+        getAccountWebhooks(accountId),
+        getAccountPins({ accountId, pageSize: 500 }),
+      ]);
+
+      if (!acc) {
+        showFeedback(`Could not locate account with ID "${accountId}".`, 'error');
+        const rows = document.getElementById('account-boards-rows');
+        if (rows) {
+          rows.innerHTML = `<tr><td colspan="6" class="p-8 text-center text-rose-500 font-semibold">Account not found.</td></tr>`;
+        }
+        return;
+      }
+
+      currentAccount = acc;
+      currentBoards = boards || [];
+      currentWebhooks = webhooks || [];
+
+      // Count pins per board
+      pinCountsByBoard = {};
+      (pinsRes?.pins || []).forEach((pin) => {
+        if (pin.board_id) {
+          pinCountsByBoard[pin.board_id] = (pinCountsByBoard[pin.board_id] || 0) + 1;
+        }
+      });
+
+      // Render Header Details
+      const nameEl = document.getElementById('boards-account-name');
+      const countBadge = document.getElementById('boards-count-badge');
+      const tableCount = document.getElementById('boards-table-count');
+      const avatarBox = document.getElementById('account-avatar-box');
+
+      if (nameEl) nameEl.textContent = acc.account_name || 'Pinterest Account';
+      if (countBadge) countBadge.textContent = `${currentBoards.length} boards`;
+      if (tableCount) tableCount.textContent = `${currentBoards.length} boards loaded`;
+      if (avatarBox) {
+        avatarBox.textContent = (acc.account_name || 'PA').slice(0, 2).toUpperCase();
+      }
+
+      renderBoardsTable();
+      populateChannelDropdown();
+    } catch (err: any) {
+      console.error('Error loading account boards:', err);
+      showFeedback(`Database query error: ${err.message || 'Unknown error'}`, 'error');
+    }
+  }
+
+  function renderBoardsTable() {
+    const tbody = document.getElementById('account-boards-rows');
+    if (!tbody) return;
+
+    if (currentBoards.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="6" class="p-12 text-center text-muted-foreground">
+            <div class="max-w-sm mx-auto space-y-2">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 mx-auto text-muted-foreground opacity-50" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
+              <p class="font-medium text-foreground">No boards yet — Add Board or import pins to auto-provision.</p>
+              <p class="text-xs text-muted-foreground">Use the "+ Add Board" button or trigger "Refresh List" to pull from Pinterest.</p>
+            </div>
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    tbody.innerHTML = currentBoards.map((board) => {
+      const pinCount = pinCountsByBoard[board.id] || pinCountsByBoard[board.board_id] || 0;
+      return `
+        <tr class="border-b border-border hover:bg-muted/30 transition-colors">
+          <td class="p-3.5">
+            <div class="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-background text-indigo-500">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L8.6 3.3A2 2 0 0 0 6.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+            </div>
+          </td>
+          <td class="p-3.5 font-bold text-foreground">
+            ${escapeHtml(board.board_name)}
+          </td>
+          <td class="p-3.5 font-mono">
+            <div class="inline-flex items-center gap-1.5 bg-muted/60 border border-border px-2 py-0.5 rounded text-[11px]">
+              <span>${escapeHtml(board.board_id)}</span>
+              <button
+                type="button"
+                class="btn-copy-board-id text-muted-foreground hover:text-foreground cursor-pointer"
+                data-id="${escapeHtml(board.board_id)}"
+                title="Copy Pinterest Board ID"
+              >
+                📋
+              </button>
+            </div>
+          </td>
+          <td class="p-3.5 text-muted-foreground">
+            ${formatDate(board.created_at)}
+          </td>
+          <td class="p-3.5 text-center">
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold ${
+              pinCount > 0 ? 'bg-primary/10 text-primary border border-primary/20' : 'bg-muted text-muted-foreground'
+            }">
+              ${pinCount} pin${pinCount === 1 ? '' : 's'}
+            </span>
+          </td>
+          <td class="p-3.5 text-right">
+            <div class="flex items-center justify-end gap-1.5">
+              <button
+                type="button"
+                class="btn-edit-board inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted cursor-pointer transition-all"
+                data-id="${board.id}"
+                data-name="${escapeHtml(board.board_name)}"
+                data-boardid="${escapeHtml(board.board_id)}"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                <span>Edit</span>
+              </button>
+
+              <button
+                type="button"
+                class="btn-delete-board inline-flex items-center gap-1 rounded-lg border border-rose-500/30 bg-rose-500/5 px-2.5 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-500/15 cursor-pointer transition-all"
+                data-id="${board.id}"
+                data-boardid="${escapeHtml(board.board_id)}"
+                data-name="${escapeHtml(board.board_name)}"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                <span>Delete</span>
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    bindRowActions();
+  }
+
+  function populateChannelDropdown() {
+    const sel = document.getElementById('select-add-board-channel') as HTMLSelectElement | null;
+    if (!sel) return;
+
+    let opts = '<option value="">Assigned Account Default</option>';
+    currentWebhooks.forEach((w) => {
+      opts += `<option value="${w.id}">${escapeHtml(w.label)} (#${w.priority || 1})</option>`;
+    });
+    sel.innerHTML = opts;
+  }
+
+  function bindRowActions() {
+    // Copy Pinterest Board ID
+    document.querySelectorAll('.btn-copy-board-id').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        const id = (e.currentTarget as HTMLElement).getAttribute('data-id') || '';
+        if (id) {
+          navigator.clipboard.writeText(id);
+          showFeedback(`Board ID ${id} copied to clipboard.`, 'success');
+        }
+      });
+    });
+
+    // Edit Board
+    document.querySelectorAll('.btn-edit-board').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        const el = e.currentTarget as HTMLElement;
+        const id = el.getAttribute('data-id') || '';
+        const name = el.getAttribute('data-name') || '';
+        const boardId = el.getAttribute('data-boardid') || '';
+
+        const dbIdInput = document.getElementById('edit-target-db-id') as HTMLInputElement | null;
+        const nameInput = document.getElementById('input-edit-board-name') as HTMLInputElement | null;
+        const boardIdInput = document.getElementById('input-edit-board-id') as HTMLInputElement | null;
+
+        if (dbIdInput) dbIdInput.value = id;
+        if (nameInput) nameInput.value = name;
+        if (boardIdInput) boardIdInput.value = boardId;
+
+        const editModal = document.getElementById('edit-board-modal');
+        editModal?.classList.remove('hidden');
+        editModal?.classList.add('flex');
+      });
+    });
+
+    // Delete Board (Real Pinterest trigger + database delete)
+    document.querySelectorAll('.btn-delete-board').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        const el = e.currentTarget as HTMLElement;
+        const dbId = el.getAttribute('data-id') || '';
+        const remoteBoardId = el.getAttribute('data-boardid') || '';
+        const name = el.getAttribute('data-name') || '';
+
+        if (!confirm(`Are you sure you want to delete board "${name}"? This triggers real deletion on Pinterest and removes it from the queue.`)) {
+          return;
+        }
+
+        showFeedback(`Dispatching delete action for "${name}"...`, 'info');
+
+        try {
+          // 1. Dispatch real delete via Pinterest Make scenario
+          const res = await fetch('/api/boards/action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              account_id: accountId,
+              action: 'delete',
+              board_id: remoteBoardId || dbId,
+            }),
+          });
+          const d = await res.json();
+          if (!res.ok) {
+            showFeedback(d.error || 'Failed to dispatch board deletion', 'error');
+            return;
+          }
+
+          showFeedback(`Board "${name}" deleted successfully.`, 'success');
+          await loadData();
+        } catch (err: any) {
+          showFeedback(err.message || 'Error deleting board', 'error');
+        }
+      });
+    });
+  }
+
+  function setupEventListeners() {
+    document.getElementById('close-boards-feedback')?.addEventListener('click', () => {
+      document.getElementById('boards-feedback-banner')?.classList.add('hidden');
+    });
+
+    // Refresh List Button (POST /api/boards/action { action: 'list' })
+    document.getElementById('btn-refresh-boards-list')?.addEventListener('click', async () => {
+      showFeedback('Sending board list refresh request to Make.com...', 'info');
+      try {
+        const res = await fetch('/api/boards/action', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            account_id: accountId,
+            action: 'list',
+          }),
+        });
+        const d = await res.json();
+        if (!res.ok) {
+          showFeedback(d.error || 'Failed to refresh boards', 'error');
+        } else {
+          showFeedback('⚡ Board list sync requested. Make scenario triggered. Refreshing data in 3s...', 'success');
+          setTimeout(() => loadData(), 3000);
+        }
+      } catch (err: any) {
+        showFeedback(err.message || 'Error triggering board list', 'error');
+      }
+    });
+
+    // Add Modal Handlers
+    const addModal = document.getElementById('add-board-modal');
+    document.getElementById('btn-open-add-board')?.addEventListener('click', () => {
+      addModal?.classList.remove('hidden');
+      addModal?.classList.add('flex');
+    });
+
+    const closeAddModal = () => {
+      addModal?.classList.add('hidden');
+      addModal?.classList.remove('flex');
+      const errEl = document.getElementById('add-board-error');
+      if (errEl) errEl.classList.add('hidden');
+      (document.getElementById('add-board-form') as HTMLFormElement)?.reset();
+    };
+
+    document.getElementById('close-add-board-modal')?.addEventListener('click', closeAddModal);
+    document.getElementById('cancel-add-board-btn')?.addEventListener('click', closeAddModal);
+
+    document.getElementById('add-board-form')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const boardName = (document.getElementById('input-add-board-name') as HTMLInputElement).value.trim();
+      const boardId = (document.getElementById('input-add-board-id') as HTMLInputElement).value.trim();
+      const errEl = document.getElementById('add-board-error');
+
+      if (!boardName || !boardId) {
+        if (errEl) {
+          errEl.textContent = 'Please fill out all required fields.';
+          errEl.classList.remove('hidden');
+        }
+        return;
+      }
+
+      try {
+        const { error } = await createBoard({
+          account_id: accountId,
+          board_name: boardName,
+          board_id: boardId,
+        });
+
+        if (error) {
+          if (errEl) {
+            errEl.textContent = error;
+            errEl.classList.remove('hidden');
+          }
+          return;
+        }
+
+        closeAddModal();
+        showFeedback(`Board "${boardName}" created successfully!`, 'success');
+        await loadData();
+      } catch (err: any) {
+        if (errEl) {
+          errEl.textContent = err.message || 'Failed to create board';
+          errEl.classList.remove('hidden');
+        }
+      }
+    });
+
+    // Edit Modal Handlers
+    const editModal = document.getElementById('edit-board-modal');
+    const closeEditModal = () => {
+      editModal?.classList.add('hidden');
+      editModal?.classList.remove('flex');
+      const errEl = document.getElementById('edit-board-error');
+      if (errEl) errEl.classList.add('hidden');
+    };
+
+    document.getElementById('close-edit-board-modal')?.addEventListener('click', closeEditModal);
+    document.getElementById('cancel-edit-board-btn')?.addEventListener('click', closeEditModal);
+
+    document.getElementById('edit-board-form')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const dbId = (document.getElementById('edit-target-db-id') as HTMLInputElement).value;
+      const boardName = (document.getElementById('input-edit-board-name') as HTMLInputElement).value.trim();
+      const boardId = (document.getElementById('input-edit-board-id') as HTMLInputElement).value.trim();
+      const errEl = document.getElementById('edit-board-error');
+
+      if (!boardName || !boardId) {
+        if (errEl) {
+          errEl.textContent = 'Please fill out all required fields.';
+          errEl.classList.remove('hidden');
+        }
+        return;
+      }
+
+      try {
+        const { error } = await updateBoard(dbId, {
+          account_id: accountId,
+          board_name: boardName,
+          board_id: boardId,
+        });
+
+        if (error) {
+          if (errEl) {
+            errEl.textContent = error;
+            errEl.classList.remove('hidden');
+          }
+          return;
+        }
+
+        closeEditModal();
+        showFeedback(`Board "${boardName}" updated successfully!`, 'success');
+        await loadData();
+      } catch (err: any) {
+        if (errEl) {
+          errEl.textContent = err.message || 'Failed to update board';
+          errEl.classList.remove('hidden');
+        }
+      }
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', init);
+</script>
