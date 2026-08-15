@@ -21,8 +21,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return new Response(JSON.stringify({ success: false, error: 'Malformed JSON payload.' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
   }
 
-  // 2. Engine events branch (pin.posted / board.created / boards.list / board.deleted) BEFORE connection_id requirement
-  const engineEvents = ['pin.posted', 'board.created', 'boards.list', 'board.deleted'];
+  // 2. Engine events branch (pin.posted / pin.failed / board.created / boards.list / board.deleted) BEFORE connection_id requirement
+  const engineEvents = ['pin.posted', 'pin.failed', 'board.created', 'boards.list', 'board.deleted'];
   if (payload && engineEvents.includes(payload.event)) {
     const ev = payload.event as string;
     const admin = dbClients.getSchedulingAdmin(runtimeEnv);
@@ -47,13 +47,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
       return new Response(JSON.stringify({ success: false, error: 'Unauthorized: missing or invalid x-ingest-secret header.' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
     }
 
-    // A) pin.posted
-    if (ev === 'pin.posted') {
+    // A) pin.posted / pin.failed
+    if (ev === 'pin.posted' || ev === 'pin.failed') {
       const internalId = payload.pin_id;
       if (!internalId) return new Response(JSON.stringify({ success: false, error: 'pin_id required.' }), { status: 422, headers: { 'Content-Type': 'application/json' } });
       const { data: pin } = await admin.from('pins').select('*').eq('id', internalId).maybeSingle();
       if (!pin) return new Response(JSON.stringify({ success: false, error: 'Pin not found.' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
-      if (payload.success === false) {
+      if (ev === 'pin.failed' || payload.success === false) {
         const rc = (pin.retry_count ?? 0) + 1;
         const exhausted = rc >= (pin.max_retries ?? 2);
         await admin.from('pins').update({

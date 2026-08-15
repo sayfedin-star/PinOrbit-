@@ -73,6 +73,10 @@ async function handleDispatch(body: any, locals: any) {
   for (const c of claimed) {
     const { data: pin } = await admin.from('pins').select('*').eq('id', c.id).single();
     if (!pin) { skipped++; continue; }
+    if (!pin.image_url) {
+      await admin.from('pins').update({ status: 'failed', last_failure_reason: 'Missing image_url', processing_started_at: null, updated_at: new Date().toISOString() }).eq('id', c.id);
+      skipped++; continue;
+    }
     let boardId: string | null = null;
     if (pin.board_name) {
       const { data: board } = await admin.from('boards').select('pinterest_board_id')
