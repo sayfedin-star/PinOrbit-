@@ -21,11 +21,23 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return new Response(JSON.stringify({ success: false, error: 'Malformed JSON payload.' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
   }
 
-  // 2. Engine events branch (pin.posted / board.created) BEFORE connection_id requirement
-  if (payload && (payload.event === 'pin.posted' || payload.event === 'board.created')) {
+  // 2. Engine events branch (pin.posted / board.created / boards.list / board.deleted) BEFORE connection_id requirement
+  const engineEvents = ['pin.posted', 'board.created', 'boards.list', 'board.deleted'];
+  if (payload && engineEvents.includes(payload.event)) {
     const ev = payload.event as string;
-    const wsId = payload.workspace_id;
-    if (!wsId) return new Response(JSON.stringify({ success: false, error: 'workspace_id required for engine events.' }), { status: 422, headers: { 'Content-Type': 'application/json' } });
+    const admin = dbClients.getSchedulingAdmin(runtimeEnv);
+
+    // Resolve workspace_id from payload or from account_id lookup
+    let wsId = payload.workspace_id;
+    if (!wsId && payload.account_id) {
+      const { data: acc } = await admin.from('accounts').select('workspace_id').eq('id', payload.account_id).maybeSingle();
+      if (acc?.workspace_id) wsId = acc.workspace_id;
+    }
+
+    if (!wsId) {
+      return new Response(JSON.stringify({ success: false, error: 'workspace_id or valid account_id required for engine events.' }), { status: 422, headers: { 'Content-Type': 'application/json' } });
+    }
+
     const eff = await getEffectiveSecret(wsId, runtimeEnv);
     if (isProductionEnv(runtimeEnv) && eff.source === 'env' && isKnownDefaultIngestSecret(eff.value)) {
       return new Response(JSON.stringify({ success: false, error: 'Service unavailable: ingest secret not configured on server.' }), { status: 503, headers: { 'Content-Type': 'application/json' } });
@@ -34,8 +46,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
     if (!prov || !eff.value || prov !== eff.value) {
       return new Response(JSON.stringify({ success: false, error: 'Unauthorized: missing or invalid x-ingest-secret header.' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
     }
-    const admin = dbClients.getSchedulingAdmin(runtimeEnv);
 
+    // A) pin.posted
     if (ev === 'pin.posted') {
       const internalId = payload.pin_id;
       if (!internalId) return new Response(JSON.stringify({ success: false, error: 'pin_id required.' }), { status: 422, headers: { 'Content-Type': 'application/json' } });
@@ -69,16 +81,118 @@ export const POST: APIRoute = async ({ request, locals }) => {
       return new Response(JSON.stringify({ success: true, handled: 'pin_posted' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
-    // board.created
-    const accId = payload.account_id;
-    const bId = payload.board_id;
-    const bName = payload.board_name;
-    if (!accId || !bId || !bName) return new Response(JSON.stringify({ success: false, error: 'account_id, board_id, board_name required.' }), { status: 422, headers: { 'Content-Type': 'application/json' } });
-    const { data: acc } = await admin.from('accounts').select('workspace_id').eq('id', accId).maybeSingle();
-    if (!acc) return new Response(JSON.stringify({ success: false, error: 'Account not found.' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
-    const { error: insErr } = await admin.from('boards').insert({ account_id: accId, workspace_id: acc.workspace_id, board_name: bName, board_id: bId, pinterest_board_id: bId, created_via: 'webhook_auto_create' }).select('id').single();
-    await admin.from('board_provisioning_requests').update({ status: insErr ? 'failed' : 'completed', error_message: insErr?.message || null, completed_at: new Date().toISOString() }).eq('idempotency_key', `board.create:${accId}:${String(bName).toLowerCase()}`).then(() => {});
-    return new Response(JSON.stringify({ success: !insErr, handled: 'board_created', error: insErr?.message || null }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    // B) board.created
+    if (ev === 'board.created') {
+      const accId = payload.account_id;
+      const bId = String(payload.board_id || payload.id || '');
+      const bName = String(payload.board_name || payload.name || '');
+      if (!accId || !bId || !bName) {
+        return new Response(JSON.stringify({ success: false, error: 'account_id, board_id, board_name required.' }), { status: 422, headers: { 'Content-Type': 'application/json' } });
+      }
+      const { data: acc } = await admin.from('accounts').select('workspace_id').eq('id', accId).maybeSingle();
+      if (!acc) return new Response(JSON.stringify({ success: false, error: 'Account not found.' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+      if (acc.workspace_id !== wsId) {
+        return new Response(JSON.stringify({ success: false, error: 'Account does not belong to workspace.' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      const { data: upsertedBoard, error: insErr } = await admin.from('boards').upsert({
+        account_id: accId,
+        workspace_id: acc.workspace_id,
+        board_name: bName,
+        board_id: bId,
+        pinterest_board_id: bId,
+        created_via: 'webhook_auto_create',
+      }, { onConflict: 'account_id, board_id' }).select('id, board_id, board_name').single();
+
+      await admin.from('board_provisioning_requests').update({
+        status: insErr ? 'failed' : 'completed',
+        error_message: insErr?.message || null,
+        completed_at: new Date().toISOString(),
+      }).eq('idempotency_key', `board.create:${accId}:${String(bName).toLowerCase()}`).then(() => {});
+
+      return new Response(JSON.stringify({
+        success: !insErr,
+        handled: 'board.created',
+        board: upsertedBoard || { board_id: bId, board_name: bName },
+        error: insErr?.message || null,
+      }), { status: insErr ? 500 : 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    // C) boards.list
+    if (ev === 'boards.list') {
+      const accId = payload.account_id;
+      const rawBoards = Array.isArray(payload.boards) ? payload.boards : [];
+      if (!accId) {
+        return new Response(JSON.stringify({ success: false, error: 'account_id required.' }), { status: 422, headers: { 'Content-Type': 'application/json' } });
+      }
+      const { data: acc } = await admin.from('accounts').select('workspace_id').eq('id', accId).maybeSingle();
+      if (!acc) return new Response(JSON.stringify({ success: false, error: 'Account not found.' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+      if (acc.workspace_id !== wsId) {
+        return new Response(JSON.stringify({ success: false, error: 'Account does not belong to workspace.' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      let syncedCount = 0;
+      const errors: string[] = [];
+
+      for (const b of rawBoards) {
+        const bId = String(b.id || b.board_id || '');
+        const bName = String(b.name || b.board_name || '');
+        if (!bId) continue;
+
+        const { error: upErr } = await admin.from('boards').upsert({
+          account_id: accId,
+          workspace_id: acc.workspace_id,
+          board_id: bId,
+          pinterest_board_id: bId,
+          board_name: bName || 'Untitled Board',
+          created_via: 'webhook_sync',
+        }, { onConflict: 'account_id, board_id' });
+
+        if (upErr) {
+          errors.push(`Board ${bId}: ${upErr.message}`);
+        } else {
+          syncedCount++;
+        }
+      }
+
+      return new Response(JSON.stringify({
+        success: errors.length === 0 || syncedCount > 0,
+        handled: 'boards.list',
+        synced: syncedCount,
+        total: rawBoards.length,
+        errors: errors.length > 0 ? errors : undefined,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    // D) board.deleted
+    if (ev === 'board.deleted') {
+      const accId = payload.account_id;
+      const bId = String(payload.board_id || payload.id || '');
+      if (!accId || !bId) {
+        return new Response(JSON.stringify({ success: false, error: 'account_id and board_id required.' }), { status: 422, headers: { 'Content-Type': 'application/json' } });
+      }
+      const { data: acc } = await admin.from('accounts').select('workspace_id').eq('id', accId).maybeSingle();
+      if (!acc) return new Response(JSON.stringify({ success: false, error: 'Account not found.' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+      if (acc.workspace_id !== wsId) {
+        return new Response(JSON.stringify({ success: false, error: 'Account does not belong to workspace.' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      const { error: delErr } = await admin
+        .from('boards')
+        .delete()
+        .eq('account_id', accId)
+        .or(`board_id.eq.${bId},pinterest_board_id.eq.${bId},id.eq.${bId}`);
+
+      if (delErr) {
+        return new Response(JSON.stringify({ success: false, error: delErr.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      return new Response(JSON.stringify({
+        success: true,
+        handled: 'board.deleted',
+        board_id: bId,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
   }
 
   // 3. Require connection_id

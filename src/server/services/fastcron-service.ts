@@ -1290,10 +1290,10 @@ export async function clonePublishingSchedule(scheduleId: string, runtimeEnv: Re
   return { success: true, new_schedule: newRow };
 }
 
-export async function triggerBoardAction(accountId: string, action: 'create' | 'list' | 'delete', extra: Record<string, any>, runtimeEnv: Record<string, any>): Promise<{ success: boolean; status?: number; error?: string }> {
+export async function triggerBoardAction(accountId: string, action: 'create' | 'list' | 'delete', extra: Record<string, any> = {}, runtimeEnv: Record<string, any> = {}): Promise<{ success: boolean; status?: number; error?: string }> {
   const schedulingClient = dbClients.getSchedulingAdmin(runtimeEnv);
   // Resolve board channel = accounts.board_creation_webhook_id webhook row
-  const { data: account } = await schedulingClient.from('accounts').select('board_creation_webhook_id').eq('id', accountId).single();
+  const { data: account } = await schedulingClient.from('accounts').select('workspace_id, board_creation_webhook_id').eq('id', accountId).single();
   let webhookUrl: string | null = null;
   if (account?.board_creation_webhook_id) {
     const { data: wh } = await schedulingClient.from('account_webhooks')
@@ -1307,7 +1307,7 @@ export async function triggerBoardAction(accountId: string, action: 'create' | '
     if (webhooks && webhooks.length > 0) webhookUrl = webhooks[0].webhook_url;
   }
   if (!webhookUrl) return { success: false, error: 'No webhook URL found for board actions' };
-  const payload = { action, account_id: accountId, ...extra };
+  const payload = { action, account_id: accountId, workspace_id: account?.workspace_id, ...extra };
   try {
     const res = await fetch(webhookUrl, {
       method: 'POST',
@@ -1320,3 +1320,4 @@ export async function triggerBoardAction(accountId: string, action: 'create' | '
     return { success: false, error: e.message };
   }
 }
+
