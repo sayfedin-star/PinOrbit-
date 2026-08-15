@@ -1,0 +1,682 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import SectionHeader from '../../components/ui/SectionHeader.astro';
+---
+
+<Layout title="Competitor Intelligence Settings" description="Closed-loop control plane for Pinterest competitor ingestion, credential vault, pipeline schedules, and live job auditing.">
+
+  <!-- ═══ Navigation & Header ═══ -->
+  <div class="mb-6">
+    <div class="mb-3">
+      <a href="/competitors" class="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        <span>Back to Competitors</span>
+      </a>
+    </div>
+    <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <SectionHeader
+        title="Competitor Operations Console"
+        description="Unified management for Pinterest ingestion schedules, credential vault, pipeline parameters, and background sync jobs."
+      />
+      <div class="flex items-center gap-2.5 self-start sm:self-auto">
+        <button id="refresh-all-btn" title="Refresh all settings"
+          class="inline-flex items-center justify-center rounded-xl border border-border bg-card p-2.5 text-muted-foreground shadow-sm hover:bg-muted hover:text-foreground transition-all">
+          <svg id="refresh-icon" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="space-y-8">
+    <!-- ═══ SECTION 1: Pipeline Settings ═══ -->
+    <div class="rounded-xl border border-border bg-card p-6 shadow-sm">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border pb-5 mb-5">
+        <div>
+          <h2 class="text-base font-bold text-foreground flex items-center gap-2">
+            <span>⚙️</span>
+            <span>Pipeline Ingestion Controls</span>
+          </h2>
+          <p class="text-xs text-muted-foreground mt-0.5">Configure global automation parameters, dry-run safety modes, and retry boundaries.</p>
+        </div>
+        <div class="flex items-center gap-2.5">
+          <button id="btn-run-full-update"
+            class="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground shadow-md hover:bg-primary/90 transition-all">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            <span>Run Full Update Now</span>
+          </button>
+        </div>
+      </div>
+
+      <form id="pipeline-settings-form" class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Pipeline Switch -->
+        <div class="flex flex-col justify-between rounded-xl border border-border bg-background p-4">
+          <div>
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-foreground">Pipeline Status</span>
+              <span id="pipeline-status-badge" class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-emerald-500/10 text-emerald-500">Active</span>
+            </div>
+            <p class="text-[11px] text-muted-foreground mt-1">When disabled, automated cron runs and background workers cleanly skip execution.</p>
+          </div>
+          <div class="mt-4 flex items-center gap-2">
+            <input type="checkbox" id="pipe-is-enabled" class="h-4 w-4 rounded accent-primary cursor-pointer" checked />
+            <label for="pipe-is-enabled" class="text-xs font-semibold text-foreground cursor-pointer">Enable Automation Pipeline</label>
+          </div>
+        </div>
+
+        <!-- Dry Run Switch -->
+        <div class="flex flex-col justify-between rounded-xl border border-border bg-background p-4">
+          <div>
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-foreground">Dry-Run Simulation</span>
+              <span id="dry-run-status-badge" class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-muted text-muted-foreground">Off</span>
+            </div>
+            <p class="text-[11px] text-muted-foreground mt-1">Queries Pinterest API & rotates cookies but commits zero database writes.</p>
+          </div>
+          <div class="mt-4 flex items-center gap-2">
+            <input type="checkbox" id="pipe-dry-run" class="h-4 w-4 rounded accent-amber-500 cursor-pointer" />
+            <label for="pipe-dry-run" class="text-xs font-semibold text-foreground cursor-pointer">Enable Dry-Run Mode</label>
+          </div>
+        </div>
+
+        <!-- Max Retries & Save -->
+        <div class="flex flex-col justify-between rounded-xl border border-border bg-background p-4">
+          <div>
+            <span class="text-xs font-bold text-foreground">Network Max Retries</span>
+            <p class="text-[11px] text-muted-foreground mt-1">Exponential backoff ceiling per competitor fetch attempt (1–10).</p>
+          </div>
+          <div class="mt-4 flex items-center gap-3">
+            <input type="number" id="pipe-max-retries" min="1" max="10" value="3"
+              class="w-20 rounded-xl border border-border bg-card py-1.5 px-3 text-xs font-semibold text-foreground focus:border-primary focus:outline-none" />
+            <button type="submit" id="btn-save-pipeline"
+              class="rounded-xl border border-border bg-card px-4 py-1.5 text-xs font-semibold text-foreground shadow-xs hover:bg-muted transition-all">
+              Save Settings
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <!-- ═══ SECTION 2: Pinterest Cookies (Vault) ═══ -->
+    <div class="rounded-xl border border-border bg-card p-6 shadow-sm">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border pb-5 mb-5">
+        <div>
+          <h2 class="text-base font-bold text-foreground flex items-center gap-2">
+            <span>🔐</span>
+            <span>Pinterest Session Vault</span>
+          </h2>
+          <p class="text-xs text-muted-foreground mt-0.5">Encrypted at rest using AES-GCM and workspace KEK. Used for authenticated Pinterest scraping.</p>
+        </div>
+        <button id="open-add-cookie-modal"
+          class="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-semibold text-white shadow-md hover:bg-emerald-500 transition-all self-start sm:self-auto">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          <span>Add Cookie</span>
+        </button>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs text-muted-foreground" id="cookies-table">
+          <thead class="border-b border-border bg-muted/60 text-foreground font-semibold">
+            <tr>
+              <th scope="col" class="py-3 px-4">Vault Identifier</th>
+              <th scope="col" class="py-3 px-4">Security Level</th>
+              <th scope="col" class="py-3 px-4">Status</th>
+              <th scope="col" class="py-3 px-4">Last Used</th>
+              <th scope="col" class="py-3 px-4">Expires At</th>
+              <th scope="col" class="py-3 px-4">Created At</th>
+              <th scope="col" class="py-3 px-4 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="cookies-table-body" class="divide-y divide-border bg-card">
+            <tr><td colspan="7" class="py-6 text-center text-muted-foreground">Loading vault credentials…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ═══ SECTION 3: Per-Competitor Controls ═══ -->
+    <div class="rounded-xl border border-border bg-card p-6 shadow-sm">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border pb-5 mb-5">
+        <div>
+          <h2 class="text-base font-bold text-foreground flex items-center gap-2">
+            <span>🎯</span>
+            <span>Per-Competitor Ingestion Matrix</span>
+          </h2>
+          <p class="text-xs text-muted-foreground mt-0.5">Toggle active tracking per profile, configure update cadence, or dispatch targeted syncs.</p>
+        </div>
+        <span class="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary self-start sm:self-auto" id="competitor-matrix-count">0 Tracked</span>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs text-muted-foreground" id="competitors-matrix-table">
+          <thead class="border-b border-border bg-muted/60 text-foreground font-semibold">
+            <tr>
+              <th scope="col" class="py-3 px-4">Competitor Profile</th>
+              <th scope="col" class="py-3 px-4">Tracking State</th>
+              <th scope="col" class="py-3 px-4">Update Cadence</th>
+              <th scope="col" class="py-3 px-4">Current Audience</th>
+              <th scope="col" class="py-3 px-4">Last Checked</th>
+              <th scope="col" class="py-3 px-4 text-right">Targeted Actions</th>
+            </tr>
+          </thead>
+          <tbody id="competitors-matrix-body" class="divide-y divide-border bg-card">
+            <tr><td colspan="6" class="py-6 text-center text-muted-foreground">Loading competitor matrix…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ═══ SECTION 4: Recent Ingestion Jobs ═══ -->
+    <div class="rounded-xl border border-border bg-card p-6 shadow-sm">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border pb-5 mb-5">
+        <div>
+          <h2 class="text-base font-bold text-foreground flex items-center gap-2">
+            <span>📋</span>
+            <span>Recent Ingestion Jobs & Live Audit</span>
+          </h2>
+          <p class="text-xs text-muted-foreground mt-0.5">Audit log of the last 15 ingestion runs with status codes, items processed, and error telemetry.</p>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs text-muted-foreground" id="jobs-table">
+          <thead class="border-b border-border bg-muted/60 text-foreground font-semibold">
+            <tr>
+              <th scope="col" class="py-3 px-4">Job ID</th>
+              <th scope="col" class="py-3 px-4">Target Scope</th>
+              <th scope="col" class="py-3 px-4">Status</th>
+              <th scope="col" class="py-3 px-4">Items Processed</th>
+              <th scope="col" class="py-3 px-4">Started At</th>
+              <th scope="col" class="py-3 px-4">Completed At</th>
+              <th scope="col" class="py-3 px-4">Telemetry / Errors</th>
+            </tr>
+          </thead>
+          <tbody id="jobs-table-body" class="divide-y divide-border bg-card">
+            <tr><td colspan="7" class="py-6 text-center text-muted-foreground">Loading recent jobs…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ MODAL: Add Cookie ═══ -->
+  <div id="add-cookie-modal" class="overlay-root fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" aria-modal="true" role="dialog">
+    <div class="fixed inset-0" data-close></div>
+    <div class="relative w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-5 z-10">
+      <div class="flex items-center justify-between border-b border-border pb-4">
+        <div class="flex items-center gap-2.5">
+          <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-500">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          </div>
+          <h3 class="text-base font-bold text-foreground">Add Encrypted Pinterest Cookie</h3>
+        </div>
+        <button data-close class="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div id="add-cookie-error" class="hidden rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-500"></div>
+
+      <form id="add-cookie-form" class="space-y-4">
+        <div class="space-y-1.5">
+          <label for="cookie-value-input" class="block text-xs font-semibold text-foreground">Cookie String *</label>
+          <textarea id="cookie-value-input" required rows="4" placeholder="Paste Pinterest session cookie (e.g. _pinterest_sess=...; auth_token=...)"
+            class="w-full rounded-xl border border-border bg-background py-2 px-3 font-mono text-[11px] text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"></textarea>
+          <p class="text-[10px] text-muted-foreground">Payload is encrypted client-side / at-rest via AES-GCM before database write. Raw string is never exposed.</p>
+        </div>
+
+        <div class="space-y-1.5">
+          <label for="cookie-expires-input" class="block text-xs font-semibold text-foreground">Expiration Date (Optional)</label>
+          <input type="datetime-local" id="cookie-expires-input"
+            class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none" />
+        </div>
+
+        <div class="flex items-center justify-end gap-3 border-t border-border pt-4">
+          <button type="button" data-close class="rounded-xl border border-border px-4 py-2.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground">Cancel</button>
+          <button type="submit" class="rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-semibold text-white shadow-md hover:bg-emerald-500 transition-all">Save (Encrypted)</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Notification Anchor -->
+  <div id="toast-root" aria-live="polite" class="fixed bottom-4 right-4 z-[70] flex flex-col gap-2 w-80 max-w-[calc(100vw-2rem)]"></div>
+</Layout>
+
+<script>
+  // ─── Helpers & Utilities ───────────────────────────────────────────────────
+  const $ = (id: string) => document.getElementById(id) as HTMLElement;
+  const escHtml = (s: any) => String(s ?? '').replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m] as string));
+  const fmtCompact = (n: number | null | undefined) => new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(n ?? 0);
+
+  function timeAgo(iso?: string | null): string {
+    if (!iso) return 'Never';
+    const ms = Date.now() - new Date(iso).getTime();
+    if (isNaN(ms) || ms < 0) return 'Just now';
+    const m = Math.floor(ms / 60000);
+    if (m < 1) return 'Just now';
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    const d = Math.floor(h / 24);
+    return `${d}d ago`;
+  }
+
+  function toast(message: string, type: 'success' | 'error' | 'info' = 'success') {
+    const colors = {
+      success: 'border-emerald-500/40 text-emerald-600 dark:text-emerald-400',
+      error: 'border-rose-500/40 text-rose-600 dark:text-rose-400',
+      info: 'border-primary/40 text-primary',
+    };
+    const icons = { success: '✓', error: '✕', info: 'ℹ' };
+    const el = document.createElement('div');
+    el.className = `flex items-start gap-2.5 rounded-xl border bg-card p-3 text-xs font-semibold shadow-lg ${colors[type]}`;
+    el.innerHTML = `<span class="flex-shrink-0">${icons[type]}</span><span class="flex-1 text-foreground">${escHtml(message)}</span>
+      <button class="text-muted-foreground hover:text-foreground" aria-label="Dismiss">✕</button>`;
+    el.querySelector('button')!.addEventListener('click', () => el.remove());
+    $('toast-root').appendChild(el);
+    setTimeout(() => {
+      el.style.opacity = '0';
+      el.style.transition = 'opacity .3s';
+      setTimeout(() => el.remove(), 300);
+    }, 4500);
+  }
+
+  // ─── Modals ───────────────────────────────────────────────────────────────
+  function showModal(el: HTMLElement) {
+    el.classList.remove('hidden');
+    el.classList.add('flex');
+    el.querySelector<HTMLElement>('input, textarea, button[data-close]')?.focus();
+  }
+  function hideModal(el: HTMLElement) {
+    el.classList.add('hidden');
+    el.classList.remove('flex');
+  }
+  document.querySelectorAll('.overlay-root').forEach(root => {
+    root.querySelectorAll('[data-close]').forEach(btn => btn.addEventListener('click', () => hideModal(root as HTMLElement)));
+  });
+
+  // ─── API Layer ────────────────────────────────────────────────────────────
+  async function fetchAPI(url: string, options: RequestInit = {}) {
+    const res = await fetch(url, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(options.headers || {}),
+      },
+    });
+    const data = await res.json().catch(() => ({ success: false, error: 'Malformed JSON response' }));
+    if (!res.ok && res.status !== 202) {
+      throw new Error(data.error || `HTTP ${res.status}`);
+    }
+    return data;
+  }
+
+  // ─── Renderers ────────────────────────────────────────────────────────────
+  function renderPipelineSettings(settings: any) {
+    const isEnabled = Boolean(settings?.is_enabled ?? true);
+    const dryRun = Boolean(settings?.dry_run ?? false);
+    const maxRetries = settings?.max_retries ?? 3;
+
+    ( $('pipe-is-enabled') as HTMLInputElement ).checked = isEnabled;
+    ( $('pipe-dry-run') as HTMLInputElement ).checked = dryRun;
+    ( $('pipe-max-retries') as HTMLInputElement ).value = String(maxRetries);
+
+    const pipeBadge = $('pipeline-status-badge');
+    if (isEnabled) {
+      pipeBadge.className = 'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-emerald-500/10 text-emerald-500';
+      pipeBadge.textContent = 'Active';
+    } else {
+      pipeBadge.className = 'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-rose-500/10 text-rose-500';
+      pipeBadge.textContent = 'Disabled';
+    }
+
+    const dryBadge = $('dry-run-status-badge');
+    if (dryRun) {
+      dryBadge.className = 'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-amber-500/10 text-amber-500';
+      dryBadge.textContent = 'Active';
+    } else {
+      dryBadge.className = 'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-muted text-muted-foreground';
+      dryBadge.textContent = 'Off';
+    }
+  }
+
+  function renderCookies(cookies: any[]) {
+    const tbody = $('cookies-table-body');
+    if (!cookies || cookies.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-muted-foreground">
+        <div class="flex flex-col items-center justify-center gap-1.5">
+          <span class="text-base">🔓</span>
+          <span class="font-medium text-xs">No Pinterest cookies stored in vault</span>
+          <span class="text-[11px] text-muted-foreground/80">Add an active session cookie to enable automated background ingestion.</span>
+        </div>
+      </td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = cookies.map((c: any) => {
+      const maskedId = c.id ? `vault-${c.id.slice(0, 8)}…` : '—';
+      const isActive = Boolean(c.is_active);
+      const expires = c.expires_at ? new Date(c.expires_at).toLocaleDateString() : 'Never';
+      const created = c.created_at ? new Date(c.created_at).toLocaleDateString() : '—';
+
+      return `<tr class="hover:bg-muted/30 transition-colors">
+        <td class="py-3 px-4 font-mono font-bold text-foreground text-[11px]">${escHtml(maskedId)}</td>
+        <td class="py-3 px-4">
+          <span class="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-500">
+            🔒 Encrypted (AES-GCM)
+          </span>
+        </td>
+        <td class="py-3 px-4">
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" class="sr-only peer ck-toggle" data-id="${c.id}" ${isActive ? 'checked' : ''} />
+            <div class="w-8 h-4 bg-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500"></div>
+          </label>
+        </td>
+        <td class="py-3 px-4 text-[11px]">${timeAgo(c.last_used_at)}</td>
+        <td class="py-3 px-4 text-[11px]">${escHtml(expires)}</td>
+        <td class="py-3 px-4 text-[11px]">${escHtml(created)}</td>
+        <td class="py-3 px-4 text-right">
+          <button data-id="${c.id}" class="ck-del rounded-lg p-1.5 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-all" title="Delete Cookie">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          </button>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  function renderCompetitorsMatrix(competitors: any[]) {
+    const tbody = $('competitors-matrix-body');
+    $('competitor-matrix-count').textContent = `${competitors?.length || 0} Tracked`;
+
+    if (!competitors || competitors.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6" class="py-8 text-center text-muted-foreground">
+        No tracked competitors found in this workspace. Add competitors from the main Competitors tab.
+      </td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = competitors.map((c: any) => {
+      const s = Array.isArray(c.competitor_settings) ? c.competitor_settings[0] : c.competitor_settings;
+      const isActive = c.is_active !== undefined ? Boolean(c.is_active) : Boolean(s?.is_active ?? true);
+      const freq = s?.update_frequency_hours ?? 24;
+      const reach = fmtCompact(c.profile_reach || 0);
+      const followers = fmtCompact(c.follower_count || 0);
+
+      return `<tr class="hover:bg-muted/30 transition-colors">
+        <td class="py-3 px-4">
+          <div class="flex items-center gap-2.5">
+            ${c.avatar_url ? `<img src="${escHtml(c.avatar_url)}" alt="" class="h-7 w-7 rounded-full object-cover border border-border" />` : `<div class="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-xs">@</div>`}
+            <div>
+              <div class="font-semibold text-foreground text-xs">@${escHtml(c.username)}</div>
+              <div class="text-[10px] text-muted-foreground">${escHtml(c.full_name || 'Competitor')}</div>
+            </div>
+          </div>
+        </td>
+        <td class="py-3 px-4">
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" class="sr-only peer comp-active" data-id="${c.id}" ${isActive ? 'checked' : ''} />
+            <div class="w-8 h-4 bg-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-primary"></div>
+          </label>
+        </td>
+        <td class="py-3 px-4">
+          <div class="flex items-center gap-1.5">
+            <input type="number" min="1" max="168" value="${freq}" data-id="${c.id}"
+              class="comp-freq w-16 rounded-lg border border-border bg-card py-1 px-2 text-xs font-semibold text-foreground focus:border-primary focus:outline-none" />
+            <span class="text-[10px] text-muted-foreground">hrs</span>
+          </div>
+        </td>
+        <td class="py-3 px-4 text-[11px]">
+          <div class="font-semibold text-foreground">${reach} reach</div>
+          <div class="text-[10px] text-muted-foreground">${followers} followers</div>
+        </td>
+        <td class="py-3 px-4 text-[11px]">${timeAgo(c.last_checked_at)}</td>
+        <td class="py-3 px-4 text-right">
+          <button data-id="${c.id}" data-username="${escHtml(c.username)}"
+            class="update-now inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground shadow-xs hover:bg-muted transition-all">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 pointer-events-none text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            <span class="pointer-events-none">Update Now</span>
+          </button>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  function renderJobs(jobs: any[]) {
+    const tbody = $('jobs-table-body');
+    if (!jobs || jobs.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="7" class="py-6 text-center text-muted-foreground">No recent ingestion jobs recorded.</td></tr>`;
+      return;
+    }
+
+    const badgeStyle: Record<string, string> = {
+      queued: 'bg-blue-500/10 text-blue-500 border-blue-500/30',
+      running: 'bg-amber-500/10 text-amber-500 border-amber-500/30 animate-pulse',
+      completed: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30',
+      failed: 'bg-rose-500/10 text-rose-500 border-rose-500/30',
+    };
+
+    tbody.innerHTML = jobs.map((j: any) => {
+      const shortId = j.id ? `job-${j.id.slice(0, 8)}` : '—';
+      const target = j.competitor_id ? `Targeted (${j.competitor_id.slice(0, 8)}…)` : 'All Active Profiles';
+      const statusCls = badgeStyle[j.status] || 'bg-muted text-muted-foreground';
+      const processed = j.items_processed ?? 0;
+      const started = j.started_at ? timeAgo(j.started_at) : (j.created_at ? timeAgo(j.created_at) : '—');
+      const completed = j.completed_at ? timeAgo(j.completed_at) : (j.status === 'running' ? 'In Progress…' : '—');
+      const err = j.error_message ? `<span class="text-rose-500 text-[10px] truncate max-w-xs block" title="${escHtml(j.error_message)}">⚠️ ${escHtml(j.error_message)}</span>` : '<span class="text-muted-foreground text-[10px]">None</span>';
+
+      return `<tr class="hover:bg-muted/30 transition-colors">
+        <td class="py-3 px-4 font-mono font-bold text-foreground text-[11px]">${escHtml(shortId)}</td>
+        <td class="py-3 px-4 text-[11px] font-medium text-foreground">${escHtml(target)}</td>
+        <td class="py-3 px-4">
+          <span class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold ${statusCls}">
+            ${escHtml(j.status)}
+          </span>
+        </td>
+        <td class="py-3 px-4 text-[11px] font-semibold text-foreground">${processed}</td>
+        <td class="py-3 px-4 text-[11px]">${escHtml(started)}</td>
+        <td class="py-3 px-4 text-[11px]">${escHtml(completed)}</td>
+        <td class="py-3 px-4">${err}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // ─── Data Loading ─────────────────────────────────────────────────────────
+  async function loadAllState() {
+    try {
+      const [opsData, cookiesData] = await Promise.all([
+        fetchAPI('/api/admin/competitor-ops'),
+        fetchAPI('/api/admin/pinterest-cookies'),
+      ]);
+
+      if (opsData.success) {
+        renderPipelineSettings(opsData.settings);
+        renderCompetitorsMatrix(opsData.competitors);
+        renderJobs(opsData.jobs);
+      }
+      if (cookiesData.success) {
+        renderCookies(cookiesData.cookies);
+      }
+    } catch (err: any) {
+      toast(`Failed to load console state: ${err.message}`, 'error');
+    }
+  }
+
+  // ─── Event Handlers ───────────────────────────────────────────────────────
+  // 1. Refresh All
+  $('refresh-all-btn').addEventListener('click', async () => {
+    $('refresh-icon').classList.add('animate-spin');
+    await loadAllState();
+    setTimeout(() => $('refresh-icon').classList.remove('animate-spin'), 400);
+    toast('Operations state refreshed', 'info');
+  });
+
+  // 2. Pipeline Settings Form Submit
+  $('pipeline-settings-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const is_enabled = ( $('pipe-is-enabled') as HTMLInputElement ).checked;
+    const dry_run = ( $('pipe-dry-run') as HTMLInputElement ).checked;
+    const max_retries = Number(( $('pipe-max-retries') as HTMLInputElement ).value || 3);
+
+    try {
+      const res = await fetchAPI('/api/admin/competitor-ops', {
+        method: 'PUT',
+        body: JSON.stringify({ is_enabled, dry_run, max_retries }),
+      });
+      if (res.success) {
+        renderPipelineSettings(res.settings);
+        toast('Pipeline settings updated successfully', 'success');
+      }
+    } catch (err: any) {
+      toast(`Update failed: ${err.message}`, 'error');
+    }
+  });
+
+  // 3. Run Full Update Now
+  $('btn-run-full-update').addEventListener('click', async () => {
+    try {
+      const res = await fetchAPI('/api/admin/competitor-ops', {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      if (res.dispatched) {
+        toast(`Dispatched full update (job ${res.job_id?.slice(0, 8)})`, 'success');
+      } else {
+        toast(`Queued: ${res.warning || 'Job recorded'}`, 'info');
+      }
+      loadAllState();
+    } catch (err: any) {
+      toast(`Dispatch failed: ${err.message}`, 'error');
+    }
+  });
+
+  // 4. Modal: Add Cookie
+  $('open-add-cookie-modal').addEventListener('click', () => {
+    $('add-cookie-error').classList.add('hidden');
+    ( $('cookie-value-input') as HTMLTextAreaElement ).value = '';
+    ( $('cookie-expires-input') as HTMLInputElement ).value = '';
+    showModal($('add-cookie-modal'));
+  });
+
+  $('add-cookie-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const cookie_value = ( $('cookie-value-input') as HTMLTextAreaElement ).value.trim();
+    const expires_at = ( $('cookie-expires-input') as HTMLInputElement ).value || null;
+
+    if (cookie_value.length < 20) {
+      $('add-cookie-error').textContent = 'Cookie string must be at least 20 characters.';
+      $('add-cookie-error').classList.remove('hidden');
+      return;
+    }
+
+    try {
+      const res = await fetchAPI('/api/admin/pinterest-cookies', {
+        method: 'POST',
+        body: JSON.stringify({ cookie_value, expires_at }),
+      });
+      if (res.success) {
+        hideModal($('add-cookie-modal'));
+        toast('Cookie stored and encrypted in vault', 'success');
+        loadAllState();
+      }
+    } catch (err: any) {
+      $('add-cookie-error').textContent = err.message;
+      $('add-cookie-error').classList.remove('hidden');
+    }
+  });
+
+  // 5. Event Delegation for Interactive Tables
+  document.addEventListener('change', async (e) => {
+    const target = e.target as HTMLElement;
+
+    // Cookie active toggle
+    if (target.classList.contains('ck-toggle')) {
+      const id = target.dataset.id;
+      const is_active = (target as HTMLInputElement).checked;
+      try {
+        await fetchAPI('/api/admin/pinterest-cookies', {
+          method: 'PATCH',
+          body: JSON.stringify({ id, is_active }),
+        });
+        toast(`Cookie status updated`, 'success');
+      } catch (err: any) {
+        toast(`Failed to toggle cookie: ${err.message}`, 'error');
+        (target as HTMLInputElement).checked = !is_active;
+      }
+    }
+
+    // Competitor active toggle
+    if (target.classList.contains('comp-active')) {
+      const competitor_id = target.dataset.id;
+      const is_active = (target as HTMLInputElement).checked;
+      try {
+        await fetchAPI('/api/admin/competitor-ops', {
+          method: 'PATCH',
+          body: JSON.stringify({ competitor_id, is_active }),
+        });
+        toast(`Competitor status updated`, 'success');
+      } catch (err: any) {
+        toast(`Failed to update competitor: ${err.message}`, 'error');
+        (target as HTMLInputElement).checked = !is_active;
+      }
+    }
+
+    // Competitor frequency change
+    if (target.classList.contains('comp-freq')) {
+      const competitor_id = target.dataset.id;
+      const update_frequency_hours = Number((target as HTMLInputElement).value || 24);
+      try {
+        await fetchAPI('/api/admin/competitor-ops', {
+          method: 'PATCH',
+          body: JSON.stringify({ competitor_id, update_frequency_hours }),
+        });
+        toast(`Update cadence updated to ${update_frequency_hours}h`, 'success');
+      } catch (err: any) {
+        toast(`Failed to update cadence: ${err.message}`, 'error');
+      }
+    }
+  });
+
+  document.addEventListener('click', async (e) => {
+    const target = (e.target as HTMLElement).closest('button');
+    if (!target) return;
+
+    // Delete Cookie
+    if (target.classList.contains('ck-del')) {
+      const id = target.dataset.id;
+      if (!confirm('Are you sure you want to remove this credential from the vault?')) return;
+      try {
+        await fetchAPI('/api/admin/pinterest-cookies', {
+          method: 'DELETE',
+          body: JSON.stringify({ id }),
+        });
+        toast('Cookie removed from vault', 'info');
+        loadAllState();
+      } catch (err: any) {
+        toast(`Failed to delete: ${err.message}`, 'error');
+      }
+    }
+
+    // Update single competitor now
+    if (target.classList.contains('update-now')) {
+      const competitor_id = target.dataset.id;
+      const username = target.dataset.username;
+      try {
+        const res = await fetchAPI('/api/admin/competitor-ops', {
+          method: 'POST',
+          body: JSON.stringify({ competitor_id, username }),
+        });
+        if (res.dispatched) {
+          toast(`Updating @${username}… (job ${res.job_id?.slice(0, 8)})`, 'success');
+        } else {
+          toast(`Queued @${username}: ${res.warning || 'Job recorded'}`, 'info');
+        }
+        loadAllState();
+      } catch (err: any) {
+        toast(`Dispatch failed: ${err.message}`, 'error');
+      }
+    }
+  });
+
+  // Initial Boot
+  loadAllState();
+</script>

@@ -1,31 +1,45 @@
-name: Update Pinterest Competitors Daily
+name: Update Pinterest Competitors
 
 on:
   schedule:
-    # Runs daily at 02:00 UTC
     - cron: '0 2 * * *'
-  # Enables manual execution button in GitHub Actions tab
   workflow_dispatch:
+    inputs:
+      target_username:
+        description: 'Username (empty = all active)'
+        type: string
+        required: false
+      dry_run:
+        description: 'Dry-run mode'
+        type: boolean
+        required: false
+        default: false
+      force_run:
+        description: 'Override pipeline disabled (use with caution)'
+        type: boolean
+        required: false
+        default: false
+  repository_dispatch:
+    types: [update-competitor]
 
 jobs:
-  run-competitor-sync:
+  sync:
     runs-on: ubuntu-latest
-
+    env:
+      SUPABASE_URL: ${{ secrets.COMPETITORS_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.COMPETITORS_SUPABASE_SERVICE_KEY }}
+      TOKEN_KEK: ${{ secrets.TOKEN_KEK }}
+      WORKSPACE_ID: ${{ secrets.WORKSPACE_ID }}
+      GITHUB_DISPATCH_TOKEN: ${{ secrets.GITHUB_DISPATCH_TOKEN }}
+      GITHUB_REPO: ${{ secrets.GITHUB_REPO || 'sayfedin-star/pinorbit-v2' }}
+      JOB_ID: ${{ github.event.client_payload.job_id || '' }}
+      TARGET_USERNAME: ${{ github.event.client_payload.username || github.event.inputs.target_username || '' }}
+      DRY_RUN: ${{ (github.event.inputs.dry_run == true || github.event.client_payload.dry_run == true) && 'true' || '' }}
+      FORCE_RUN: ${{ (github.event.inputs.force_run == true || github.event.client_payload.force_run == true) && 'true' || '' }}
     steps:
-      - name: Checkout Code Repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js Runtime
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
-
-      - name: Install Dependencies
-        run: npm install @supabase/supabase-js
-
-      - name: Execute Competitor Update Script
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          PINTEREST_COOKIE: ${{ secrets.PINTEREST_COOKIE }}
-        run: node scripts/update-competitors.mjs
+      - run: npm install @supabase/supabase-js --no-save
+      - run: node scripts/update-competitors.mjs

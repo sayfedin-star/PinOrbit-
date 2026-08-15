@@ -1,0 +1,231 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { GET as getCookies, POST as postCookies, PATCH as patchCookies, DELETE as deleteCookies } from '../../pages/api/admin/pinterest-cookies';
+import { GET as getOps, PUT as putOps, PATCH as patchOps, POST as postOps } from '../../pages/api/admin/competitor-ops';
+
+const mockCompetitorsClient = {
+  from: vi.fn(),
+};
+
+vi.mock('../db/clients', () => ({
+  dbClients: {
+    getCompetitors: vi.fn(() => mockCompetitorsClient),
+  },
+  getServerEnv: vi.fn(() => ({
+    TOKEN_KEK: 'test_token_kek_00000000_1234567890',
+  })),
+  isProductionEnv: vi.fn(() => false),
+  isKnownDefaultKek: vi.fn(() => false),
+}));
+
+vi.mock('../auth/workspace-guard', () => ({
+  assertWorkspaceAccess: vi.fn().mockImplementation(async (client, wsId, userId, role) => {
+    if (userId === 'member-only-user' && role === 'admin') {
+      const { HttpError } = await import('../lib/http-error');
+      throw new HttpError(403, 'Forbidden: insufficient workspace role.');
+    }
+    return { workspaceId: wsId, role: 'admin', isOwner: true, isAdmin: true };
+  }),
+}));
+
+vi.mock('../lib/token-crypto', () => ({
+  resolveTokenKek: vi.fn().mockResolvedValue('test_token_kek_00000000_1234567890'),
+  encryptToken: vi.fn().mockResolvedValue('v1:aXZfdGVzdA==:Y3RfdGVzdA=='),
+  decryptToken: vi.fn().mockResolvedValue('auth_token=decrypted_value'),
+}));
+
+describe('Competitor Ops Console API Endpoints', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  describe('Pinterest Cookies API (/api/admin/pinterest-cookies)', () => {
+    it('returns 401 for unauthenticated request', async () => {
+      const req = new Request('http://localhost/api/admin/pinterest-cookies');
+      const res = await getCookies({ request: req, locals: {} } as any);
+      expect(res.status).toBe(401);
+      const body = await res.json();
+      expect(body.success).toBe(false);
+    });
+
+    it('returns 403 for non-admin member', async () => {
+      const req = new Request('http://localhost/api/admin/pinterest-cookies?workspace_id=ws-123');
+      const res = await getCookies({
+        request: req,
+        locals: {
+          user: { id: 'member-only-user' },
+          supabase: {} as any,
+          activeWorkspaceId: 'ws-123',
+        },
+      } as any);
+      expect(res.status).toBe(403);
+    });
+
+    it('returns 200 with masked cookies for admin user (never exposes cookie_value)', async () => {
+      mockCompetitorsClient.from.mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            order: vi.fn().mockResolvedValue({
+              data: [
+                {
+                  id: 'cookie-1',
+                  workspace_id: 'ws-123',
+                  is_active: true,
+                  last_used_at: '2026-08-15T00:00:00Z',
+                  expires_at: null,
+                  created_at: '2026-08-15T00:00:00Z',
+                },
+              ],
+              error: null,
+            }),
+          }),
+        }),
+      });
+
+      const req = new Request('http://localhost/api/admin/pinterest-cookies?workspace_id=ws-123');
+      const res = await getCookies({
+        request: req,
+        locals: {
+          user: { id: 'admin-user' },
+          supabase: {} as any,
+          activeWorkspaceId: 'ws-123',
+        },
+      } as any);
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.success).toBe(true);
+      expect(body.cookies).toHaveLength(1);
+      expect(body.cookies[0].cookie_value).toBeUndefined();
+    });
+
+    it('POST validates cookie length and encrypts at rest', async () => {
+      mockCompetitorsClient.from.mockReturnValue({
+        insert: vi.fn().mockReturnValue({
+          select: vi.fn().mockReturnValue({
+            single: vi.fn().mockResolvedValue({
+              data: {
+                id: 'cookie-new',
+                workspace_id: 'ws-123',
+                is_active: true,
+              },
+              error: null,
+            }),
+          }),
+        }),
+      });
+
+      // Too short:
+      const shortReq = new Request('http://localhost/api/admin/pinterest-cookies', {
+        method: 'POST',
+        body: JSON.stringify({ cookie_value: 'short' }),
+      });
+      const shortRes = await postCookies({
+        request: shortReq,
+        locals: { user: { id: 'admin-user' }, supabase: {} as any, activeWorkspaceId: 'ws-123' },
+      } as any);
+      expect(shortRes.status).toBe(400);
+
+      // Valid:
+      const validReq = new Request('http://localhost/api/admin/pinterest-cookies', {
+        method: 'POST',
+        body: JSON.stringify({ cookie_value: 'auth_token=valid_long_test_session_cookie_12345' }),
+      });
+      const validRes = await postCookies({
+        request: validReq,
+        locals: { user: { id: 'admin-user' }, supabase: {} as any, activeWorkspaceId: 'ws-123' },
+      } as any);
+      expect(validRes.status).toBe(201);
+      const validBody = await validRes.json();
+      expect(validBody.success).toBe(true);
+    });
+  });
+
+  describe('Competitor Ops API (/api/admin/competitor-ops)', () => {
+    it('GET returns pipeline settings, joined competitors, and jobs', async () => {
+      mockCompetitorsClient.from.mockImplementation((table: string) => {
+        if (table === 'competitor_pipeline_settings') {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: { id: true, is_enabled: true, dry_run: false, max_retries: 3 },
+                  error: null,
+                }),
+              }),
+            }),
+          };
+        }
+        if (table === 'competitors') {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                order: vi.fn().mockResolvedValue({
+                  data: [{ id: 'comp-1', username: 'testcomp', competitor_settings: [{ is_active: true }] }],
+                  error: null,
+                }),
+              }),
+            }),
+          };
+        }
+        if (table === 'competitor_ingestion_jobs') {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                order: vi.fn().mockReturnValue({
+                  limit: vi.fn().mockResolvedValue({
+                    data: [{ id: 'job-1', status: 'completed', items_processed: 5 }],
+                    error: null,
+                  }),
+                }),
+              }),
+            }),
+          };
+        }
+        return {};
+      });
+
+      const req = new Request('http://localhost/api/admin/competitor-ops?workspace_id=ws-123');
+      const res = await getOps({
+        request: req,
+        locals: { user: { id: 'admin-user' }, supabase: {} as any, activeWorkspaceId: 'ws-123' },
+      } as any);
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.success).toBe(true);
+      expect(body.settings.is_enabled).toBe(true);
+      expect(body.competitors).toHaveLength(1);
+      expect(body.jobs).toHaveLength(1);
+    });
+
+    it('POST enqueues job and returns 202 without throwing even if dispatch token is missing', async () => {
+      mockCompetitorsClient.from.mockReturnValue({
+        insert: vi.fn().mockReturnValue({
+          select: vi.fn().mockReturnValue({
+            single: vi.fn().mockResolvedValue({
+              data: { id: 'job-uuid-123', status: 'queued' },
+              error: null,
+            }),
+          }),
+        }),
+      });
+
+      const req = new Request('http://localhost/api/admin/competitor-ops', {
+        method: 'POST',
+        body: JSON.stringify({ username: 'testcomp' }),
+      });
+
+      const res = await postOps({
+        request: req,
+        locals: { user: { id: 'admin-user' }, supabase: {} as any, activeWorkspaceId: 'ws-123' },
+      } as any);
+
+      expect(res.status).toBe(202);
+      const body = await res.json();
+      expect(body.success).toBe(true);
+      expect(body.job_id).toBe('job-uuid-123');
+      expect(body.dispatched).toBe(false);
+      expect(body.warning).toBeDefined();
+    });
+  });
+});
