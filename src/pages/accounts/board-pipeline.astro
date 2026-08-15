@@ -364,6 +364,9 @@ ROUTER on: action
             <button type="button" class="btn-copy-payload text-xs font-semibold text-primary hover:underline cursor-pointer" data-target="code-pin-posted-payload">📋 Copy JSON</button>
           </div>
           <pre id="code-pin-posted-payload" class="rounded-lg border border-border bg-background p-3 font-mono text-xs text-foreground overflow-x-auto"><code></code></pre>
+          <div class="rounded-lg border border-border bg-muted/20 p-2.5 text-[11px] text-muted-foreground">
+            <strong>💡 Footnote:</strong> If your scenario lacks the <code>1200x</code> path, map <code>{`{{W.image_url}}`}</code> instead; server ignores empty values.
+          </div>
         </div>
 
         <!-- FAILURE Route -->
@@ -646,6 +649,7 @@ ROUTER on: action
       id: `{{${pubP}.id}}`,
       created_at: `{{${pubP}.created_at}}`,
       board_id: `{{${pubP}.board_id}}`,
+      image_url: `{{${pubP}.media.images.1200x.url}}`,
     }, null, 2);
 
     // 5. PIN PUBLISH FAILURE Payload

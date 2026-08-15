@@ -1292,7 +1292,10 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
 
   function renderPinStatusBadgeWithRetry(pin: Pin) {
     if (pin.status === 'posted') {
-      return `<span class="inline-flex items-center rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">Posted</span>`;
+      const linkHtml = pin.pinterest_pin_id
+        ? `<a href="https://www.pinterest.com/pin/${encodeURIComponent(pin.pinterest_pin_id)}/" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 hover:underline text-emerald-600 dark:text-emerald-400 font-semibold" title="View on Pinterest">Posted <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>`
+        : 'Posted';
+      return `<span class="inline-flex items-center rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">${linkHtml}</span>`;
     }
     if (pin.status === 'processing') {
       return `<span class="inline-flex items-center rounded-full bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 text-[11px] font-semibold text-blue-500">Processing</span>`;

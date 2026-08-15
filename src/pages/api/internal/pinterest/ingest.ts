@@ -68,16 +68,31 @@ export const POST: APIRoute = async ({ request, locals }) => {
         await admin.from('pin_delivery_logs').insert({ pin_id: internalId, attempt_no: pin.attempts, event_type: 'dispatch_failed', error_message: payload.error || null, metadata: { source: 'make_callback' } }).then(() => {});
         return new Response(JSON.stringify({ success: true, handled: 'pin_failed', exhausted }), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }
-      await admin.from('pins').update({
+      const postedAt = payload.created_at
+        ? (() => {
+            try {
+              const d = new Date(payload.created_at);
+              return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+            } catch { return new Date().toISOString(); }
+          })()
+        : new Date().toISOString();
+
+      const updateFields: any = {
         status: 'posted',
-        posted_at: payload.created_at || new Date().toISOString(),
-        pinterest_pin_id: payload.id || null,
+        posted_at: postedAt,
+        pinterest_pin_id: payload.id || pin.pinterest_pin_id || null,
         pinterest_pin_created_at: payload.created_at || null,
         processing_started_at: null,
         last_error_message: null,
         updated_at: new Date().toISOString(),
-      }).eq('id', internalId);
-      await admin.from('pin_delivery_logs').insert({ pin_id: internalId, attempt_no: pin.attempts, event_type: 'dispatch_success', provider: 'pinterest', metadata: { pinterest_pin_id: payload.id, board_id: payload.board_id, source: 'make_callback' } }).then(() => {});
+      };
+
+      if (typeof payload.image_url === 'string' && payload.image_url.trim().length > 0 && !payload.image_url.includes('{{')) {
+        updateFields.image_url = payload.image_url.trim();
+      }
+
+      await admin.from('pins').update(updateFields).eq('id', internalId);
+      await admin.from('pin_delivery_logs').insert({ pin_id: internalId, attempt_no: pin.attempts, event_type: 'dispatch_success', provider: 'pinterest', metadata: { pinterest_pin_id: payload.id || pin.pinterest_pin_id, board_id: payload.board_id, source: 'make_callback' } }).then(() => {});
       return new Response(JSON.stringify({ success: true, handled: 'pin_posted' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 

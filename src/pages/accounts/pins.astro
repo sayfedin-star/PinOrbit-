@@ -466,7 +466,10 @@ import Layout from '../../layouts/Layout.astro';
 
   function renderPinStatusBadgeWithRetry(pin: Pin) {
     if (pin.status === 'posted') {
-      return `<span class="inline-flex items-center rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">Posted</span>`;
+      const linkHtml = pin.pinterest_pin_id
+        ? `<a href="https://www.pinterest.com/pin/${encodeURIComponent(pin.pinterest_pin_id)}/" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 hover:underline text-emerald-600 dark:text-emerald-400 font-semibold" title="View on Pinterest">Posted <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>`
+        : 'Posted';
+      return `<span class="inline-flex items-center rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">${linkHtml}</span>`;
     }
     if (pin.status === 'processing') {
       return `<span class="inline-flex items-center rounded-full bg-blue-500/10 border border-blue-500/20 px-2.5 py-0.5 text-[11px] font-semibold text-blue-500">Processing</span>`;
@@ -1008,9 +1011,26 @@ import Layout from '../../layouts/Layout.astro';
             <p class="font-bold text-foreground">${pin.scheduled_for ? formatDate(pin.scheduled_for) : 'Immediate'}</p>
           </div>
           <div class="p-2.5 rounded-xl border border-border bg-background space-y-0.5">
-            <span class="text-[11px] font-medium text-muted-foreground">Posted / Created</span>
-            <p class="font-bold text-foreground">${pin.posted_at ? formatDate(pin.posted_at) : formatDate(pin.created_at)}</p>
+            <span class="text-[11px] font-medium text-muted-foreground">Posted At</span>
+            <p class="font-bold text-foreground">${pin.posted_at ? formatDate(pin.posted_at) : 'Not posted yet'}</p>
           </div>
+          ${pin.pinterest_pin_id ? `
+            <div class="p-2.5 rounded-xl border border-border bg-background space-y-1.5 col-span-2">
+              <div class="flex items-center justify-between">
+                <span class="text-[11px] font-medium text-muted-foreground">Pinterest Pin ID</span>
+                <div class="flex items-center gap-2">
+                  <button type="button" class="btn-copy-pin-pid text-primary hover:text-primary/80 transition-colors p-0.5 text-[11px] font-semibold cursor-pointer" data-id="${escapeHtml(pin.pinterest_pin_id)}" title="Copy Pinterest Pin ID">
+                    📋 Copy
+                  </button>
+                  <a href="https://www.pinterest.com/pin/${encodeURIComponent(pin.pinterest_pin_id)}/" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-primary hover:underline text-[11px] font-semibold">
+                    <span>Open on Pinterest</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                  </a>
+                </div>
+              </div>
+              <p class="font-mono text-xs font-bold text-foreground">${escapeHtml(pin.pinterest_pin_id)}</p>
+            </div>
+          ` : ''}
         </div>
 
         ${pin.last_failure_reason ? `
@@ -1027,6 +1047,16 @@ import Layout from '../../layouts/Layout.astro';
           </div>
         ` : ''}
       `;
+
+      content.querySelectorAll('.btn-copy-pin-pid').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          const id = (e.currentTarget as HTMLElement).getAttribute('data-id');
+          if (id) {
+            navigator.clipboard.writeText(id);
+            showFeedback('Pinterest Pin ID copied to clipboard.', 'success');
+          }
+        });
+      });
     }
 
     modal?.classList.remove('hidden');
