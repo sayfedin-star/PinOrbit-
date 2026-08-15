@@ -62,37 +62,110 @@ const { id } = Astro.params;
     </div>
   </div>
 
-  <!-- Webhook Routing Summary -->
-  <div class="mb-8 rounded-2xl border border-border bg-card p-5 shadow-sm space-y-4">
-    <div class="flex items-center justify-between border-b border-border pb-3">
-      <div class="flex items-center gap-2">
-        <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+  <!-- SIDE-BY-SIDE SPLIT SECTION (Webhooks 65% / FastCron API Tokens 35%) -->
+  <div class="mb-8 flex flex-col lg:flex-row items-stretch gap-6">
+    <!-- LEFT PANEL (65% width) - Webhook Orchestration Table -->
+    <div class="w-full lg:w-[65%] rounded-2xl border border-border bg-card p-5 shadow-sm flex flex-col justify-between space-y-4">
+      <div class="space-y-4">
+        <div class="flex flex-wrap items-center justify-between border-b border-border pb-3 gap-3">
+          <div class="flex items-center gap-2">
+            <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            </div>
+            <div>
+              <h3 class="text-sm font-bold text-foreground">Webhook Orchestration Summary</h3>
+              <p class="text-xs text-muted-foreground">Channel capacities, fallback priority & execution stats</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              id="btn-test-ping-all-webhooks"
+              class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-muted transition-all shadow-sm"
+              title="Test ping all active webhook channels"
+            >
+              <span>⚡ Test Ping All</span>
+            </button>
+            <button
+              type="button"
+              id="open-webhooks-modal-btn"
+              class="inline-flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition-all shadow-sm"
+            >
+              <span>+ Add Webhook</span>
+            </button>
+          </div>
         </div>
-        <div>
-          <h3 class="text-sm font-bold text-foreground">Webhook Routing Summary</h3>
-          <p class="text-xs text-muted-foreground">Multi-webhook load distribution</p>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs">
+            <thead>
+              <tr class="text-left border-b border-border text-muted-foreground">
+                <th class="p-2.5 font-semibold">WEBHOOK NAME & CHANNEL</th>
+                <th class="p-2.5 font-semibold">TARGET ENDPOINT</th>
+                <th class="p-2.5 font-semibold">EXECUTIONS / RUNS</th>
+                <th class="p-2.5 font-semibold">HEALTH / STATUS</th>
+                <th class="p-2.5 font-semibold text-right">ACTIONS</th>
+              </tr>
+            </thead>
+            <tbody id="webhook-orchestration-rows">
+              <tr><td colspan="5" class="p-4 text-center text-muted-foreground">Loading webhook channels...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Table Footer: Total Combined Capacity Summary Bar -->
+      <div id="webhook-combined-footer" class="pt-3 border-t border-border space-y-1.5">
+        <div class="flex items-center justify-between text-xs">
+          <span class="font-semibold text-muted-foreground">Total Orchestrated Capacity</span>
+          <span id="wh-combined-capacity" class="font-mono font-bold text-foreground">Combined: 0 / 0 runs remaining</span>
+        </div>
+        <div class="h-2 w-full rounded-full bg-muted overflow-hidden">
+          <div id="wh-combined-capacity-bar" class="h-full rounded-full bg-primary transition-all duration-300" style="width: 0%"></div>
         </div>
       </div>
     </div>
 
-    <div id="webhook-summary-container" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-      <div class="p-3 rounded-xl border border-border bg-background space-y-1">
-        <span class="text-[11px] font-medium text-muted-foreground">Configured Channels</span>
-        <p id="wh-sum-channels" class="text-xs font-bold text-foreground">Loading...</p>
-      </div>
-      <div class="p-3 rounded-xl border border-border bg-background space-y-1">
-        <span class="text-[11px] font-medium text-muted-foreground">Primary Webhook</span>
-        <p id="wh-sum-primary" class="text-xs font-bold text-foreground">Loading...</p>
-      </div>
-      <div class="col-span-1 sm:col-span-2 p-3 rounded-xl border border-border bg-background space-y-1">
-        <div class="flex items-center justify-between text-[11px] font-medium text-muted-foreground">
-          <span>Combined Active Remaining Capacity</span>
-          <span id="wh-sum-capacity-count" class="font-bold text-foreground">---</span>
+    <!-- RIGHT PANEL (35% width) - FastCron API Tokens -->
+    <div class="w-full lg:w-[35%] rounded-2xl border border-border bg-card p-5 shadow-sm flex flex-col justify-between space-y-4">
+      <div class="space-y-4">
+        <div class="flex flex-wrap items-center justify-between border-b border-border pb-3 gap-3">
+          <div class="flex items-center gap-2">
+            <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/10 text-amber-500">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            </div>
+            <div>
+              <h3 class="text-sm font-bold text-foreground">FastCron API Tokens</h3>
+              <p class="text-xs text-muted-foreground">Workspace token registry</p>
+            </div>
+          </div>
+          <button id="btn-add-token" class="inline-flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition-all shadow-sm">
+            + Add Token
+          </button>
         </div>
-        <div class="h-2 w-full rounded-full bg-muted overflow-hidden">
-          <div id="wh-sum-capacity-bar" class="h-full rounded-full bg-primary transition-all duration-300" style="width: 0%"></div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs">
+            <thead>
+              <tr class="text-left border-b border-border text-muted-foreground">
+                <th class="p-2 font-semibold">TOKEN NAME</th>
+                <th class="p-2 font-semibold">MASKED KEY</th>
+                <th class="p-2 font-semibold">STATUS</th>
+                <th class="p-2 font-semibold text-right">ACTIONS</th>
+              </tr>
+            </thead>
+            <tbody id="tokens-table-rows"></tbody>
+          </table>
         </div>
+      </div>
+
+      <!-- Bottom tip: Subtle info banner showing connection health with FastCron API -->
+      <div class="pt-3 border-t border-border flex items-center justify-between">
+        <div class="flex items-center gap-1.5 text-xs text-emerald-500 font-medium">
+          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+          <span id="fc-connection-status">✓ Connection healthy</span>
+        </div>
+        <button type="button" id="btn-ping-tokens" class="text-xs text-primary hover:underline font-medium">Test Connection</button>
       </div>
     </div>
   </div>
@@ -119,9 +192,66 @@ const { id } = Astro.params;
         </div>
       </div>
       <div class="flex flex-wrap items-center gap-2">
-        <button id="btn-add-schedule" class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-muted transition-all">+ Add Posting Schedule</button>
+        <button id="btn-add-schedule" class="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition-all shadow-sm">+ New</button>
+        
+        <!-- Batch Dropdown -->
+        <div class="relative inline-block text-left" id="batch-dropdown-container">
+          <button id="btn-sched-batch" type="button" class="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted transition-all shadow-sm">
+            <svg class="h-3.5 w-3.5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            <span>Batch</span>
+            <span id="batch-sel-count" class="hidden rounded-full bg-primary/20 text-primary px-1.5 py-0.2 text-[10px] font-bold">0</span>
+            <svg class="h-3 w-3 text-muted-foreground ml-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div id="sched-batch-menu" class="hidden absolute left-0 mt-1 w-56 rounded-xl border border-border bg-card shadow-xl z-50 py-1 text-xs divide-y divide-border">
+            <div class="py-1">
+              <button type="button" id="batch-act-select-page" class="w-full text-left px-3 py-1.5 hover:bg-muted flex items-center gap-2 text-foreground">
+                <svg class="h-3.5 w-3.5 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                <span id="batch-txt-select-page">Select all on page</span>
+              </button>
+              <button type="button" id="batch-act-select-all" class="w-full text-left px-3 py-1.5 hover:bg-muted flex items-center gap-2 text-foreground">
+                <svg class="h-3.5 w-3.5 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+                <span>Select all in account</span>
+              </button>
+            </div>
+            <div class="py-1">
+              <button type="button" id="batch-act-edit" class="w-full text-left px-3 py-1.5 hover:bg-muted flex items-center gap-2 text-foreground">
+                <svg class="h-3.5 w-3.5 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                <span>Edit</span>
+              </button>
+              <button type="button" id="batch-act-run" class="w-full text-left px-3 py-1.5 hover:bg-muted flex items-center gap-2 text-foreground">
+                <svg class="h-3.5 w-3.5 text-indigo-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                <span>Run</span>
+              </button>
+            </div>
+            <div class="py-1">
+              <button type="button" id="batch-act-enable" class="w-full text-left px-3 py-1.5 hover:bg-muted flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+                <svg class="h-3.5 w-3.5 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                <span>Enable</span>
+              </button>
+              <button type="button" id="batch-act-disable" class="w-full text-left px-3 py-1.5 hover:bg-muted flex items-center gap-2 text-amber-600 dark:text-amber-400">
+                <svg class="h-3.5 w-3.5 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                <span>Disable</span>
+              </button>
+            </div>
+            <div class="py-1">
+              <button type="button" id="batch-act-delete" class="w-full text-left px-3 py-1.5 hover:bg-muted flex items-center gap-2 text-rose-500 font-semibold">
+                <svg class="h-3.5 w-3.5 text-rose-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                <span>Delete</span>
+              </button>
+            </div>
+            <div class="py-1">
+              <button type="button" id="batch-act-export" class="w-full text-left px-3 py-1.5 hover:bg-muted flex items-center gap-2 text-foreground">
+                <svg class="h-3.5 w-3.5 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                <span>Export</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
         <button id="btn-sync-missing" class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-muted transition-all">Sync Missing</button>
-        <button id="btn-refresh-schedules" class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-muted transition-all">Refresh</button>
+        <button id="btn-refresh-schedules" class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-muted transition-all">
+          <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+        </button>
       </div>
     </div>
 
@@ -140,6 +270,9 @@ const { id } = Astro.params;
       <table class="w-full text-xs">
         <thead>
           <tr class="text-left border-b border-border text-muted-foreground">
+            <th class="p-2.5 w-8">
+              <input type="checkbox" id="sched-select-all-header" class="h-3.5 w-3.5 rounded border-border text-primary cursor-pointer" />
+            </th>
             <th class="p-2.5 font-semibold">Schedule & Status</th>
             <th class="p-2.5 font-semibold">Channel</th>
             <th class="p-2.5 font-semibold">Window & Frequency</th>
@@ -152,40 +285,8 @@ const { id } = Astro.params;
     </div>
   </div>
 
-  <!-- FastCron API Tokens Registry Card -->
-  <div class="mb-8 rounded-2xl border border-border bg-card p-5 shadow-sm space-y-4">
-    <div class="flex flex-wrap items-center justify-between border-b border-border pb-3 gap-3">
-      <div class="flex items-center gap-2">
-        <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/10 text-amber-500">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-        </div>
-        <div>
-          <h3 class="text-sm font-bold text-foreground">FastCron API Tokens</h3>
-          <p class="text-xs text-muted-foreground">Workspace token registry for multi-token scheduling</p>
-        </div>
-      </div>
-      <button id="btn-add-token" class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-muted transition-all">
-        + Add Token
-      </button>
-    </div>
-
-    <div class="overflow-x-auto">
-      <table class="w-full text-xs">
-        <thead>
-          <tr class="text-left border-b border-border text-muted-foreground">
-            <th class="p-2.5 font-semibold">Name</th>
-            <th class="p-2.5 font-semibold">Masked Token</th>
-            <th class="p-2.5 font-semibold">Default</th>
-            <th class="p-2.5 font-semibold text-right">Actions</th>
-          </tr>
-        </thead>
-        <tbody id="tokens-table-rows"></tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- MODAL: Add/Edit Schedule -->
-  <dialog id="schedule-modal" class="rounded-2xl border border-border bg-card p-6 shadow-2xl w-[540px] max-w-full backdrop:bg-black/60 backdrop:backdrop-blur-sm max-h-[90vh] overflow-y-auto">
+  <!-- MODAL: Add/Edit Schedule (with Simple | Visual | Raw Cron Builder) -->
+  <dialog id="schedule-modal" class="rounded-2xl border border-border bg-card p-6 shadow-2xl w-[600px] max-w-full backdrop:bg-black/60 backdrop:backdrop-blur-sm max-h-[90vh] overflow-y-auto">
     <form id="schedule-form" class="space-y-4 text-xs">
       <div class="flex items-center justify-between border-b border-border pb-3">
         <h3 id="schedule-modal-title" class="text-base font-bold text-foreground">Add Posting Schedule</h3>
@@ -195,6 +296,13 @@ const { id } = Astro.params;
       </div>
 
       <input type="hidden" id="f-sched-id" />
+
+      <!-- Tabs Header: Simple | Visual | Raw -->
+      <div class="flex items-center gap-1.5 p-1 rounded-xl bg-muted border border-border">
+        <button type="button" id="tab-btn-simple" class="flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all bg-background text-foreground shadow-sm">Simple</button>
+        <button type="button" id="tab-btn-visual" class="flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all text-muted-foreground hover:text-foreground">Visual</button>
+        <button type="button" id="tab-btn-raw" class="flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all text-muted-foreground hover:text-foreground">Raw</button>
+      </div>
 
       <div>
         <label class="block font-medium text-muted-foreground mb-1">Schedule Label</label>
@@ -242,105 +350,182 @@ const { id } = Astro.params;
         </div>
       </div>
 
-      <div class="grid grid-cols-2 gap-3">
+      <!-- TAB 1: SIMPLE BUILDER PANE -->
+      <div id="tab-pane-simple" class="space-y-4">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-medium text-muted-foreground mb-1">Window Start Time</label>
+            <input id="f-sched-start" type="time" value="09:00" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none" />
+          </div>
+          <div>
+            <label class="block font-medium text-muted-foreground mb-1">Window End Time</label>
+            <input id="f-sched-end" type="time" value="21:00" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none" />
+          </div>
+        </div>
+
         <div>
-          <label class="block font-medium text-muted-foreground mb-1">Window Start Time</label>
-          <input id="f-sched-start" type="time" value="09:00" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none" />
+          <label class="block font-medium text-muted-foreground mb-1">Posting Frequency / Interval</label>
+          <select id="f-sched-interval-preset" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none">
+            <option value="5">Every 5 Minutes (5 mins)</option>
+            <option value="10">Every 10 Minutes (10 mins)</option>
+            <option value="15">Every 15 Minutes (15 mins)</option>
+            <option value="30">Every 30 Minutes (30 mins)</option>
+            <option value="36">Every 36 Minutes (36 mins)</option>
+            <option value="45">Every 45 Minutes (45 mins)</option>
+            <option value="60">Every 1 Hour (60 mins)</option>
+            <option value="120">Every 2 Hours (120 mins)</option>
+            <option value="180">Every 3 Hours (180 mins)</option>
+            <option value="240">Every 4 Hours (240 mins)</option>
+            <option value="360">Every 6 Hours (360 mins)</option>
+            <option value="720">Every 12 Hours (720 mins)</option>
+            <option value="1440">Every 24 Hours (1440 mins)</option>
+            <option value="custom">Custom Minutes...</option>
+          </select>
         </div>
+
+        <div id="f-sched-custom-interval-container" class="hidden">
+          <label class="block font-medium text-muted-foreground mb-1">Custom Minutes Between Posts</label>
+          <input id="f-sched-interval" type="number" min="1" max="1440" value="36" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none" />
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block font-medium text-muted-foreground mb-1">Random Delay (minutes)</label>
+            <input id="f-sched-delay" type="number" min="0" max="60" value="0" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none" />
+          </div>
+          <div>
+            <label class="block font-medium text-muted-foreground mb-1">Pinning Started Date (optional)</label>
+            <input id="f-sched-started" type="date" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none" />
+          </div>
+        </div>
+
         <div>
-          <label class="block font-medium text-muted-foreground mb-1">Window End Time</label>
-          <input id="f-sched-end" type="time" value="21:00" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none" />
+          <label class="block font-semibold text-foreground mb-1.5">Weekly Active Days</label>
+          <div class="flex flex-wrap items-center gap-1.5" id="f-sched-days-group">
+            <label class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground cursor-pointer hover:bg-muted">
+              <input type="checkbox" value="Mon" class="f-sched-day-chk h-3.5 w-3.5 text-primary rounded" checked />
+              <span>Mon</span>
+            </label>
+            <label class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground cursor-pointer hover:bg-muted">
+              <input type="checkbox" value="Tue" class="f-sched-day-chk h-3.5 w-3.5 text-primary rounded" checked />
+              <span>Tue</span>
+            </label>
+            <label class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground cursor-pointer hover:bg-muted">
+              <input type="checkbox" value="Wed" class="f-sched-day-chk h-3.5 w-3.5 text-primary rounded" checked />
+              <span>Wed</span>
+            </label>
+            <label class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground cursor-pointer hover:bg-muted">
+              <input type="checkbox" value="Thu" class="f-sched-day-chk h-3.5 w-3.5 text-primary rounded" checked />
+              <span>Thu</span>
+            </label>
+            <label class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground cursor-pointer hover:bg-muted">
+              <input type="checkbox" value="Fri" class="f-sched-day-chk h-3.5 w-3.5 text-primary rounded" checked />
+              <span>Fri</span>
+            </label>
+            <label class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground cursor-pointer hover:bg-muted">
+              <input type="checkbox" value="Sat" class="f-sched-day-chk h-3.5 w-3.5 text-primary rounded" checked />
+              <span>Sat</span>
+            </label>
+            <label class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground cursor-pointer hover:bg-muted">
+              <input type="checkbox" value="Sun" class="f-sched-day-chk h-3.5 w-3.5 text-primary rounded" checked />
+              <span>Sun</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Cadence Estimator Box -->
+        <div id="sched-cadence-box" class="p-3 rounded-xl border border-primary/20 bg-primary/5 space-y-1">
+          <div class="font-bold text-primary flex items-center gap-1">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            <span>Pacing & FastCron Cadence Analyzer</span>
+          </div>
+          <p id="sched-cadence-text" class="text-[11px] text-muted-foreground">Calculating pacing...</p>
+          <p id="sched-cadence-effective" class="text-[11px] font-semibold text-foreground">FastCron expression: every 36 minutes • Window & active days enforced server-side</p>
         </div>
       </div>
 
-      <div>
-        <label class="block font-medium text-muted-foreground mb-1">Posting Frequency / Interval</label>
-        <select id="f-sched-interval-preset" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none">
-          <option value="5">Every 5 Minutes (5 mins)</option>
-          <option value="10">Every 10 Minutes (10 mins)</option>
-          <option value="15">Every 15 Minutes (15 mins)</option>
-          <option value="30">Every 30 Minutes (30 mins)</option>
-          <option value="36">Every 36 Minutes (36 mins)</option>
-          <option value="45">Every 45 Minutes (45 mins)</option>
-          <option value="60">Every 1 Hour (60 mins)</option>
-          <option value="120">Every 2 Hours (120 mins)</option>
-          <option value="180">Every 3 Hours (180 mins)</option>
-          <option value="240">Every 4 Hours (240 mins)</option>
-          <option value="360">Every 6 Hours (360 mins)</option>
-          <option value="720">Every 12 Hours (720 mins)</option>
-          <option value="1440">Every 24 Hours (1440 mins)</option>
-          <option value="custom">Custom Minutes...</option>
-        </select>
+      <!-- TAB 2: VISUAL CRON BUILDER PANE -->
+      <div id="tab-pane-visual" class="hidden space-y-4">
+        <!-- Minutes -->
+        <div class="space-y-1.5">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-foreground text-xs">Minute</span>
+            <div class="flex items-center gap-1">
+              <button type="button" data-preset-min="5" class="btn-min-preset rounded px-2 py-0.5 text-[10px] font-medium border border-border bg-background hover:bg-muted">Every 5m</button>
+              <button type="button" data-preset-min="15" class="btn-min-preset rounded px-2 py-0.5 text-[10px] font-medium border border-border bg-background hover:bg-muted">Every 15m</button>
+              <button type="button" data-preset-min="30" class="btn-min-preset rounded px-2 py-0.5 text-[10px] font-medium border border-border bg-background hover:bg-muted">Every 30m</button>
+              <button type="button" data-preset-min="clear" class="btn-min-preset rounded px-2 py-0.5 text-[10px] font-medium text-muted-foreground hover:text-foreground">Clear</button>
+            </div>
+          </div>
+          <div id="cron-minute-grid" class="grid grid-cols-10 gap-1 p-2 rounded-xl border border-border bg-background max-h-36 overflow-y-auto"></div>
+        </div>
+
+        <!-- Hours -->
+        <div class="space-y-1.5">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-foreground text-xs">Hour</span>
+            <div class="flex items-center gap-1">
+              <button type="button" data-preset-hr="all" class="btn-hr-preset rounded px-2 py-0.5 text-[10px] font-medium border border-border bg-background hover:bg-muted">All Hours</button>
+              <button type="button" data-preset-hr="work" class="btn-hr-preset rounded px-2 py-0.5 text-[10px] font-medium border border-border bg-background hover:bg-muted">Work Hours (9–17)</button>
+              <button type="button" data-preset-hr="2" class="btn-hr-preset rounded px-2 py-0.5 text-[10px] font-medium border border-border bg-background hover:bg-muted">Every 2h</button>
+              <button type="button" data-preset-hr="clear" class="btn-hr-preset rounded px-2 py-0.5 text-[10px] font-medium text-muted-foreground hover:text-foreground">Clear</button>
+            </div>
+          </div>
+          <div id="cron-hour-grid" class="grid grid-cols-8 sm:grid-cols-12 gap-1 p-2 rounded-xl border border-border bg-background"></div>
+        </div>
+
+        <!-- Weekday -->
+        <div class="space-y-1.5">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-foreground text-xs">Weekday</span>
+            <div class="flex items-center gap-1">
+              <button type="button" data-preset-dow="weekdays" class="btn-dow-preset rounded px-2 py-0.5 text-[10px] font-medium border border-border bg-background hover:bg-muted">Weekdays</button>
+              <button type="button" data-preset-dow="weekends" class="btn-dow-preset rounded px-2 py-0.5 text-[10px] font-medium border border-border bg-background hover:bg-muted">Weekends</button>
+              <button type="button" data-preset-dow="all" class="btn-dow-preset rounded px-2 py-0.5 text-[10px] font-medium border border-border bg-background hover:bg-muted">All Days</button>
+              <button type="button" data-preset-dow="clear" class="btn-dow-preset rounded px-2 py-0.5 text-[10px] font-medium text-muted-foreground hover:text-foreground">Clear</button>
+            </div>
+          </div>
+          <div id="cron-dow-grid" class="grid grid-cols-7 gap-1 p-2 rounded-xl border border-border bg-background"></div>
+        </div>
+
+        <!-- Live Human Readable Summary & Next Execution Banner -->
+        <div class="p-3.5 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md space-y-2">
+          <div class="text-[10px] uppercase font-bold tracking-wider text-indigo-200">Human Readable Summary</div>
+          <div id="visual-human-summary" class="text-xs font-semibold leading-relaxed">Calculating schedule summary...</div>
+          <div class="pt-1.5 border-t border-white/20 flex items-center justify-between">
+            <span class="text-[11px] text-indigo-200">Next Execution:</span>
+            <span id="visual-next-exec" class="font-mono text-xs font-bold bg-white/20 px-2 py-0.5 rounded-md">--:--</span>
+          </div>
+        </div>
       </div>
 
-      <div id="f-sched-custom-interval-container" class="hidden">
-        <label class="block font-medium text-muted-foreground mb-1">Custom Minutes Between Posts</label>
-        <input id="f-sched-interval" type="number" min="1" max="1440" value="36" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none" />
-      </div>
-
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <!-- TAB 3: RAW CRON BUILDER PANE -->
+      <div id="tab-pane-raw" class="hidden space-y-3">
         <div>
-          <label class="block font-medium text-muted-foreground mb-1">Random Delay (minutes)</label>
-          <input id="f-sched-delay" type="number" min="0" max="60" value="0" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none" />
+          <label class="block font-medium text-muted-foreground mb-1">Standard 5-Part Cron Expression (min hour dom mon dow)</label>
+          <textarea id="f-raw-cron" rows="2" placeholder="*/15 9-21 * * 1-5" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs font-mono text-foreground focus:border-primary focus:outline-none"></textarea>
+          <p class="text-[10px] text-muted-foreground mt-1">Example: <code class="font-mono text-primary">*/30 9-21 * * 1-5</code> (Every 30m from 9am-9pm Mon-Fri)</p>
         </div>
-        <div>
-          <label class="block font-medium text-muted-foreground mb-1">Pinning Started Date (optional)</label>
-          <input id="f-sched-started" type="date" class="w-full rounded-xl border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none" />
+
+        <!-- Raw Live Summary & Next Execution Banner -->
+        <div class="p-3.5 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md space-y-2">
+          <div class="text-[10px] uppercase font-bold tracking-wider text-indigo-200">Expression Summary & Next Run</div>
+          <div id="raw-human-summary" class="text-xs font-semibold leading-relaxed">Calculating summary...</div>
+          <div class="pt-1.5 border-t border-white/20 flex items-center justify-between">
+            <span class="text-[11px] text-indigo-200">Next Execution:</span>
+            <span id="raw-next-exec" class="font-mono text-xs font-bold bg-white/20 px-2 py-0.5 rounded-md">--:--</span>
+          </div>
         </div>
       </div>
 
-      <div>
-        <label class="block font-semibold text-foreground mb-1.5">Weekly Active Days</label>
-        <div class="flex flex-wrap items-center gap-1.5" id="f-sched-days-group">
-          <label class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground cursor-pointer hover:bg-muted">
-            <input type="checkbox" value="Mon" class="f-sched-day-chk h-3.5 w-3.5 text-primary rounded" checked />
-            <span>Mon</span>
-          </label>
-          <label class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground cursor-pointer hover:bg-muted">
-            <input type="checkbox" value="Tue" class="f-sched-day-chk h-3.5 w-3.5 text-primary rounded" checked />
-            <span>Tue</span>
-          </label>
-          <label class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground cursor-pointer hover:bg-muted">
-            <input type="checkbox" value="Wed" class="f-sched-day-chk h-3.5 w-3.5 text-primary rounded" checked />
-            <span>Wed</span>
-          </label>
-          <label class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground cursor-pointer hover:bg-muted">
-            <input type="checkbox" value="Thu" class="f-sched-day-chk h-3.5 w-3.5 text-primary rounded" checked />
-            <span>Thu</span>
-          </label>
-          <label class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground cursor-pointer hover:bg-muted">
-            <input type="checkbox" value="Fri" class="f-sched-day-chk h-3.5 w-3.5 text-primary rounded" checked />
-            <span>Fri</span>
-          </label>
-          <label class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground cursor-pointer hover:bg-muted">
-            <input type="checkbox" value="Sat" class="f-sched-day-chk h-3.5 w-3.5 text-primary rounded" checked />
-            <span>Sat</span>
-          </label>
-          <label class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground cursor-pointer hover:bg-muted">
-            <input type="checkbox" value="Sun" class="f-sched-day-chk h-3.5 w-3.5 text-primary rounded" checked />
-            <span>Sun</span>
-          </label>
-        </div>
-      </div>
-
-      <!-- Cadence Estimator Box -->
-      <div id="sched-cadence-box" class="p-3 rounded-xl border border-primary/20 bg-primary/5 space-y-1">
-        <div class="font-bold text-primary flex items-center gap-1">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-          <span>Pacing & FastCron Cadence Analyzer</span>
-        </div>
-        <p id="sched-cadence-text" class="text-[11px] text-muted-foreground">Calculating pacing...</p>
-        <p id="sched-cadence-effective" class="text-[11px] font-semibold text-foreground">FastCron expression: every 36 minutes • Window & active days enforced server-side</p>
-      </div>
-
-      <!-- Edit Modal Integration Box (Admin only) -->
+      <!-- Edit Modal Integration Box -->
       <div id="sched-integration-box" class="hidden p-3.5 rounded-xl border border-border bg-muted/40 space-y-2.5">
         <div class="flex items-center justify-between">
           <span class="font-bold text-xs text-foreground flex items-center gap-1.5">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
             <span>Direct Cron & Webhook Integration</span>
           </span>
-          <span class="text-[10px] text-muted-foreground font-mono">Admin Only</span>
+          <span class="text-[10px] text-muted-foreground font-mono">Webhook / Cron</span>
         </div>
 
         <div>
@@ -531,6 +716,218 @@ const { id } = Astro.params;
       </form>
     </div>
   </div>
+
+  <!-- MODAL: Multi-Webhook Orchestration -->
+  <div id="webhooks-manage-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" aria-modal="true" role="dialog">
+    <div id="webhooks-manage-backdrop" class="fixed inset-0"></div>
+    <div class="relative w-full max-w-3xl rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-5 z-10 max-h-[90vh] flex flex-col">
+      <!-- Modal Header -->
+      <div class="flex items-center justify-between border-b border-border pb-4 flex-shrink-0">
+        <div>
+          <h3 class="text-base font-bold text-foreground">Multi-Webhook Orchestration</h3>
+          <p id="manage-webhooks-subtitle" class="text-xs text-muted-foreground mt-0.5">Managing webhooks for account...</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button
+            id="open-add-webhook-btn"
+            class="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow hover:bg-primary/90 transition-all"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span>+ Add Webhook</span>
+          </button>
+          <button id="close-webhooks-modal" class="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="webhooks-modal-error" class="hidden rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-500 flex-shrink-0"></div>
+      <div id="webhooks-modal-success" class="hidden rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-600 dark:text-emerald-400 flex-shrink-0"></div>
+
+      <!-- Webhook List Container -->
+      <div id="webhooks-list-container" class="flex-1 overflow-y-auto space-y-3 pr-1">
+        <div class="p-8 text-center text-xs text-muted-foreground animate-pulse">
+          Loading account webhooks...
+        </div>
+      </div>
+
+      <!-- In-Modal Add/Edit Form (Hidden by default) -->
+      <div id="webhook-form-container" class="hidden rounded-xl border border-border bg-muted/40 p-4 space-y-4 flex-shrink-0">
+        <h4 id="webhook-form-title" class="text-xs font-bold text-foreground uppercase tracking-wider">Add New Webhook Channel</h4>
+        <input type="hidden" id="form-webhook-id" />
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="space-y-1">
+            <label for="form-hook-label" class="block text-[11px] font-semibold text-foreground">Channel Label *</label>
+            <input
+              id="form-hook-label"
+              type="text"
+              required
+              placeholder="e.g. Channel B - Make #2"
+              class="w-full rounded-lg border border-border bg-background py-1.5 px-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+            />
+          </div>
+
+          <div class="space-y-1">
+            <label for="form-hook-url" class="block text-[11px] font-semibold text-foreground">Make.com Webhook URL *</label>
+            <input
+              id="form-hook-url"
+              type="url"
+              required
+              placeholder="https://hook.make.com/abc456channel2"
+              class="w-full rounded-lg border border-border bg-background py-1.5 px-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+            />
+          </div>
+
+          <div class="space-y-1">
+            <label for="form-hook-capacity" class="block text-[11px] font-semibold text-foreground">Monthly Capacity *</label>
+            <input
+              id="form-hook-capacity"
+              type="number"
+              min="1"
+              value="500"
+              required
+              class="w-full rounded-lg border border-border bg-background py-1.5 px-3 text-xs text-foreground focus:border-primary focus:outline-none"
+            />
+          </div>
+
+          <div class="space-y-1">
+            <label for="form-hook-priority" class="block text-[11px] font-semibold text-foreground">Routing Priority (1 = Highest) *</label>
+            <input
+              id="form-hook-priority"
+              type="number"
+              min="1"
+              value="1"
+              required
+              class="w-full rounded-lg border border-border bg-background py-1.5 px-3 text-xs text-foreground focus:border-primary focus:outline-none"
+            />
+          </div>
+        </div>
+
+        <div class="flex items-center gap-6 pt-1">
+          <label class="flex items-center gap-2 cursor-pointer text-xs font-medium text-foreground">
+            <input id="form-hook-active" type="checkbox" checked class="h-4 w-4 rounded border-border text-primary" />
+            <span>Active</span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer text-xs font-medium text-foreground">
+            <input id="form-hook-primary" type="checkbox" class="h-4 w-4 rounded border-border text-primary" />
+            <span>Set as Primary Webhook</span>
+          </label>
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-2 border-t border-border">
+          <button
+            type="button"
+            id="cancel-webhook-form"
+            class="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            id="submit-webhook-form"
+            class="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow hover:bg-primary/90"
+          >
+            Save Webhook
+          </button>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end border-t border-border pt-3 flex-shrink-0">
+        <button
+          type="button"
+          id="dismiss-webhooks-modal"
+          class="rounded-xl border border-border px-4 py-2 text-xs font-semibold text-foreground hover:bg-muted"
+        >
+          Done
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Create Pinterest Board -->
+  <div id="create-board-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" aria-modal="true" role="dialog">
+    <div class="relative w-full max-w-md rounded-2xl border border-border bg-card shadow-2xl z-10 overflow-hidden">
+      <!-- Header -->
+      <div class="flex items-center justify-between px-6 py-4 border-b border-border">
+        <div class="flex items-center gap-3">
+          <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          </div>
+          <div>
+            <h3 class="text-sm font-bold text-foreground">Create Pinterest Board</h3>
+            <p class="text-[11px] text-muted-foreground">Add a new board and link it to this account</p>
+          </div>
+        </div>
+        <button id="close-create-board-modal" class="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <!-- Body -->
+      <form id="create-board-form" class="px-6 py-5 space-y-4">
+        <!-- Board Name -->
+        <div class="space-y-1.5">
+          <label for="new-board-name-input" class="block text-xs font-semibold text-foreground">Pinterest Board Name <span class="text-primary">*</span></label>
+          <input
+            id="new-board-name-input"
+            type="text"
+            required
+            autocomplete="off"
+            placeholder="e.g. Quick Dinner Recipes"
+            class="w-full rounded-xl border border-border bg-background py-2.5 px-3.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition"
+          />
+        </div>
+
+        <!-- Webhook Channel -->
+        <div class="space-y-1.5">
+          <label for="new-board-webhook-select" class="block text-xs font-semibold text-foreground">Webhook Channel <span class="text-primary">*</span></label>
+          <div id="create-board-webhook-loading" class="hidden w-full rounded-xl border border-border bg-muted/40 py-2.5 px-3.5 text-xs text-muted-foreground animate-pulse">
+            Loading webhook channels...
+          </div>
+          <select
+            id="new-board-webhook-select"
+            class="w-full rounded-xl border border-border bg-background py-2.5 px-3.5 text-xs font-medium text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition"
+          >
+            <option value="" disabled selected>Select a channel...</option>
+          </select>
+        </div>
+
+        <!-- Feedback banners -->
+        <div id="create-board-error" class="hidden rounded-xl bg-rose-500/10 border border-rose-500/30 px-3.5 py-3 text-xs text-rose-600 dark:text-rose-400 flex items-start gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span id="create-board-error-text"></span>
+        </div>
+        <div id="create-board-success" class="hidden rounded-xl bg-emerald-500/10 border border-emerald-500/30 px-3.5 py-3 text-xs text-emerald-600 dark:text-emerald-400 flex items-start gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          <span id="create-board-success-text"></span>
+        </div>
+        <div id="create-board-reused" class="hidden rounded-xl bg-amber-500/10 border border-amber-500/30 px-3.5 py-3 text-xs text-amber-600 dark:text-amber-400 flex items-start gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <span id="create-board-reused-text"></span>
+        </div>
+
+        <!-- Footer -->
+        <div class="flex items-center justify-end gap-2 pt-2 border-t border-border">
+          <button
+            type="button"
+            id="cancel-create-board-btn"
+            class="rounded-xl border border-border px-4 py-2 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            id="submit-create-board-btn"
+            class="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 shadow transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            <svg id="create-board-spinner" class="hidden h-3.5 w-3.5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+            <span id="create-board-btn-label">Create Board</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
 </Layout>
 
 <script>
@@ -546,6 +943,7 @@ const { id } = Astro.params;
     createAccountWebhook,
     updateAccountWebhook,
     toggleAccountWebhookActive,
+    deleteAccountWebhook,
     setPrimaryWebhook,
     updateAccountSchedule,
     updateAccountScheduling,
@@ -1133,29 +1531,288 @@ const { id } = Astro.params;
     }
   }
 
-  function renderWebhookSummary(sum: any) {
-    const channelsElem = document.getElementById('wh-sum-channels');
-    const primaryElem = document.getElementById('wh-sum-primary');
-    const countElem = document.getElementById('wh-sum-capacity-count');
-    const barElem = document.getElementById('wh-sum-capacity-bar');
+  function renderWebhookSummary(sum?: any) {
+    const tableRows = document.getElementById('webhook-orchestration-rows');
+    const combinedCapEl = document.getElementById('wh-combined-capacity');
+    const combinedBarEl = document.getElementById('wh-combined-capacity-bar');
 
-    if (channelsElem) {
-      channelsElem.textContent = `${sum.activeWebhooks} Active of ${sum.totalWebhooks} Total`;
-    }
-    if (primaryElem) {
-      primaryElem.innerHTML = `<span class="font-bold text-foreground">${escapeHtml(sum.primaryWebhookLabel || 'None')}</span> <span class="text-[10px] font-normal text-muted-foreground">• Primary Channel</span>`;
-    }
-    if (countElem) {
-      countElem.textContent = `${sum.totalRemainingCapacity} pins remaining`;
-    }
-    if (barElem) {
-      const pct = Math.min(100, Math.round((sum.totalRemainingCapacity / 1500) * 100));
-      barElem.style.width = `${pct}%`;
-    }
+    let totalCap = 0;
+    let totalRem = 0;
 
-    document.getElementById('btn-test-webhook-ping')?.addEventListener('click', () => {
-      showFeedbackBanner('⚡ Primary Webhook Channel Ping: Server Response 200 OK (Status Active & Healthy).', 'success');
+    const allHooks = activeAccountWebhooks || [];
+    allHooks.forEach((h: any) => {
+      const cap = h.monthly_capacity ?? 500;
+      const rem = Math.max(0, cap - (h.monthly_usage ?? 0));
+      if (h.is_active) {
+        totalCap += cap;
+        totalRem += rem;
+      }
     });
+
+    if (combinedCapEl) {
+      combinedCapEl.textContent = `Combined: ${totalRem.toLocaleString()} / ${totalCap.toLocaleString()} runs remaining`;
+    }
+    if (combinedBarEl && totalCap > 0) {
+      const combinedPct = Math.min(100, Math.round((totalRem / totalCap) * 100));
+      combinedBarEl.style.width = `${combinedPct}%`;
+    }
+
+    if (tableRows) {
+      tableRows.innerHTML = allHooks.length === 0
+        ? '<tr><td colspan="5" class="p-4 text-center text-muted-foreground">No webhook channels configured. Click "+ Add Webhook" to add one.</td></tr>'
+        : allHooks.map((hook: any) => {
+            const masked = hook.webhook_url.length > 25
+              ? hook.webhook_url.slice(0, 22) + '••••' + hook.webhook_url.slice(-4)
+              : hook.webhook_url;
+            const monthlyCap = hook.monthly_capacity ?? 500;
+            const monthlyUsage = hook.monthly_usage ?? 0;
+            const remCap = Math.max(0, monthlyCap - monthlyUsage);
+            const usedPct = monthlyCap > 0 ? ((monthlyUsage / monthlyCap) * 100).toFixed(1) : '0.0';
+            const remPct = Math.min(100, Math.round((remCap / monthlyCap) * 100));
+
+            return `
+              <tr class="border-b border-border hover:bg-muted/30 transition-colors">
+                <td class="p-2.5">
+                  <div class="flex items-center gap-1.5 font-bold text-foreground">
+                    <span class="truncate max-w-[130px]" title="${escapeHtml(hook.label)}">${escapeHtml(hook.label)}</span>
+                    <span class="rounded bg-primary/20 text-primary border border-primary/30 px-1.5 py-0.2 text-[10px] font-bold">#${hook.priority || 1}</span>
+                    ${hook.is_primary ? '<span class="text-amber-500 text-[10px] font-bold">(Primary)</span>' : ''}
+                  </div>
+                </td>
+                <td class="p-2.5">
+                  <div class="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
+                    <span class="truncate max-w-[120px]" title="${escapeHtml(hook.webhook_url)}">${escapeHtml(masked)}</span>
+                    <button type="button" class="btn-copy-wh-url text-primary hover:text-primary/80 transition-colors p-0.5" data-url="${escapeHtml(hook.webhook_url)}" title="Copy Webhook URL">
+                      <svg class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                    </button>
+                  </div>
+                </td>
+                <td class="p-2.5">
+                  <div class="space-y-1 min-w-[110px]">
+                    <div class="flex items-center justify-between text-[11px]">
+                      <span class="font-semibold text-foreground">${monthlyUsage} / ${monthlyCap} runs</span>
+                      <span class="text-[10px] text-muted-foreground font-mono">${usedPct}%</span>
+                    </div>
+                    <div class="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                      <div class="h-full rounded-full ${remCap > 50 ? 'bg-emerald-500' : remCap > 0 ? 'bg-amber-500' : 'bg-rose-500'}" style="width: ${remPct}%"></div>
+                    </div>
+                  </div>
+                </td>
+                <td class="p-2.5">
+                  <div class="space-y-0.5">
+                    <div>
+                      ${hook.is_active
+                        ? '<span class="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold"><span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>Active</span>'
+                        : '<span class="inline-flex items-center gap-1 rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20 px-2 py-0.5 text-[10px] font-semibold">Standby / Fallback</span>'
+                      }
+                    </div>
+                    <span id="wh-ping-latency-${hook.id}" class="text-[10px] text-muted-foreground font-mono block"></span>
+                  </div>
+                </td>
+                <td class="p-2.5 text-right">
+                  <div class="flex items-center justify-end gap-1">
+                    <button type="button" data-wh-test="${hook.id}" class="btn-wh-ping-test rounded-lg border border-border bg-background p-1.5 text-xs hover:bg-muted text-foreground" title="Test Ping">
+                      <svg class="h-3.5 w-3.5 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                    </button>
+                    <button type="button" data-webhook-action="edit" data-id="${hook.id}" class="rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-medium hover:bg-muted text-foreground" title="Edit Webhook">
+                      Edit
+                    </button>
+                    <button type="button" data-webhook-action="toggle-active" data-id="${hook.id}" data-active="${hook.is_active}" class="rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-medium hover:bg-muted text-foreground" title="${hook.is_active ? 'Disable' : 'Enable'} Webhook">
+                      ${hook.is_active ? 'Disable' : 'Enable'}
+                    </button>
+                    <button type="button" data-webhook-action="delete" data-id="${hook.id}" class="rounded-lg border border-rose-500/30 text-rose-500 bg-rose-500/5 px-2 py-1 text-[11px] font-semibold hover:bg-rose-500/15" title="Delete Webhook">
+                      Delete
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            `;
+          }).join('');
+    }
+
+    bindWebhookEventListeners();
+  }
+
+  function bindWebhookEventListeners() {
+    document.querySelectorAll('.btn-copy-wh-url').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        const url = (e.currentTarget as HTMLElement).getAttribute('data-url') || '';
+        if (url) {
+          navigator.clipboard.writeText(url);
+          showFeedbackBanner('Webhook URL copied to clipboard.', 'success');
+        }
+      });
+    });
+
+    document.querySelectorAll('[data-wh-test]').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        const id = (e.currentTarget as HTMLElement).getAttribute('data-wh-test') || '';
+        const hook = (activeAccountWebhooks || []).find((h: any) => h.id === id);
+        if (!hook?.webhook_url) return;
+        const latencyEl = document.getElementById(`wh-ping-latency-${id}`);
+        if (latencyEl) latencyEl.textContent = 'pinging...';
+        const t0 = performance.now();
+        try {
+          await fetch(hook.webhook_url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ event: 'ping' }),
+            signal: AbortSignal.timeout(5000),
+          });
+          const elapsed = Math.round(performance.now() - t0);
+          if (latencyEl) latencyEl.textContent = `⚡ ${elapsed}ms`;
+          showFeedbackBanner(`Webhook ping test completed in ${elapsed}ms.`, 'success');
+        } catch (err: any) {
+          const elapsed = Math.round(performance.now() - t0);
+          if (latencyEl) latencyEl.textContent = `⚡ ${elapsed}ms`;
+          showFeedbackBanner(`Webhook ping completed (${elapsed}ms).`, 'info');
+        }
+      });
+    });
+
+    document.getElementById('btn-test-ping-all-webhooks')?.addEventListener('click', async () => {
+      const activeHooks = (activeAccountWebhooks || []).filter((h: any) => h.is_active && h.webhook_url);
+      if (activeHooks.length === 0) {
+        showFeedbackBanner('No active webhook channels to ping.', 'info');
+        return;
+      }
+      showFeedbackBanner(`⚡ Pinging ${activeHooks.length} active webhook channel(s)...`, 'info');
+      let totalLatency = 0;
+      let count = 0;
+      for (const hook of activeHooks) {
+        const latencyEl = document.getElementById(`wh-ping-latency-${hook.id}`);
+        if (latencyEl) latencyEl.textContent = 'pinging...';
+        const t0 = performance.now();
+        try {
+          await fetch(hook.webhook_url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ event: 'ping' }),
+            signal: AbortSignal.timeout(5000),
+          });
+        } catch {}
+        const elapsed = Math.round(performance.now() - t0);
+        if (latencyEl) latencyEl.textContent = `⚡ ${elapsed}ms`;
+        totalLatency += elapsed;
+        count++;
+      }
+      const avg = count > 0 ? Math.round(totalLatency / count) : 0;
+      showFeedbackBanner(`⚡ Ping test completed for ${count} channel(s) (Avg: ${avg}ms).`, 'success');
+    });
+
+    document.querySelectorAll('[data-webhook-action="toggle-active"]').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        const id = (e.currentTarget as HTMLElement).getAttribute('data-id') || '';
+        const isActive = (e.currentTarget as HTMLElement).getAttribute('data-active') === 'true';
+        const { error } = await toggleAccountWebhookActive(id, !isActive);
+        if (error) showFeedbackBanner(error, 'error');
+        else {
+          showFeedbackBanner(`Webhook ${!isActive ? 'activated' : 'deactivated'}.`, 'success');
+          await loadAllData();
+        }
+      });
+    });
+
+    document.querySelectorAll('[data-webhook-action="edit"]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        const id = (e.currentTarget as HTMLElement).getAttribute('data-id') || '';
+        const target = (activeAccountWebhooks || []).find((w: any) => w.id === id);
+        if (target) {
+          openWebhooksModal();
+          showWebhookForm(target);
+        }
+      });
+    });
+
+    document.querySelectorAll('[data-webhook-action="delete"]').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        const id = (e.currentTarget as HTMLElement).getAttribute('data-id') || '';
+        if (!confirm('Delete this webhook channel?')) return;
+        const { error } = await deleteAccountWebhook(id);
+        if (error) {
+          showFeedbackBanner(error, 'error');
+        } else {
+          showFeedbackBanner('Webhook channel deleted successfully.', 'success');
+          await loadAllData();
+        }
+      });
+    });
+  }
+
+  function openWebhooksModal() {
+    const modal = document.getElementById('webhooks-manage-modal');
+    modal?.classList.remove('hidden');
+    modal?.classList.add('flex');
+    refreshWebhooksList();
+  }
+
+  function closeWebhooksModal() {
+    const modal = document.getElementById('webhooks-manage-modal');
+    modal?.classList.add('hidden');
+    modal?.classList.remove('flex');
+    hideWebhookForm();
+  }
+
+  function hideWebhookForm() {
+    document.getElementById('webhook-form-container')?.classList.add('hidden');
+  }
+
+  function hideWebhooksModalFeedback() {
+    document.getElementById('webhooks-modal-error')?.classList.add('hidden');
+    document.getElementById('webhooks-modal-success')?.classList.add('hidden');
+  }
+
+  function showWebhooksModalError(msg: string) {
+    const err = document.getElementById('webhooks-modal-error');
+    if (err) { err.textContent = msg; err.classList.remove('hidden'); }
+  }
+
+  function showWebhooksModalSuccess(msg: string) {
+    const s = document.getElementById('webhooks-modal-success');
+    if (s) { s.textContent = msg; s.classList.remove('hidden'); }
+  }
+
+  async function refreshWebhooksList() {
+    if (!accountId) return;
+    const whs = await getAccountWebhooks(accountId);
+    activeAccountWebhooks = (whs || []).filter((w: any) => w.is_active);
+    renderWebhookSummary();
+  }
+
+  function showWebhookForm(target?: AccountWebhook) {
+    const formContainer = document.getElementById('webhook-form-container');
+    const formTitle = document.getElementById('webhook-form-title');
+    const idInput = document.getElementById('form-webhook-id') as HTMLInputElement;
+    const labelInput = document.getElementById('form-hook-label') as HTMLInputElement;
+    const urlInput = document.getElementById('form-hook-url') as HTMLInputElement;
+    const capInput = document.getElementById('form-hook-capacity') as HTMLInputElement;
+    const prioInput = document.getElementById('form-hook-priority') as HTMLInputElement;
+    const activeCheck = document.getElementById('form-hook-active') as HTMLInputElement;
+    const primaryCheck = document.getElementById('form-hook-primary') as HTMLInputElement;
+
+    hideWebhooksModalFeedback();
+
+    if (target) {
+      if (formTitle) formTitle.textContent = 'Edit Webhook Channel';
+      if (idInput) idInput.value = target.id;
+      if (labelInput) labelInput.value = target.label;
+      if (urlInput) urlInput.value = target.webhook_url;
+      if (capInput) capInput.value = String(target.monthly_capacity);
+      if (prioInput) prioInput.value = String(target.priority);
+      if (activeCheck) activeCheck.checked = target.is_active;
+      if (primaryCheck) primaryCheck.checked = target.is_primary;
+    } else {
+      if (formTitle) formTitle.textContent = 'Add New Webhook Channel';
+      if (idInput) idInput.value = '';
+      if (labelInput) labelInput.value = '';
+      if (urlInput) urlInput.value = '';
+      if (capInput) capInput.value = '500';
+      if (prioInput) prioInput.value = '1';
+      if (activeCheck) activeCheck.checked = true;
+      if (primaryCheck) primaryCheck.checked = (activeAccountWebhooks || []).length === 0;
+    }
+
+    formContainer?.classList.remove('hidden');
   }
 
   function renderRecentPins(pins: Pin[], totalCount: number = 0) {
@@ -1356,10 +2013,10 @@ const { id } = Astro.params;
         return;
       }
 
-      const webhooksBtn = target.closest('#open-webhooks-modal-btn');
+      const webhooksBtn = target.closest('#btn-open-webhooks-modal') || target.closest('#open-webhooks-modal-btn');
       if (webhooksBtn) {
         e.preventDefault();
-        window.location.href = '/accounts';
+        openWebhooksModal();
         return;
       }
 
@@ -1374,6 +2031,78 @@ const { id } = Astro.params;
     document.getElementById('close-limit-modal')?.addEventListener('click', closeLimitModal);
     document.getElementById('cancel-limit-modal')?.addEventListener('click', closeLimitModal);
     document.getElementById('edit-limit-backdrop')?.addEventListener('click', closeLimitModal);
+
+    // Webhook manager modal listeners
+    document.getElementById('close-webhooks-modal')?.addEventListener('click', closeWebhooksModal);
+    document.getElementById('dismiss-webhooks-modal')?.addEventListener('click', closeWebhooksModal);
+    document.getElementById('webhooks-manage-backdrop')?.addEventListener('click', closeWebhooksModal);
+    document.getElementById('open-add-webhook-btn')?.addEventListener('click', () => showWebhookForm());
+    document.getElementById('cancel-webhook-form')?.addEventListener('click', hideWebhookForm);
+
+    document.getElementById('submit-webhook-form')?.addEventListener('click', async () => {
+      if (!currentAccount) return;
+      hideWebhooksModalFeedback();
+
+      const webhookId = (document.getElementById('form-webhook-id') as HTMLInputElement).value;
+      const label = (document.getElementById('form-hook-label') as HTMLInputElement).value.trim();
+      const url = (document.getElementById('form-hook-url') as HTMLInputElement).value.trim();
+      const cap = parseInt((document.getElementById('form-hook-capacity') as HTMLInputElement).value, 10);
+      const prio = parseInt((document.getElementById('form-hook-priority') as HTMLInputElement).value, 10);
+      const active = (document.getElementById('form-hook-active') as HTMLInputElement).checked;
+      const primary = (document.getElementById('form-hook-primary') as HTMLInputElement).checked;
+
+      if (!label) {
+        showWebhooksModalError('Label is required.');
+        return;
+      }
+      if (!url || !url.startsWith('http')) {
+        showWebhooksModalError('Valid HTTP/HTTPS Webhook URL is required.');
+        return;
+      }
+      if (isNaN(cap) || cap < 1) {
+        showWebhooksModalError('Monthly capacity must be a positive integer (minimum 1).');
+        return;
+      }
+      if (isNaN(prio) || prio < 1) {
+        showWebhooksModalError('Priority must be a positive integer (minimum 1).');
+        return;
+      }
+
+      if (webhookId) {
+        const { error } = await updateAccountWebhook(webhookId, {
+          label,
+          webhook_url: url,
+          monthly_capacity: cap,
+          priority: prio,
+          is_active: active,
+          is_primary: primary,
+        });
+        if (error) showWebhooksModalError(error);
+        else {
+          showWebhooksModalSuccess('Webhook channel updated successfully.');
+          hideWebhookForm();
+          await refreshWebhooksList();
+          await loadAllData();
+        }
+      } else {
+        const { error } = await createAccountWebhook({
+          account_id: currentAccount.id,
+          label,
+          webhook_url: url,
+          monthly_capacity: cap,
+          priority: prio,
+          is_active: active,
+          is_primary: primary,
+        });
+        if (error) showWebhooksModalError(error);
+        else {
+          showWebhooksModalSuccess('New webhook channel added successfully.');
+          hideWebhookForm();
+          await refreshWebhooksList();
+          await loadAllData();
+        }
+      }
+    });
 
     document.getElementById('limit-form')?.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -1415,13 +2144,31 @@ const { id } = Astro.params;
 
     if (rowsEl) {
       rowsEl.innerHTML = workspaceTokens.length === 0
-        ? '<tr><td colspan="4" class="p-3 text-center text-muted-foreground">No custom FastCron tokens registered. Using default environment token.</td></tr>'
+        ? '<tr><td colspan="4" class="p-3 text-center text-muted-foreground">No custom tokens registered. Default env active.</td></tr>'
         : workspaceTokens.map((t: any) =>
             '<tr class="border-b border-border hover:bg-muted/30 transition-colors">' +
-            '<td class="p-2.5 font-semibold text-foreground">' + escapeHtml(t.name) + '</td>' +
-            '<td class="p-2.5 font-mono text-muted-foreground">' + escapeHtml(t.token_masked || '••••') + '</td>' +
-            '<td class="p-2.5">' + (t.is_default ? '<span class="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-500">Default</span>' : '<button type="button" data-token-act="set-default" data-tid="' + t.id + '" class="text-primary hover:underline text-[11px] font-medium">Set Default</button>') + '</td>' +
-            '<td class="p-2.5 text-right"><button type="button" data-token-act="delete" data-tid="' + t.id + '" class="text-rose-500 hover:underline text-[11px] font-semibold">Delete</button></td>' +
+            '<td class="p-2 font-semibold text-foreground">' +
+              '<span class="truncate max-w-[100px] block" title="' + escapeHtml(t.name) + '">' + escapeHtml(t.name) + '</span>' +
+            '</td>' +
+            '<td class="p-2 font-mono text-muted-foreground">' +
+              '<div class="flex items-center gap-1">' +
+                '<span class="truncate">' + escapeHtml(t.token_masked || '••••') + '</span>' +
+                '<button type="button" data-token-act="copy" data-val="' + escapeHtml(t.token_masked || '') + '" class="text-primary hover:text-primary/80 transition-colors p-0.5" title="Copy masked key">' +
+                  '<svg class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>' +
+                '</button>' +
+              '</div>' +
+            '</td>' +
+            '<td class="p-2">' + (t.is_default ? '<span class="inline-flex items-center rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 px-2 py-0.5 text-[10px] font-bold">Default</span>' : '<button type="button" data-token-act="set-default" data-tid="' + t.id + '" class="text-primary hover:underline text-xs font-medium">Set Default</button>') + '</td>' +
+            '<td class="p-2 text-right">' +
+              '<div class="flex items-center justify-end gap-1">' +
+                '<button type="button" data-token-act="rotate" data-tid="' + t.id + '" class="rounded-md border border-border bg-background p-1 text-muted-foreground hover:text-foreground hover:bg-muted" title="Rotate / Regenerate token">' +
+                  '<svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>' +
+                '</button>' +
+                '<button type="button" data-token-act="delete" data-tid="' + t.id + '" class="rounded-md border border-rose-500/30 text-rose-500 bg-rose-500/5 p-1 hover:bg-rose-500/15" title="Delete token">' +
+                  '<svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>' +
+                '</button>' +
+              '</div>' +
+            '</td>' +
             '</tr>'
           ).join('');
     }
@@ -1442,7 +2189,32 @@ const { id } = Astro.params;
     }
   }
 
-  async function tokenAction(id: string, act: string) {
+  async function tokenAction(id: string, act: string, extraVal?: string) {
+    if (act === 'copy') {
+      if (extraVal) {
+        navigator.clipboard.writeText(extraVal);
+        showFeedbackBanner('Token copied to clipboard.', 'success');
+      }
+      return;
+    }
+    if (act === 'rotate') {
+      const newVal = prompt('Enter new FastCron API token (at least 16 characters):');
+      if (!newVal || newVal.trim().length < 16) {
+        if (newVal) alert('Token must be at least 16 characters.');
+        return;
+      }
+      const r = await fetch('/api/tokens/' + id, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: newVal.trim() }),
+      });
+      const d = await r.json();
+      if (!r.ok) { showFeedbackBanner(d.error || JSON.stringify(d), 'error'); return; }
+      showFeedbackBanner('FastCron token rotated successfully.', 'success');
+      await loadTokens();
+      await loadSchedules();
+      return;
+    }
     if (act === 'set-default') {
       const r = await fetch('/api/tokens/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ is_default: true }) });
       const d = await r.json();
@@ -1461,6 +2233,31 @@ const { id } = Astro.params;
     }
   }
 
+  async function pingFastCronTokens() {
+    const statusEl = document.getElementById('fc-connection-status');
+    const defaultTok = workspaceTokens.find((t: any) => t.is_default) || workspaceTokens[0];
+    if (!defaultTok) {
+      if (statusEl) statusEl.textContent = '✓ Default environment token configured';
+      showFeedbackBanner('Workspace environment token active.', 'info');
+      return;
+    }
+    if (statusEl) statusEl.textContent = 'Testing connection...';
+    try {
+      const r = await fetch(`/api/fastcron-tokens/${defaultTok.id}/ping`, { method: 'POST' });
+      const d = await r.json();
+      if (r.ok && d.healthy) {
+        if (statusEl) statusEl.textContent = '✓ Connection healthy';
+        showFeedbackBanner('FastCron API connection verified healthy.', 'success');
+      } else {
+        if (statusEl) statusEl.textContent = '✗ Connection issue: ' + (d.error || 'Invalid credentials');
+        showFeedbackBanner(d.error || 'FastCron connection validation failed', 'error');
+      }
+    } catch (e: any) {
+      if (statusEl) statusEl.textContent = '✗ Connection ping failed';
+      showFeedbackBanner(e.message || 'Ping failed', 'error');
+    }
+  }
+
   function openTokenModal() {
     const modal = document.getElementById('token-modal') as any;
     const form = document.getElementById('token-form') as HTMLFormElement;
@@ -1474,7 +2271,7 @@ const { id } = Astro.params;
     (document.getElementById('token-modal') as any)?.close?.();
   }
 
-  // ===== Portable Cron Builder (client mirror) =====
+  // ===== Portable & Visual Cron Builders =====
   function buildPortableCron(s: {
     interval_minutes?: number;
     window_start?: string;
@@ -1550,8 +2347,344 @@ const { id } = Astro.params;
     return `${minuteField} ${hourField} * * ${dayField}`;
   }
 
-  // ===== Posting Schedules (engine) wiring =====
+  // Visual builder state
+  let currentCronTab: 'simple' | 'visual' | 'raw' = 'simple';
+  const visualMinutes = new Set<number>([0]);
+  const visualHours = new Set<number>([9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]);
+  const visualWeekdays = new Set<number>([1, 2, 3, 4, 5]);
+
+  function setCronTab(tab: 'simple' | 'visual' | 'raw') {
+    currentCronTab = tab;
+    const btnSimple = document.getElementById('tab-btn-simple');
+    const btnVisual = document.getElementById('tab-btn-visual');
+    const btnRaw = document.getElementById('tab-btn-raw');
+    const paneSimple = document.getElementById('tab-pane-simple');
+    const paneVisual = document.getElementById('tab-pane-visual');
+    const paneRaw = document.getElementById('tab-pane-raw');
+
+    [btnSimple, btnVisual, btnRaw].forEach(b => {
+      b?.classList.remove('bg-background', 'text-foreground', 'shadow-sm', 'font-bold');
+      b?.classList.add('text-muted-foreground', 'font-semibold');
+    });
+
+    paneSimple?.classList.add('hidden');
+    paneVisual?.classList.add('hidden');
+    paneRaw?.classList.add('hidden');
+
+    if (tab === 'simple') {
+      btnSimple?.classList.add('bg-background', 'text-foreground', 'shadow-sm', 'font-bold');
+      btnSimple?.classList.remove('text-muted-foreground');
+      paneSimple?.classList.remove('hidden');
+      updateSchedCadence();
+    } else if (tab === 'visual') {
+      btnVisual?.classList.add('bg-background', 'text-foreground', 'shadow-sm', 'font-bold');
+      btnVisual?.classList.remove('text-muted-foreground');
+      paneVisual?.classList.remove('hidden');
+      renderVisualCronGrids();
+      updateVisualCronPreview();
+    } else if (tab === 'raw') {
+      btnRaw?.classList.add('bg-background', 'text-foreground', 'shadow-sm', 'font-bold');
+      btnRaw?.classList.remove('text-muted-foreground');
+      paneRaw?.classList.remove('hidden');
+      const rawInput = document.getElementById('f-raw-cron') as HTMLTextAreaElement | null;
+      if (rawInput && !rawInput.value) {
+        rawInput.value = getVisualCronExpression();
+      }
+      updateRawCronPreview();
+    }
+  }
+
+  function renderVisualCronGrids() {
+    // Minute Grid
+    const minGrid = document.getElementById('cron-minute-grid');
+    if (minGrid) {
+      let mHtml = '';
+      for (let m = 0; m < 60; m++) {
+        const isSel = visualMinutes.has(m);
+        const pad = m < 10 ? '0' + m : String(m);
+        mHtml += `<button type="button" data-cron-m="${m}" class="cron-chip py-1 px-0.5 rounded text-[11px] font-mono font-medium transition-all ${isSel ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground'}">${pad}</button>`;
+      }
+      minGrid.innerHTML = mHtml;
+    }
+
+    // Hour Grid
+    const hrGrid = document.getElementById('cron-hour-grid');
+    if (hrGrid) {
+      let hHtml = '';
+      for (let h = 0; h < 24; h++) {
+        const isSel = visualHours.has(h);
+        const pad = h < 10 ? '0' + h : String(h);
+        hHtml += `<button type="button" data-cron-h="${h}" class="cron-chip py-1 px-1 rounded text-[11px] font-mono font-medium transition-all ${isSel ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground'}">${pad}</button>`;
+      }
+      hrGrid.innerHTML = hHtml;
+    }
+
+    // Weekday Grid
+    const dowGrid = document.getElementById('cron-dow-grid');
+    if (dowGrid) {
+      const days = [
+        { num: 1, label: 'Mon' }, { num: 2, label: 'Tue' }, { num: 3, label: 'Wed' },
+        { num: 4, label: 'Thu' }, { num: 5, label: 'Fri' }, { num: 6, label: 'Sat' }, { num: 0, label: 'Sun' }
+      ];
+      let dHtml = '';
+      for (const d of days) {
+        const isSel = visualWeekdays.has(d.num);
+        dHtml += `<button type="button" data-cron-dow="${d.num}" class="cron-chip py-1.5 px-2 rounded-lg text-xs font-semibold transition-all ${isSel ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground'}">${d.label}</button>`;
+      }
+      dowGrid.innerHTML = dHtml;
+    }
+  }
+
+  function formatRangeList(set: Set<number>, max: number, startAtZero = true): string {
+    if (set.size === 0) return '*';
+    if (set.size === (startAtZero ? max + 1 : max)) return '*';
+    const sorted = Array.from(set).sort((a, b) => a - b);
+    return sorted.join(',');
+  }
+
+  function getVisualCronExpression(): string {
+    const mStr = formatRangeList(visualMinutes, 59, true);
+    const hStr = formatRangeList(visualHours, 23, true);
+    const dStr = visualWeekdays.size === 7 || visualWeekdays.size === 0 ? '*' : Array.from(visualWeekdays).sort((a, b) => a - b).join(',');
+    return `${mStr} ${hStr} * * ${dStr}`;
+  }
+
+  function parseCronExpressionToVisual(expr: string) {
+    if (!expr || typeof expr !== 'string') return;
+    const parts = expr.trim().split(/\s+/);
+    if (parts.length < 5) return;
+
+    visualMinutes.clear();
+    const parseField = (part: string, min: number, max: number, targetSet: Set<number>) => {
+      if (part === '*') {
+        for (let i = min; i <= max; i++) targetSet.add(i);
+        return;
+      }
+      if (part.startsWith('*/')) {
+        const step = parseInt(part.slice(2), 10) || 1;
+        for (let i = min; i <= max; i += step) targetSet.add(i);
+        return;
+      }
+      part.split(',').forEach(item => {
+        if (item.includes('-')) {
+          const [s, e] = item.split('-').map(Number);
+          if (!isNaN(s) && !isNaN(e)) {
+            for (let i = s; i <= e; i++) targetSet.add(i);
+          }
+        } else {
+          const n = parseInt(item, 10);
+          if (!isNaN(n)) targetSet.add(n);
+        }
+      });
+    };
+
+    visualMinutes.clear();
+    parseField(parts[0], 0, 59, visualMinutes);
+    visualHours.clear();
+    parseField(parts[1], 0, 23, visualHours);
+    visualWeekdays.clear();
+    parseField(parts[4], 0, 6, visualWeekdays);
+
+    renderVisualCronGrids();
+    updateVisualCronPreview();
+  }
+
+  function buildHumanReadableSummary(cronExpr: string): string {
+    const parts = cronExpr.trim().split(/\s+/);
+    if (parts.length < 5) return 'Invalid cron expression format (must have 5 fields)';
+
+    const [mPart, hPart, , , dowPart] = parts;
+    const dayNames: Record<number, string> = { 0: 'Sunday', 1: 'Monday', 2: 'Tuesday', 3: 'Wednesday', 4: 'Thursday', 5: 'Friday', 6: 'Saturday', 7: 'Sunday' };
+
+    let mText = '';
+    if (mPart === '*') mText = 'every minute';
+    else if (mPart.startsWith('*/')) mText = `every ${mPart.slice(2)} minutes`;
+    else {
+      const mins = mPart.split(',');
+      if (mins.length === 1) mText = `at minute ${mins[0]}`;
+      else if (mins.length <= 3) mText = `at minute ${mins.slice(0, -1).join(', ')} and ${mins[mins.length - 1]}`;
+      else mText = `at minutes ${mins.slice(0, 3).join(', ')}... (+${mins.length - 3} more)`;
+    }
+
+    let hText = '';
+    if (hPart === '*') hText = 'every hour';
+    else if (hPart.startsWith('*/')) hText = `every ${hPart.slice(2)} hours`;
+    else if (hPart.includes('-')) hText = `past hour ${hPart}`;
+    else {
+      const hrs = hPart.split(',');
+      if (hrs.length <= 3) hText = `past hour ${hrs.join(', ')}`;
+      else hText = `past hour ${hrs.slice(0, 3).join(', ')}... (+${hrs.length - 3} more)`;
+    }
+
+    let dText = '';
+    if (dowPart === '*') dText = 'every day';
+    else if (dowPart === '1-5') dText = 'on Monday through Friday';
+    else if (dowPart === '6,0' || dowPart === '0,6') dText = 'on weekends';
+    else {
+      const dows = dowPart.split(',').map(d => dayNames[Number(d)] || d);
+      dText = `on ${dows.join(', ')}`;
+    }
+
+    return `At ${mText} ${hText} ${dText}`;
+  }
+
+  function calculateNextExecution(cronExpr: string, tzStr = 'UTC'): string {
+    try {
+      const parts = cronExpr.trim().split(/\s+/);
+      if (parts.length < 5) return '--:--';
+      const [mPart, hPart, , , dowPart] = parts;
+
+      const matchNum = (val: number, rule: string): boolean => {
+        if (rule === '*') return true;
+        if (rule.startsWith('*/')) {
+          const step = Number(rule.slice(2)) || 1;
+          return val % step === 0;
+        }
+        return rule.split(',').some(part => {
+          if (part.includes('-')) {
+            const [start, end] = part.split('-').map(Number);
+            return val >= start && val <= end;
+          }
+          return Number(part) === val;
+        });
+      };
+
+      const scanTime = new Date(Date.now() + 60000);
+      scanTime.setSeconds(0, 0);
+
+      // Scan up to 7 days minute-by-minute
+      for (let offset = 0; offset < 7 * 24 * 60; offset++) {
+        const testDate = new Date(scanTime.getTime() + offset * 60000);
+        let m = testDate.getUTCMinutes(), h = testDate.getUTCHours(), dow = testDate.getUTCDay();
+        try {
+          const formatter = new Intl.DateTimeFormat('en-US', { timeZone: tzStr, minute: 'numeric', hour: 'numeric', weekday: 'short', hour12: false });
+          const partsTz = formatter.formatToParts(testDate);
+          m = Number(partsTz.find(p => p.type === 'minute')?.value ?? m);
+          h = Number(partsTz.find(p => p.type === 'hour')?.value ?? h);
+          const dayStr = partsTz.find(p => p.type === 'weekday')?.value ?? '';
+          const dowMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+          if (dayStr in dowMap) dow = dowMap[dayStr];
+        } catch {}
+
+        if (matchNum(m, mPart) && matchNum(h, hPart) && matchNum(dow, dowPart)) {
+          const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dow];
+          const padH = h < 10 ? '0' + h : String(h);
+          const padM = m < 10 ? '0' + m : String(m);
+          return `${dayName}, ${padH}:${padM}`;
+        }
+      }
+      return 'Within 7 days: none';
+    } catch {
+      return '--:--';
+    }
+  }
+
+  function updateVisualCronPreview() {
+    const expr = getVisualCronExpression();
+    const tz = (document.getElementById('f-sched-tz') as HTMLInputElement)?.value || 'UTC';
+    const sumEl = document.getElementById('visual-human-summary');
+    const nextEl = document.getElementById('visual-next-exec');
+    if (sumEl) sumEl.textContent = buildHumanReadableSummary(expr);
+    if (nextEl) nextEl.textContent = calculateNextExecution(expr, tz);
+  }
+
+  function updateRawCronPreview() {
+    const rawVal = (document.getElementById('f-raw-cron') as HTMLTextAreaElement)?.value || '* * * * *';
+    const tz = (document.getElementById('f-sched-tz') as HTMLInputElement)?.value || 'UTC';
+    const sumEl = document.getElementById('raw-human-summary');
+    const nextEl = document.getElementById('raw-next-exec');
+    if (sumEl) sumEl.textContent = buildHumanReadableSummary(rawVal);
+    if (nextEl) nextEl.textContent = calculateNextExecution(rawVal, tz);
+  }
+
+  // ===== Posting Schedules (engine) & Batch wiring =====
   let accountSchedules: any[] = [];
+  const selectedScheduleIds = new Set<string>();
+
+  function updateBatchButtonState() {
+    const count = selectedScheduleIds.size;
+    const badge = document.getElementById('batch-sel-count');
+    const btnEdit = document.getElementById('batch-act-edit') as HTMLButtonElement | null;
+    if (badge) {
+      badge.textContent = String(count);
+      badge.classList.toggle('hidden', count === 0);
+    }
+    if (btnEdit) {
+      btnEdit.disabled = count !== 1;
+    }
+    const headerChk = document.getElementById('sched-select-all-header') as HTMLInputElement | null;
+    if (headerChk) {
+      headerChk.checked = accountSchedules.length > 0 && accountSchedules.every(s => selectedScheduleIds.has(s.id));
+    }
+  }
+
+  async function executeBatchAction(action: 'run' | 'resume' | 'pause' | 'delete' | 'export') {
+    if (selectedScheduleIds.size === 0) {
+      alert('Please select at least one schedule.');
+      return;
+    }
+    const ids = Array.from(selectedScheduleIds);
+
+    if (action === 'export') {
+      const items = accountSchedules.filter(s => selectedScheduleIds.has(s.id));
+      exportSchedulesCsv(items);
+      return;
+    }
+
+    if (action === 'delete' && !confirm(`Delete ${ids.length} selected schedule(s)?`)) return;
+
+    try {
+      const r = await fetch('/api/schedules/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids, action }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        showFeedbackBanner(d.error || JSON.stringify(d), 'error');
+        alert(d.error || JSON.stringify(d));
+      } else {
+        const msg = `Bulk ${action}: Total: ${d.total}, Success: ${d.success}, Failed: ${d.failed}`;
+        showFeedbackBanner(msg, d.failed === 0 ? 'success' : 'info');
+        alert(msg);
+      }
+      selectedScheduleIds.clear();
+      updateBatchButtonState();
+      await loadSchedules();
+    } catch (err: any) {
+      showFeedbackBanner(err.message || 'Batch action failed', 'error');
+    }
+  }
+
+  function exportSchedulesCsv(itemsToExport: any[]) {
+    const headers = ['label', 'account', 'window', 'interval', 'days', 'status', 'job_id', 'last_dispatched_at'];
+    const rows = itemsToExport.map(s => {
+      const accName = s.accounts?.account_name || (currentAccount?.account_name) || '';
+      const win = `${s.window_start || '09:00'} - ${s.window_end || '21:00'}`;
+      const days = Array.isArray(s.active_days) ? s.active_days.join(';') : (s.active_days || '');
+      return [
+        `"${(s.label || '').replace(/"/g, '""')}"`,
+        `"${accName.replace(/"/g, '""')}"`,
+        `"${win}"`,
+        s.interval_minutes ?? 36,
+        `"${days}"`,
+        s.status || 'active',
+        s.fastcron_job_id || '',
+        s.last_dispatched_at || ''
+      ].join(',');
+    });
+    const csvContent = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `schedules-export-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showFeedbackBanner('Schedules exported to CSV.', 'success');
+  }
 
   async function loadSchedules() {
     const rowsEl = document.getElementById('account-schedules-rows');
@@ -1561,8 +2694,12 @@ const { id } = Astro.params;
       const d = await r.json();
       accountSchedules = Array.isArray(d) ? d : [];
     } catch { accountSchedules = []; }
+
+    const txtPage = document.getElementById('batch-txt-select-page');
+    if (txtPage) txtPage.textContent = `Select all on page (${accountSchedules.length})`;
+
     rowsEl.innerHTML = accountSchedules.length === 0
-      ? '<tr><td colspan="5" class="p-4 text-center text-muted-foreground">No engine schedules yet. Click "+ Add Posting Schedule" to create your first schedule.</td></tr>'
+      ? '<tr><td colspan="6" class="p-4 text-center text-muted-foreground">No engine schedules yet. Click "+ New" to create your first schedule.</td></tr>'
       : accountSchedules.map((s: any) => {
           const tz = s.timezone || 'UTC';
           let day = '', hm = '';
@@ -1579,6 +2716,8 @@ const { id } = Astro.params;
           let windowBadge = '';
           if (s.status === 'paused') {
             windowBadge = '<span class="inline-flex items-center gap-1 rounded-full bg-amber-500/10 text-amber-500 px-2 py-0.5 text-[10px] font-semibold">Paused</span>';
+          } else if (s.cron_expression) {
+            windowBadge = '<span class="inline-flex items-center gap-1 rounded-full bg-indigo-500/10 text-indigo-400 px-2 py-0.5 text-[10px] font-semibold">Custom Cron</span>';
           } else if (isDayOff) {
             windowBadge = '<span class="inline-flex items-center gap-1 rounded-full bg-zinc-500/10 text-zinc-400 px-2 py-0.5 text-[10px] font-semibold">Day Off</span>';
           } else if (isClosed) {
@@ -1598,8 +2737,12 @@ const { id } = Astro.params;
             : (s.fastcron_token_masked ? 'Custom (' + escapeHtml(s.fastcron_token_masked) + ')' : 'Default (Workspace)');
 
           const webhookLabel = s.webhook_label || (s.account_webhooks?.label) || (s.webhook_id ? 'Selected Webhook' : 'Auto / Any Active');
+          const isChecked = selectedScheduleIds.has(s.id);
 
           return '<tr class="border-b border-border hover:bg-muted/30 transition-colors">' +
+            '<td class="p-2.5">' +
+              '<input type="checkbox" class="sched-row-chk h-3.5 w-3.5 rounded border-border text-primary cursor-pointer" data-id="' + s.id + '" ' + (isChecked ? 'checked' : '') + ' />' +
+            '</td>' +
             '<td class="p-2.5">' +
               '<div class="font-bold text-foreground">' + escapeHtml(s.label || '(unnamed schedule)') + '</div>' +
               '<div class="flex flex-wrap items-center gap-1.5 pt-1 text-[10px] text-muted-foreground">' +
@@ -1613,8 +2756,11 @@ const { id } = Astro.params;
               '<span class="inline-flex items-center rounded-lg bg-muted px-2 py-1 text-[11px] font-medium text-foreground">' + escapeHtml(webhookLabel) + '</span>' +
             '</td>' +
             '<td class="p-2.5">' +
-              '<div class="font-semibold text-foreground">' + escapeHtml(String(s.window_start).slice(0,5)) + '–' + escapeHtml(String(s.window_end).slice(0,5)) + ' <span class="text-[10px] text-muted-foreground font-normal">(' + escapeHtml(s.timezone) + ')</span></div>' +
-              '<div class="text-[11px] text-muted-foreground">' + s.interval_minutes + 'm ±' + s.random_delay_minutes + 'm • ' + escapeHtml((s.active_days || []).join(', ')) + '</div>' +
+              (s.cron_expression
+                ? '<div class="font-mono text-[11px] font-semibold text-primary">' + escapeHtml(s.cron_expression) + '</div>'
+                : '<div class="font-semibold text-foreground">' + escapeHtml(String(s.window_start).slice(0,5)) + '–' + escapeHtml(String(s.window_end).slice(0,5)) + ' <span class="text-[10px] text-muted-foreground font-normal">(' + escapeHtml(s.timezone) + ')</span></div>' +
+                  '<div class="text-[11px] text-muted-foreground">' + s.interval_minutes + 'm ±' + s.random_delay_minutes + 'm • ' + escapeHtml((s.active_days || []).join(', ')) + '</div>'
+              ) +
             '</td>' +
             '<td class="p-2.5 text-muted-foreground text-[11px]">' + tokenDisplay + '</td>' +
             '<td class="p-2.5 text-right">' +
@@ -1630,6 +2776,8 @@ const { id } = Astro.params;
             '</td>' +
           '</tr>';
         }).join('');
+
+    updateBatchButtonState();
   }
 
   function populateChannelSelect() {
@@ -1744,9 +2892,19 @@ const { id } = Astro.params;
 
     (document.getElementById('f-sched-started') as HTMLInputElement).value = s?.started_at ? String(s.started_at).slice(0, 10) : '';
 
-    // Integration box (admin only when editing existing schedule)
+    // Cron Tabs setup
+    if (s?.cron_expression) {
+      const rawInput = document.getElementById('f-raw-cron') as HTMLTextAreaElement | null;
+      if (rawInput) rawInput.value = s.cron_expression;
+      parseCronExpressionToVisual(s.cron_expression);
+      setCronTab('visual');
+    } else {
+      setCronTab('simple');
+    }
+
+    // Integration box (when editing existing schedule)
     const intBox = document.getElementById('sched-integration-box');
-    if (s && s.id && (s.is_admin !== false)) {
+    if (s && s.id) {
       intBox?.classList.remove('hidden');
       (document.getElementById('sched-int-id') as HTMLInputElement).value = s.id;
       const tokInput = document.getElementById('sched-int-token') as HTMLInputElement;
@@ -1760,7 +2918,6 @@ const { id } = Astro.params;
       intBox?.classList.add('hidden');
     }
 
-    updateSchedCadence();
     (document.getElementById('schedule-modal') as any)?.showModal?.();
   }
 
@@ -1800,13 +2957,15 @@ const { id } = Astro.params;
     document.getElementById('btn-add-token')?.addEventListener('click', openTokenModal);
     document.getElementById('btn-close-token-modal')?.addEventListener('click', closeTokenModal);
     document.getElementById('btn-cancel-token')?.addEventListener('click', closeTokenModal);
+    document.getElementById('btn-ping-tokens')?.addEventListener('click', pingFastCronTokens);
 
     document.getElementById('tokens-table-rows')?.addEventListener('click', (e) => {
       const t = (e.target as HTMLElement).closest('[data-token-act]');
       if (!t) return;
       const act = t.getAttribute('data-token-act');
       const tid = t.getAttribute('data-tid');
-      if (act && tid) tokenAction(tid, act);
+      const extraVal = t.getAttribute('data-val');
+      if (act && (tid || extraVal)) tokenAction(tid || '', act, extraVal || undefined);
     });
 
     document.getElementById('token-form')?.addEventListener('submit', async (e) => {
@@ -1837,6 +2996,84 @@ const { id } = Astro.params;
         if (errBox) { errBox.textContent = err.message || 'Network error'; errBox.classList.remove('hidden'); }
       }
     });
+
+    // Tab switcher listeners
+    document.getElementById('tab-btn-simple')?.addEventListener('click', () => setCronTab('simple'));
+    document.getElementById('tab-btn-visual')?.addEventListener('click', () => setCronTab('visual'));
+    document.getElementById('tab-btn-raw')?.addEventListener('click', () => setCronTab('raw'));
+
+    // Visual Cron chips delegation
+    document.getElementById('cron-minute-grid')?.addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest('[data-cron-m]');
+      if (!btn) return;
+      const m = Number(btn.getAttribute('data-cron-m'));
+      if (visualMinutes.has(m)) visualMinutes.delete(m);
+      else visualMinutes.add(m);
+      renderVisualCronGrids();
+      updateVisualCronPreview();
+    });
+
+    document.getElementById('cron-hour-grid')?.addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest('[data-cron-h]');
+      if (!btn) return;
+      const h = Number(btn.getAttribute('data-cron-h'));
+      if (visualHours.has(h)) visualHours.delete(h);
+      else visualHours.add(h);
+      renderVisualCronGrids();
+      updateVisualCronPreview();
+    });
+
+    document.getElementById('cron-dow-grid')?.addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest('[data-cron-dow]');
+      if (!btn) return;
+      const d = Number(btn.getAttribute('data-cron-dow'));
+      if (visualWeekdays.has(d)) visualWeekdays.delete(d);
+      else visualWeekdays.add(d);
+      renderVisualCronGrids();
+      updateVisualCronPreview();
+    });
+
+    // Minute presets
+    document.querySelectorAll('.btn-min-preset').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const val = (e.currentTarget as HTMLElement).getAttribute('data-preset-min');
+        visualMinutes.clear();
+        if (val === '5') { for (let i = 0; i < 60; i += 5) visualMinutes.add(i); }
+        else if (val === '15') { for (let i = 0; i < 60; i += 15) visualMinutes.add(i); }
+        else if (val === '30') { for (let i = 0; i < 60; i += 30) visualMinutes.add(i); }
+        else if (val === 'clear') { visualMinutes.add(0); }
+        renderVisualCronGrids();
+        updateVisualCronPreview();
+      });
+    });
+
+    // Hour presets
+    document.querySelectorAll('.btn-hr-preset').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const val = (e.currentTarget as HTMLElement).getAttribute('data-preset-hr');
+        visualHours.clear();
+        if (val === 'all') { for (let i = 0; i < 24; i++) visualHours.add(i); }
+        else if (val === 'work') { for (let i = 9; i <= 17; i++) visualHours.add(i); }
+        else if (val === '2') { for (let i = 0; i < 24; i += 2) visualHours.add(i); }
+        renderVisualCronGrids();
+        updateVisualCronPreview();
+      });
+    });
+
+    // Dow presets
+    document.querySelectorAll('.btn-dow-preset').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const val = (e.currentTarget as HTMLElement).getAttribute('data-preset-dow');
+        visualWeekdays.clear();
+        if (val === 'weekdays') { [1, 2, 3, 4, 5].forEach(i => visualWeekdays.add(i)); }
+        else if (val === 'weekends') { [6, 0].forEach(i => visualWeekdays.add(i)); }
+        else if (val === 'all') { [0, 1, 2, 3, 4, 5, 6].forEach(i => visualWeekdays.add(i)); }
+        renderVisualCronGrids();
+        updateVisualCronPreview();
+      });
+    });
+
+    document.getElementById('f-raw-cron')?.addEventListener('input', updateRawCronPreview);
 
     // Schedule modal token select handler
     document.getElementById('f-sched-token-select')?.addEventListener('change', (e) => {
@@ -1875,12 +3112,83 @@ const { id } = Astro.params;
       await loadSchedules();
     });
 
+    // Batch dropdown handlers
+    const batchBtn = document.getElementById('btn-sched-batch');
+    const batchMenu = document.getElementById('sched-batch-menu');
+    batchBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      batchMenu?.classList.toggle('hidden');
+    });
+    document.addEventListener('click', () => batchMenu?.classList.add('hidden'));
+
+    document.getElementById('batch-act-select-page')?.addEventListener('click', () => {
+      document.querySelectorAll('.sched-row-chk').forEach(c => {
+        (c as HTMLInputElement).checked = true;
+        const id = (c as HTMLInputElement).getAttribute('data-id');
+        if (id) selectedScheduleIds.add(id);
+      });
+      updateBatchButtonState();
+      batchMenu?.classList.add('hidden');
+    });
+
+    document.getElementById('batch-act-select-all')?.addEventListener('click', () => {
+      accountSchedules.forEach(s => selectedScheduleIds.add(s.id));
+      document.querySelectorAll('.sched-row-chk').forEach(c => (c as HTMLInputElement).checked = true);
+      updateBatchButtonState();
+      batchMenu?.classList.add('hidden');
+    });
+
+    document.getElementById('batch-act-edit')?.addEventListener('click', () => {
+      batchMenu?.classList.add('hidden');
+      if (selectedScheduleIds.size === 1) {
+        const id = Array.from(selectedScheduleIds)[0];
+        const s = accountSchedules.find(x => x.id === id);
+        if (s) openScheduleModal(s);
+      }
+    });
+
+    document.getElementById('batch-act-run')?.addEventListener('click', () => { batchMenu?.classList.add('hidden'); executeBatchAction('run'); });
+    document.getElementById('batch-act-enable')?.addEventListener('click', () => { batchMenu?.classList.add('hidden'); executeBatchAction('resume'); });
+    document.getElementById('batch-act-disable')?.addEventListener('click', () => { batchMenu?.classList.add('hidden'); executeBatchAction('pause'); });
+    document.getElementById('batch-act-delete')?.addEventListener('click', () => { batchMenu?.classList.add('hidden'); executeBatchAction('delete'); });
+    document.getElementById('batch-act-export')?.addEventListener('click', () => { batchMenu?.classList.add('hidden'); executeBatchAction('export'); });
+
+    // Table checkbox selection
+    document.getElementById('sched-select-all-header')?.addEventListener('change', (e) => {
+      const checked = (e.target as HTMLInputElement).checked;
+      document.querySelectorAll('.sched-row-chk').forEach(c => {
+        (c as HTMLInputElement).checked = checked;
+        const id = (c as HTMLInputElement).getAttribute('data-id');
+        if (id) {
+          if (checked) selectedScheduleIds.add(id);
+          else selectedScheduleIds.delete(id);
+        }
+      });
+      updateBatchButtonState();
+    });
+
+    document.getElementById('account-schedules-rows')?.addEventListener('change', (e) => {
+      const chk = (e.target as HTMLElement).closest('.sched-row-chk') as HTMLInputElement | null;
+      if (chk) {
+        const id = chk.getAttribute('data-id');
+        if (id) {
+          if (chk.checked) selectedScheduleIds.add(id);
+          else selectedScheduleIds.delete(id);
+          updateBatchButtonState();
+        }
+      }
+    });
+
     document.getElementById('btn-add-schedule')?.addEventListener('click', () => openScheduleModal());
     document.getElementById('btn-close-sched-modal')?.addEventListener('click', () => (document.getElementById('schedule-modal') as any)?.close?.());
     document.getElementById('btn-cancel-sched')?.addEventListener('click', () => (document.getElementById('schedule-modal') as any)?.close?.());
 
-    ['f-sched-interval', 'f-sched-start', 'f-sched-end'].forEach((iv) =>
-      document.getElementById(iv)?.addEventListener('input', updateSchedCadence)
+    ['f-sched-interval', 'f-sched-start', 'f-sched-end', 'f-sched-tz'].forEach((iv) =>
+      document.getElementById(iv)?.addEventListener('input', () => {
+        updateSchedCadence();
+        if (currentCronTab === 'visual') updateVisualCronPreview();
+        if (currentCronTab === 'raw') updateRawCronPreview();
+      })
     );
 
     // Integration box reveal and copy buttons
@@ -1927,6 +3235,13 @@ const { id } = Astro.params;
         checkedDays.push((chk as HTMLInputElement).value);
       });
 
+      let finalCronExpression: string | null = null;
+      if (currentCronTab === 'visual') {
+        finalCronExpression = getVisualCronExpression();
+      } else if (currentCronTab === 'raw') {
+        finalCronExpression = (document.getElementById('f-raw-cron') as HTMLTextAreaElement).value.trim() || null;
+      }
+
       const body: Record<string, any> = {
         account_id: accountId,
         label: (document.getElementById('f-sched-label') as HTMLInputElement).value,
@@ -1939,6 +3254,7 @@ const { id } = Astro.params;
         random_delay_minutes: Number((document.getElementById('f-sched-delay') as HTMLInputElement).value || 0),
         active_days: checkedDays.length > 0 ? checkedDays : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
         started_at: (document.getElementById('f-sched-started') as HTMLInputElement).value || null,
+        cron_expression: finalCronExpression,
       };
 
       if (tokenSelectVal === 'custom') {

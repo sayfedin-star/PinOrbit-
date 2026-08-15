@@ -20,20 +20,22 @@ async function handleDispatch(body: any, locals: any) {
   if (schedule.status !== 'active') return json({ success: true, dispatched: false, reason: 'paused' });
   if (schedule.started_at && new Date(schedule.started_at).getTime() > Date.now()) return json({ success: true, dispatched: false, reason: 'not_started' });
 
-  // Timezone-aware window and active days enforcement
-  const tz = schedule.timezone || 'UTC';
-  const now = new Date();
-  let day = '', hm = '';
-  try {
-    const parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(now);
-    day = parts.find(p => p.type === 'weekday')?.value || '';
-    hm = (parts.find(p => p.type === 'hour')?.value || '00') + ':' + (parts.find(p => p.type === 'minute')?.value || '00');
-  } catch {}
-  if (day && (schedule.active_days || []).length && !schedule.active_days.includes(day))
-    return json({ success: true, dispatched: false, reason: 'day_off' });
-  const w0 = String(schedule.window_start || '09:00').slice(0,5), w1 = String(schedule.window_end || '21:00').slice(0,5);
-  if (hm && (w0 <= w1 ? (hm < w0 || hm > w1) : (hm < w0 && hm > w1)))
-    return json({ success: true, dispatched: false, reason: 'window_closed' });
+  // Timezone-aware window and active days enforcement (skipped when explicit cron_expression is configured)
+  if (!schedule.cron_expression) {
+    const tz = schedule.timezone || 'UTC';
+    const now = new Date();
+    let day = '', hm = '';
+    try {
+      const parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(now);
+      day = parts.find(p => p.type === 'weekday')?.value || '';
+      hm = (parts.find(p => p.type === 'hour')?.value || '00') + ':' + (parts.find(p => p.type === 'minute')?.value || '00');
+    } catch {}
+    if (day && (schedule.active_days || []).length && !schedule.active_days.includes(day))
+      return json({ success: true, dispatched: false, reason: 'day_off' });
+    const w0 = String(schedule.window_start || '09:00').slice(0,5), w1 = String(schedule.window_end || '21:00').slice(0,5);
+    if (hm && (w0 <= w1 ? (hm < w0 || hm > w1) : (hm < w0 && hm > w1)))
+      return json({ success: true, dispatched: false, reason: 'window_closed' });
+  }
 
   const accountId = schedule.account_id;
   const workspaceId = schedule.workspace_id;
@@ -52,7 +54,8 @@ async function handleDispatch(body: any, locals: any) {
   if ((postedToday ?? 0) >= (account.max_pins_per_day ?? 20)) return json({ success: true, dispatched: false, reason: 'cap_reached' });
 
   // 4) Atomic claim
-  const { data: claimed } = await admin.rpc('claim_due_pins_simple', { p_account_id: accountId, p_limit: schedule.batch ?? 1 });
+  const { data: claimed, error: rpcErr } = await admin.rpc('claim_due_pins_simple', { p_account_id: accountId, p_limit: schedule.batch ?? 1 });
+  if (rpcErr) return json({ success: false, error: 'claim RPC failed: ' + rpcErr.message }, 500);
   if (!claimed || claimed.length === 0) return json({ success: true, dispatched: false, reason: 'no_due_pins' });
 
   // 5) Webhook channel (schedule's channel first, then any with capacity)

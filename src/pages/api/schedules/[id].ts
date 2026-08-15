@@ -34,7 +34,7 @@ export const PATCH: APIRoute = async ({ request, params, locals }) => {
       return new Response(JSON.stringify({ error: 'Schedule not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
     }
     const updateFields: Record<string, any> = {};
-    const allowedFields = ['label', 'webhook_id', 'timezone', 'window_start', 'window_end', 'interval_minutes', 'random_delay_minutes', 'active_days', 'started_at', 'batch', 'status', 'fastcron_token_id'];
+    const allowedFields = ['label', 'webhook_id', 'timezone', 'window_start', 'window_end', 'interval_minutes', 'random_delay_minutes', 'active_days', 'started_at', 'batch', 'status', 'fastcron_token_id', 'cron_expression'];
     for (const field of allowedFields) {
       if (body[field] !== undefined) updateFields[field] = body[field];
     }

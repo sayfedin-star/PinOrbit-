@@ -1,8 +1,8 @@
-```gitignore
 # Dependencies
 node_modules/
 
-# Build outputs
+# Astro & Build outputs
+.astro/
 dist/
 build/
 *.js.map
@@ -49,6 +49,4 @@ yarn-error.log*
 
 # Compiled assets
 public/build/
-```
-.astro/types.d.ts
-.astro/integrations/_inox-tools_astro-when/types.d.ts
+

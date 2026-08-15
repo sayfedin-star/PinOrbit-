@@ -1,7 +1,6 @@
 export const prerender = false;
 
 import type { APIRoute } from 'astro';
-import { validateUserSession } from '../../../../server/auth/session';
 import { assertWorkspaceAccess } from '../../../../server/auth/workspace-guard';
 import { dbClients } from '../../../../server/db/clients';
 import { fastcronService, resolveScheduleToken } from '../../../../server/services/fastcron-service';

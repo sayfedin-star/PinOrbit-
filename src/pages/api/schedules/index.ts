@@ -1,9 +1,8 @@
 export const prerender = false;
 
 import type { APIRoute } from 'astro';
-import { validateUserSession } from '../../../server/auth/session';
 import { assertWorkspaceAccess } from '../../../server/auth/workspace-guard';
-import { dbClients, getServerEnv, isKnownDefaultKek, isProductionEnv } from '../../../server/db/clients';
+import { dbClients, isKnownDefaultKek, isProductionEnv } from '../../../server/db/clients';
 import { encryptToken, decryptToken, resolveTokenKek } from '../../../server/lib/token-crypto';
 import { maskSecret } from '../../../server/services/webhook-secrets';
 import { syncPublishingSchedule } from '../../../server/services/fastcron-service';
@@ -22,8 +21,8 @@ export const GET: APIRoute = async ({ url, locals }) => {
   }
 
   try {
-    const role = await assertWorkspaceAccess(schedulingClient, workspaceId, user.id);
-    const isAdmin = role === 'admin' || role === 'owner';
+    const wsCtx = await assertWorkspaceAccess(schedulingClient, workspaceId, user.id);
+    const isAdmin = wsCtx.isAdmin;
     const adminClient = dbClients.getSchedulingAdmin(runtimeEnv);
     let query = adminClient.from('posting_schedules').select('*, accounts(account_name), account_webhooks(label), fastcron_tokens(id, name, is_default, token_masked)').eq('workspace_id', workspaceId);
     
@@ -66,10 +65,10 @@ export const GET: APIRoute = async ({ url, locals }) => {
         result.has_fastcron_token = false;
       }
 
-      if (!isAdmin && schedule.dispatch_token) {
-        result.dispatch_token = maskSecret(schedule.dispatch_token);
-      }
       result.is_admin = isAdmin;
+      if (!isAdmin && result.dispatch_token) {
+        result.dispatch_token = maskSecret(result.dispatch_token);
+      }
 
       return result;
     }));
@@ -146,6 +145,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       batch: body.batch ?? 1,
       status: 'not_synced',
       dispatch_token,
+      cron_expression: body.cron_expression || null,
       fastcron_job_id: null,
       fastcron_token_id: fastcron_token_id,
       fastcron_token_encrypted: fastcron_token_encrypted,

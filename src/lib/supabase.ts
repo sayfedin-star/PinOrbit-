@@ -1255,6 +1255,22 @@ export async function toggleAccountWebhookActive(
   return updateAccountWebhook(id, { is_active });
 }
 
+export async function deleteAccountWebhook(
+  id: string
+): Promise<{ success: boolean; error: string | null }> {
+  if (!supabase) {
+    mockWebhooks = mockWebhooks.filter((w) => w.id !== id);
+    return { success: true, error: null };
+  }
+  try {
+    const { error } = await supabase.from('account_webhooks').delete().eq('id', id);
+    if (error) return { success: false, error: error.message };
+    return { success: true, error: null };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Failed to delete webhook' };
+  }
+}
+
 // 10. Importer Bulk Pin Operations
 
 export async function bulkInsertPins(

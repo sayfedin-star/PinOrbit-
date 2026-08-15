@@ -94,8 +94,9 @@ export const fastcronService = {
 
   /**
    * Validates webhook URL format and domain allowlist.
+   * Scheme must be https: and host must end with .make.com (or in ALLOWED_WEBHOOK_HOSTS env override).
    */
-  validateWebhookUrl(urlStr?: string | null): { valid: boolean; error?: string } {
+  validateWebhookUrl(urlStr?: string | null, runtimeEnv?: Record<string, any>): { valid: boolean; error?: string } {
     if (!urlStr || typeof urlStr !== 'string') {
       return { valid: false, error: 'Webhook URL is required.' };
     }
@@ -103,25 +104,37 @@ export const fastcronService = {
     try {
       const parsed = new URL(urlStr);
       if (parsed.protocol !== 'https:') {
-        return { valid: false, error: 'Webhook URL must use secure HTTPS protocol.' };
+        return { valid: false, error: 'Webhook host not allowed' };
       }
 
       const host = parsed.hostname.toLowerCase();
+      const envHosts = (runtimeEnv && runtimeEnv.ALLOWED_WEBHOOK_HOSTS) ||
+        (typeof process !== 'undefined' ? process.env.ALLOWED_WEBHOOK_HOSTS : '');
+
+      if (envHosts && typeof envHosts === 'string' && envHosts.trim().length > 0) {
+        const customHosts = envHosts.split(',').map((h: string) => h.trim().toLowerCase()).filter(Boolean);
+        const match = customHosts.some((allowed: string) => host === allowed || host.endsWith('.' + allowed));
+        if (!match) {
+          return { valid: false, error: 'Webhook host not allowed' };
+        }
+        return { valid: true };
+      }
+
       const isAllowed =
-        ALLOWED_WEBHOOK_HOSTS.some((allowed) => host === allowed || host.endsWith('.' + allowed)) ||
+        host === 'make.com' ||
         host.endsWith('.make.com') ||
-        host.endsWith('.integromat.com');
+        ALLOWED_WEBHOOK_HOSTS.some((allowed) => host === allowed || host.endsWith('.' + allowed));
 
       if (!isAllowed) {
         return {
           valid: false,
-          error: `Webhook host "${host}" is not allowed. Must be a verified Make.com or Integromat domain.`,
+          error: 'Webhook host not allowed',
         };
       }
 
       return { valid: true };
     } catch {
-      return { valid: false, error: 'Invalid Webhook URL format.' };
+      return { valid: false, error: 'Webhook host not allowed' };
     }
   },
 
@@ -676,14 +689,14 @@ export const fastcronService = {
       ? connection.analytics_webhook_url
       : connection.top_pins_webhook_url;
 
-    const urlValidation = this.validateWebhookUrl(webhookUrl);
+    const urlValidation = this.validateWebhookUrl(webhookUrl, runtimeEnv);
     if (!urlValidation.valid) {
       return {
         success: false,
         connection_id: connectionId,
         channel,
         mode,
-        error: urlValidation.error || 'Webhook URL not configured or invalid.',
+        error: urlValidation.error || 'Webhook host not allowed',
       };
     }
 
@@ -1135,6 +1148,10 @@ export async function syncPublishingSchedule(schedule: any, runtimeEnv: Record<s
   let webhookUrl: string;
   try {
     webhookUrl = await resolveWebhookUrlForSchedule(schedulingClient, schedule);
+    const urlValidation = fastcronService.validateWebhookUrl(webhookUrl, runtimeEnv);
+    if (!urlValidation.valid) {
+      return { success: false, error: urlValidation.error || 'Webhook host not allowed' };
+    }
   } catch (e: any) {
     return { success: false, error: e.message };
   }
@@ -1147,7 +1164,7 @@ export async function syncPublishingSchedule(schedule: any, runtimeEnv: Record<s
   const postData = JSON.stringify({ schedule_id: schedule.id, dispatch_token: schedule.dispatch_token });
   const jobParams: Record<string, any> = {
     name: jobName,
-    expression: buildPortableCron(schedule),
+    expression: schedule.cron_expression || buildPortableCron(schedule),
     delay: schedule.random_delay_minutes ?? 0,
     random_delay: schedule.random_delay_minutes ?? 0,
     timezone: schedule.timezone || 'UTC',
@@ -1261,6 +1278,7 @@ export async function clonePublishingSchedule(scheduleId: string, runtimeEnv: Re
       batch: orig.batch,
       status: 'not_synced',
       dispatch_token: newDispatchToken,
+      cron_expression: orig.cron_expression || null,
       fastcron_job_id: null,
       fastcron_token_encrypted: orig.fastcron_token_encrypted,
     })
