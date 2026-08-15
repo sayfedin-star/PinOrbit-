@@ -1,0 +1,778 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import SectionHeader from '../../components/ui/SectionHeader.astro';
+
+export const prerender = false;
+---
+
+<Layout title="Board Pipeline Kit — Pinterest Automation" description="Make.com scenario configuration, webhook outbound routing, and ingest callback reference for Pinterest boards.">
+  <div class="max-w-5xl mx-auto space-y-6 pb-12">
+    <!-- Breadcrumb & Back Link -->
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+        <a href="/accounts" class="hover:text-foreground transition-colors">Accounts</a>
+        <span>/</span>
+        <a id="link-account-details-crumb" href="/accounts/details" class="hover:text-foreground transition-colors">Account Details</a>
+        <span>/</span>
+        <span class="text-foreground">Board Pipeline Kit</span>
+      </div>
+      <a id="btn-back-details" href="/accounts/details" class="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        <span>&larr; Back to Account Details</span>
+      </a>
+    </div>
+
+    <!-- Global Feedback Banner -->
+    <div id="pipeline-feedback-banner" class="hidden rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3.5 text-xs text-emerald-600 dark:text-emerald-400 flex items-center justify-between shadow-sm">
+      <div class="flex items-center gap-2.5">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+        </svg>
+        <span id="pipeline-feedback-text">Operation completed.</span>
+      </div>
+      <button id="close-pipeline-feedback" class="font-bold opacity-70 hover:opacity-100">&times;</button>
+    </div>
+
+    <!-- Header Control Card -->
+    <div class="rounded-2xl border border-border bg-card p-6 shadow-sm">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div class="flex items-center gap-3.5">
+          <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-500/10 text-indigo-500 flex-shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h2 id="pipeline-account-name" class="text-lg font-bold text-foreground">Loading Account...</h2>
+              <span id="pipeline-status-badge" class="rounded-full bg-primary/10 border border-primary/20 px-2.5 py-0.5 text-[11px] font-bold text-primary">Active</span>
+            </div>
+            <p class="text-xs text-muted-foreground mt-0.5 font-mono">
+              Account ID: <span id="pipeline-account-id" class="font-bold text-foreground">---</span>
+            </p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            id="btn-test-list-boards"
+            class="inline-flex items-center gap-1.5 rounded-xl border border-border bg-background px-3.5 py-2 text-xs font-semibold text-foreground hover:bg-muted transition-all shadow-sm cursor-pointer"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            <span>Send test list</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- CARD 1: Outbound Trigger (Board Channel Configuration) -->
+    <div class="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-5">
+      <div class="flex flex-wrap items-center justify-between border-b border-border pb-3 gap-3">
+        <div class="flex items-center gap-2.5">
+          <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          </div>
+          <div>
+            <h3 class="text-sm font-bold text-foreground">Outbound Trigger Configuration</h3>
+            <p class="text-xs text-muted-foreground">Select or register the dedicated Make.com webhook for board operations</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          id="btn-open-add-webhook-modal"
+          class="inline-flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition-all shadow-sm cursor-pointer"
+        >
+          + Add Webhook
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+        <!-- Select Board Channel -->
+        <div class="space-y-1.5 p-3.5 rounded-xl border border-border bg-muted/20">
+          <label for="select-board-channel" class="block font-bold text-foreground text-[11px]">Assigned Board Channel</label>
+          <select
+            id="select-board-channel"
+            class="w-full rounded-lg border border-border bg-background py-2 px-3 text-xs font-medium text-foreground focus:border-primary focus:outline-none cursor-pointer"
+          >
+            <option value="">Auto (First Active / Priority)</option>
+          </select>
+          <p class="text-[11px] text-muted-foreground mt-1">Saves immediately to account configuration.</p>
+        </div>
+
+        <!-- Editable Webhook URL -->
+        <div class="space-y-1.5 p-3.5 rounded-xl border border-border bg-muted/20">
+          <div class="flex items-center justify-between">
+            <label for="input-board-webhook-url" class="font-bold text-foreground text-[11px]">Board Webhook URL (Make Outbound Trigger)</label>
+            <span id="label-active-channel" class="text-[10px] font-mono text-primary font-semibold">Auto</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <input
+              id="input-board-webhook-url"
+              type="text"
+              placeholder="https://hook.make.com/..."
+              class="w-full rounded-lg border border-border bg-background py-1.5 px-2.5 text-xs font-mono text-foreground focus:border-primary focus:outline-none"
+            />
+            <button
+              type="button"
+              id="btn-save-webhook-url"
+              class="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition-all shrink-0 cursor-pointer"
+            >
+              Save
+            </button>
+            <button
+              type="button"
+              id="btn-copy-webhook-url"
+              class="rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold hover:bg-muted text-foreground transition-all shrink-0 cursor-pointer"
+              title="Copy URL"
+            >
+              📋 Copy
+            </button>
+          </div>
+          <p class="text-[11px] text-muted-foreground mt-1">Must be HTTPS URL (e.g. Make.com webhook).</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- CARD 2: SCENARIO (ROUTER DESIGN) -->
+    <div class="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-4">
+      <div class="flex items-center justify-between border-b border-border pb-3">
+        <div class="flex items-center gap-2">
+          <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/10 text-amber-500">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/></svg>
+          </div>
+          <div>
+            <h3 class="text-sm font-bold text-foreground">Make.com Scenario (Router on Action)</h3>
+            <p class="text-xs text-muted-foreground">Deterministic routing spec for Make.com Router module</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          id="btn-copy-router-spec"
+          class="rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold hover:bg-muted text-foreground transition-all cursor-pointer"
+        >
+          📋 Copy Router Spec
+        </button>
+      </div>
+
+      <div class="relative rounded-xl border border-border bg-muted/40 p-4 font-mono text-xs text-foreground overflow-x-auto">
+        <pre class="leading-relaxed whitespace-pre font-mono"><code>TRIGGER: Custom Webhook (Board Webhook URL above)
+DETECTED FIELDS: action, account_id, board_name, board_id, workspace_id
+ROUTER on: action
+  Route CREATE:  action  equals  create     (NO [] suffix)
+  Route LIST:    action  equals  list       (NO [] suffix)
+  Route DELETE:  action  equals  delete     (NO [] suffix)</code></pre>
+      </div>
+    </div>
+
+    <!-- CARD 3: CALLBACKS (HTTP Target in Make) -->
+    <div class="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-5">
+      <div class="flex items-center justify-between border-b border-border pb-3">
+        <div class="flex items-center gap-2">
+          <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-500">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </div>
+          <div>
+            <h3 class="text-sm font-bold text-foreground">Callback HTTP Specifications (Make to PinOrbit)</h3>
+            <p class="text-xs text-muted-foreground">Configure HTTP Make module for each route targeting PinOrbit Ingest API</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Common Headers Box -->
+      <div class="space-y-2 p-4 rounded-xl border border-border bg-muted/20">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold text-foreground uppercase tracking-wider">Common Headers & Ingest Endpoint (All Routes)</span>
+          <button type="button" id="btn-copy-common-headers" class="text-xs font-semibold text-primary hover:underline cursor-pointer">📋 Copy Headers</button>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+          <div>
+            <label class="font-bold text-muted-foreground text-[10px]">TARGET INGEST ENDPOINT</label>
+            <div class="flex items-center gap-1.5 mt-1">
+              <input id="input-ingest-url" type="text" readonly class="w-full rounded-lg border border-border bg-background py-1.5 px-2 text-xs font-mono text-foreground select-all focus:outline-none" />
+              <button type="button" id="btn-copy-ingest-url" class="rounded-lg border border-border bg-background px-2 py-1.5 text-xs font-semibold hover:bg-muted text-foreground cursor-pointer shrink-0">Copy</button>
+            </div>
+          </div>
+
+          <div>
+            <label class="font-bold text-muted-foreground text-[10px]">x-ingest-secret HEADER</label>
+            <div class="flex items-center gap-1.5 mt-1">
+              <input id="input-ingest-secret" type="password" readonly value="••••••••••••••••••••••••" class="w-full rounded-lg border border-border bg-background py-1.5 px-2 text-xs font-mono text-foreground select-all focus:outline-none" />
+              <button type="button" id="btn-reveal-secret" class="rounded-lg border border-primary/30 bg-primary/10 px-2 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 cursor-pointer shrink-0">Reveal</button>
+              <button type="button" id="btn-copy-secret" class="rounded-lg border border-border bg-background px-2 py-1.5 text-xs font-semibold hover:bg-muted text-foreground cursor-pointer shrink-0">Copy</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Route Payloads -->
+      <div class="space-y-4">
+        <!-- CREATE Route -->
+        <div class="rounded-xl border border-border bg-muted/10 p-4 space-y-2">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 px-2 py-0.5 text-[10px] font-bold">ROUTE 1: CREATE</span>
+              <span class="text-xs font-bold text-foreground">board.created Callback Body</span>
+            </div>
+            <button type="button" class="btn-copy-payload text-xs font-semibold text-primary hover:underline cursor-pointer" data-target="code-create-payload">📋 Copy JSON</button>
+          </div>
+          <pre id="code-create-payload" class="rounded-lg border border-border bg-background p-3 font-mono text-xs text-foreground overflow-x-auto"><code>&#123;
+  "event": "board.created",
+  "workspace_id": "&#123;&#123;workspace_id&#125;&#125;",
+  "account_id": "&#123;&#123;account_id&#125;&#125;",
+  "board_name": "&#123;&#123;board_name&#125;&#125;",
+  "board_id": "&#123;&#123;CreateBoard.id&#125;&#125;",
+  "idempotency_key": "create:&#123;&#123;account_id&#125;&#125;:&#123;&#123;board_name&#125;&#125;"
+&#125;</code></pre>
+        </div>
+
+        <!-- LIST Route -->
+        <div class="rounded-xl border border-border bg-muted/10 p-4 space-y-2">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="rounded bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 text-[10px] font-bold">ROUTE 2: LIST</span>
+              <span class="text-xs font-bold text-foreground">boards.list Callback Body</span>
+            </div>
+            <button type="button" class="btn-copy-payload text-xs font-semibold text-primary hover:underline cursor-pointer" data-target="code-list-payload">📋 Copy JSON</button>
+          </div>
+          <pre id="code-list-payload" class="rounded-lg border border-border bg-background p-3 font-mono text-xs text-foreground overflow-x-auto"><code>&#123;
+  "event": "boards.list",
+  "workspace_id": "&#123;&#123;workspace_id&#125;&#125;",
+  "account_id": "&#123;&#123;account_id&#125;&#125;",
+  "boards": &#123;&#123;map(ListBoards; &#123;id: id, name: name&#125;)&#125;&#125;
+&#125;</code></pre>
+        </div>
+
+        <!-- DELETE Route -->
+        <div class="rounded-xl border border-border bg-muted/10 p-4 space-y-2">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="rounded bg-rose-500/10 text-rose-500 border border-rose-500/20 px-2 py-0.5 text-[10px] font-bold">ROUTE 3: DELETE</span>
+              <span class="text-xs font-bold text-foreground">board.deleted Callback Body</span>
+            </div>
+            <button type="button" class="btn-copy-payload text-xs font-semibold text-primary hover:underline cursor-pointer" data-target="code-delete-payload">📋 Copy JSON</button>
+          </div>
+          <pre id="code-delete-payload" class="rounded-lg border border-border bg-background p-3 font-mono text-xs text-foreground overflow-x-auto"><code>&#123;
+  "event": "board.deleted",
+  "workspace_id": "&#123;&#123;workspace_id&#125;&#125;",
+  "account_id": "&#123;&#123;account_id&#125;&#125;",
+  "board_id": "&#123;&#123;board_id&#125;&#125;"
+&#125;</code></pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- CARD 4: Supported Events Row & Documentation -->
+    <div class="rounded-2xl border border-border bg-card p-5 shadow-sm space-y-3">
+      <div class="flex items-center justify-between">
+        <div>
+          <h4 class="text-xs font-bold uppercase tracking-wider text-foreground">Supported Board Callback Events</h4>
+          <p class="text-xs text-muted-foreground mt-0.5">Ingest router handles these 3 event types automatically.</p>
+        </div>
+        <button type="button" id="btn-copy-all-events" class="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold hover:bg-muted text-foreground transition-all cursor-pointer">
+          📋 Copy Events List
+        </button>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <input
+          id="input-all-events"
+          type="text"
+          readonly
+          value="board.created, boards.list, board.deleted"
+          class="w-full rounded-lg border border-border bg-muted/30 py-2 px-3 font-mono text-xs font-bold text-foreground select-all focus:outline-none"
+        />
+      </div>
+
+      <div class="pt-2 border-t border-border flex items-center justify-between text-[11px] text-muted-foreground">
+        <p class="italic">Note: <code class="font-mono text-foreground font-semibold">idempotency_key</code> ensures safe deduplication of board creation callbacks across network retries without creating duplicate boards.</p>
+        <span class="font-mono text-[10px]">Content-Type: application/json</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Add Webhook Modal -->
+  <div id="add-board-webhook-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" aria-modal="true" role="dialog">
+    <div class="relative w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-border pb-3">
+        <h3 class="text-sm font-bold text-foreground">Add New Board Webhook</h3>
+        <button id="btn-close-webhook-modal" class="text-muted-foreground hover:text-foreground text-sm font-bold">&times;</button>
+      </div>
+
+      <div id="modal-webhook-error" class="hidden rounded-lg bg-rose-500/10 border border-rose-500/30 p-2.5 text-xs text-rose-600 dark:text-rose-400"></div>
+
+      <form id="form-create-board-webhook" class="space-y-3.5 text-xs">
+        <div>
+          <label for="modal-hook-label" class="block font-semibold text-foreground mb-1">Channel Label</label>
+          <input
+            id="modal-hook-label"
+            type="text"
+            required
+            value="Board Channel"
+            class="w-full rounded-lg border border-border bg-background py-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none"
+          />
+        </div>
+
+        <div>
+          <label for="modal-hook-url" class="block font-semibold text-foreground mb-1">Make Webhook URL (HTTPS)</label>
+          <input
+            id="modal-hook-url"
+            type="url"
+            required
+            placeholder="https://hook.make.com/..."
+            class="w-full rounded-lg border border-border bg-background py-2 px-3 text-xs font-mono text-foreground focus:border-primary focus:outline-none"
+          />
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-3 border-t border-border">
+          <button type="button" id="btn-cancel-modal" class="rounded-xl border border-border px-3.5 py-2 font-semibold text-muted-foreground hover:bg-muted">Cancel</button>
+          <button type="submit" class="rounded-xl bg-primary px-3.5 py-2 font-semibold text-primary-foreground shadow hover:bg-primary/90">Create Channel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</Layout>
+
+<script>
+  import { requireAuth } from '../../lib/auth';
+  import {
+    getAccountDetails,
+    getAccountWebhooks,
+    createAccountWebhook,
+    updateAccountWebhook,
+  } from '../../lib/supabase';
+  import { escapeHtml } from '../../lib/ui-helpers';
+  import type { Account, AccountWebhook } from '../../lib/types';
+
+  let currentAccount: Account | null = null;
+  let accountId: string = '';
+  let accountWebhooks: AccountWebhook[] = [];
+  let revealedSecret: string | null = null;
+
+  function showFeedback(msg: string, type: 'success' | 'error' | 'info' = 'success') {
+    const banner = document.getElementById('pipeline-feedback-banner');
+    const text = document.getElementById('pipeline-feedback-text');
+    if (!banner || !text) return;
+
+    banner.className = `mb-4 rounded-xl border p-3.5 text-xs flex items-center justify-between shadow-sm ${
+      type === 'error'
+        ? 'border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400'
+        : type === 'info'
+        ? 'border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400'
+        : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+    }`;
+    text.textContent = msg;
+    banner.classList.remove('hidden');
+
+    setTimeout(() => {
+      banner.classList.add('hidden');
+    }, 6000);
+  }
+
+  async function init() {
+    const isAuth = await requireAuth();
+    if (!isAuth) return;
+
+    const urlParams = new URLSearchParams(window.location.search);
+    accountId = urlParams.get('id') || '';
+
+    if (!accountId) {
+      showFeedback('No account ID provided in URL query (?id=...)', 'error');
+      return;
+    }
+
+    // Update Back Links
+    const backBtn = document.getElementById('btn-back-details') as HTMLAnchorElement | null;
+    const crumbLink = document.getElementById('link-account-details-crumb') as HTMLAnchorElement | null;
+    if (backBtn) backBtn.href = `/accounts/details?id=${encodeURIComponent(accountId)}`;
+    if (crumbLink) crumbLink.href = `/accounts/details?id=${encodeURIComponent(accountId)}`;
+
+    const idDisplay = document.getElementById('pipeline-account-id');
+    if (idDisplay) idDisplay.textContent = accountId;
+
+    // Set Ingest Callback URL
+    const ingestInput = document.getElementById('input-ingest-url') as HTMLInputElement | null;
+    if (ingestInput) {
+      ingestInput.value = `${window.location.origin}/api/internal/pinterest/ingest`;
+    }
+
+    setupEventListeners();
+    await loadData();
+  }
+
+  async function loadData() {
+    try {
+      const [acc, whs] = await Promise.all([
+        getAccountDetails(accountId),
+        getAccountWebhooks(accountId),
+      ]);
+
+      if (!acc) {
+        showFeedback(`Could not find account matching ID "${accountId}".`, 'error');
+        const nameEl = document.getElementById('pipeline-account-name');
+        if (nameEl) nameEl.textContent = 'Account Not Found';
+        return;
+      }
+
+      currentAccount = acc;
+      accountWebhooks = whs || [];
+
+      // Render Header
+      const nameEl = document.getElementById('pipeline-account-name');
+      const statusBadge = document.getElementById('pipeline-status-badge');
+      if (nameEl) nameEl.textContent = acc.account_name || 'Pinterest Account';
+      if (statusBadge) {
+        statusBadge.textContent = acc.is_active ? 'Active' : 'Inactive';
+        statusBadge.className = `rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${
+          acc.is_active
+            ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500'
+            : 'bg-muted border-border text-muted-foreground'
+        }`;
+      }
+
+      renderChannelDropdown();
+      updateSelectedWebhookDisplay();
+    } catch (err: any) {
+      console.error('Failed to load board pipeline data:', err);
+      showFeedback(`Failed to load pipeline data: ${err.message || 'Unknown database error'}`, 'error');
+    }
+  }
+
+  function renderChannelDropdown() {
+    const select = document.getElementById('select-board-channel') as HTMLSelectElement | null;
+    if (!select) return;
+
+    const currentSelected = currentAccount?.board_webhook_id || currentAccount?.board_creation_webhook_id || '';
+    let opts = '<option value="">Auto (First Active / Priority)</option>';
+    accountWebhooks.forEach((w) => {
+      const cap = w.monthly_capacity ?? 500;
+      const usage = w.monthly_usage ?? 0;
+      const rem = Math.max(0, cap - usage);
+      const isSel = w.id === currentSelected ? 'selected' : '';
+      opts += `<option value="${w.id}" ${isSel}>${escapeHtml(w.label)} (${rem}/${cap} runs) [#${w.priority || 1}]</option>`;
+    });
+
+    select.innerHTML = opts;
+  }
+
+  function getActiveBoardWebhook(): AccountWebhook | null {
+    const targetWhId = currentAccount?.board_webhook_id || currentAccount?.board_creation_webhook_id;
+    if (targetWhId) {
+      const found = accountWebhooks.find((w) => w.id === targetWhId);
+      if (found) return found;
+    }
+    // Fallback: active label match or first active
+    return accountWebhooks.find((w) => w.is_active && /board/i.test(w.label)) ||
+           accountWebhooks.find((w) => w.is_active) ||
+           accountWebhooks[0] ||
+           null;
+  }
+
+  function updateSelectedWebhookDisplay() {
+    const target = getActiveBoardWebhook();
+    const urlInput = document.getElementById('input-board-webhook-url') as HTMLInputElement | null;
+    const labelBadge = document.getElementById('label-active-channel');
+
+    if (urlInput) {
+      urlInput.value = target?.webhook_url || '';
+    }
+    if (labelBadge) {
+      labelBadge.textContent = target ? `${target.label} (#${target.priority || 1})` : 'None';
+    }
+  }
+
+  function setupEventListeners() {
+    document.getElementById('close-pipeline-feedback')?.addEventListener('click', () => {
+      document.getElementById('pipeline-feedback-banner')?.classList.add('hidden');
+    });
+
+    // Board Channel Dropdown Change
+    const channelSelect = document.getElementById('select-board-channel') as HTMLSelectElement | null;
+    channelSelect?.addEventListener('change', async (e) => {
+      const val = (e.target as HTMLSelectElement).value || null;
+      try {
+        const res = await fetch('/api/accounts/board-channel', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ account_id: accountId, webhook_id: val }),
+        });
+        const d = await res.json();
+        if (!res.ok) {
+          showFeedback(d.error || 'Failed to update board channel', 'error');
+        } else {
+          if (currentAccount) {
+            currentAccount.board_webhook_id = val;
+            currentAccount.board_creation_webhook_id = val;
+          }
+          updateSelectedWebhookDisplay();
+          showFeedback('Board channel updated successfully.', 'success');
+        }
+      } catch (err: any) {
+        showFeedback(err.message || 'Error updating board channel', 'error');
+      }
+    });
+
+    // Save Webhook URL Button
+    document.getElementById('btn-save-webhook-url')?.addEventListener('click', async () => {
+      const urlInput = document.getElementById('input-board-webhook-url') as HTMLInputElement | null;
+      const url = urlInput?.value.trim() || '';
+      if (!url || !url.startsWith('https://')) {
+        showFeedback('Please provide a valid HTTPS webhook URL.', 'error');
+        return;
+      }
+
+      const activeHook = getActiveBoardWebhook();
+      if (!activeHook) {
+        // Create new webhook
+        try {
+          const { data, error } = await createAccountWebhook({
+            account_id: accountId,
+            label: 'Board Channel',
+            webhook_url: url,
+            monthly_capacity: 500,
+            priority: 1,
+            is_active: true,
+            is_primary: accountWebhooks.length === 0,
+          });
+          if (error) {
+            showFeedback(error, 'error');
+          } else {
+            showFeedback('Board webhook created and assigned.', 'success');
+            await loadData();
+          }
+        } catch (e: any) {
+          showFeedback(e.message || 'Error creating webhook', 'error');
+        }
+        return;
+      }
+
+      // Update existing webhook
+      try {
+        const { error } = await updateAccountWebhook(activeHook.id, {
+          webhook_url: url,
+        });
+        if (error) {
+          showFeedback(error, 'error');
+        } else {
+          showFeedback('Webhook URL updated successfully.', 'success');
+          await loadData();
+        }
+      } catch (e: any) {
+        showFeedback(e.message || 'Error saving webhook URL', 'error');
+      }
+    });
+
+    // Copy Webhook URL
+    document.getElementById('btn-copy-webhook-url')?.addEventListener('click', () => {
+      const urlInput = document.getElementById('input-board-webhook-url') as HTMLInputElement | null;
+      if (urlInput?.value) {
+        navigator.clipboard.writeText(urlInput.value);
+        showFeedback('Board Webhook URL copied to clipboard.', 'success');
+      }
+    });
+
+    // Send Test List Button
+    document.getElementById('btn-test-list-boards')?.addEventListener('click', async () => {
+      showFeedback('Sending test board list trigger...', 'info');
+      try {
+        const res = await fetch('/api/boards/action', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ account_id: accountId, action: 'list' }),
+        });
+        const d = await res.json();
+        if (!res.ok) {
+          showFeedback(`Test failed: ${d.error || 'Unknown error'}`, 'error');
+        } else {
+          const branch = d.meta?.branch ? ` (via branch: ${d.meta.branch})` : '';
+          showFeedback(`⚡ Board action 'list' dispatched successfully${branch}. Make.com scenario triggered.`, 'success');
+        }
+      } catch (e: any) {
+        showFeedback(`Error triggering board test: ${e.message}`, 'error');
+      }
+    });
+
+    // Copy Router Spec
+    document.getElementById('btn-copy-router-spec')?.addEventListener('click', () => {
+      const spec = `TRIGGER: Custom Webhook (Board Webhook URL above)\nDETECTED FIELDS: action, account_id, board_name, board_id, workspace_id\nROUTER on: action\n  Route CREATE:  action  equals  create     (NO [] suffix)\n  Route LIST:    action  equals  list       (NO [] suffix)\n  Route DELETE:  action  equals  delete     (NO [] suffix)`;
+      navigator.clipboard.writeText(spec);
+      showFeedback('Router design specification copied to clipboard.', 'success');
+    });
+
+    // Copy Ingest URL
+    document.getElementById('btn-copy-ingest-url')?.addEventListener('click', () => {
+      const urlInput = document.getElementById('input-ingest-url') as HTMLInputElement | null;
+      if (urlInput?.value) {
+        navigator.clipboard.writeText(urlInput.value);
+        showFeedback('Ingest callback URL copied to clipboard.', 'success');
+      }
+    });
+
+    // Copy Common Headers
+    document.getElementById('btn-copy-common-headers')?.addEventListener('click', () => {
+      const headers = `Content-Type: application/json\nx-ingest-secret: ${revealedSecret || '<YOUR_INGEST_SECRET>'}`;
+      navigator.clipboard.writeText(headers);
+      showFeedback('Common HTTP headers copied to clipboard.', 'success');
+    });
+
+    // Reveal Secret
+    const revealBtn = document.getElementById('btn-reveal-secret');
+    const secretInput = document.getElementById('input-ingest-secret') as HTMLInputElement | null;
+    revealBtn?.addEventListener('click', async () => {
+      if (revealedSecret) {
+        revealedSecret = null;
+        if (secretInput) {
+          secretInput.type = 'password';
+          secretInput.value = '••••••••••••••••••••••••';
+        }
+        if (revealBtn) revealBtn.textContent = 'Reveal';
+        return;
+      }
+
+      try {
+        if (revealBtn) revealBtn.textContent = 'Revealing...';
+        const wsId = currentAccount?.workspace_id;
+        const res = await fetch('/api/secrets/reveal', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ workspace_id: wsId }),
+        });
+        const d = await res.json();
+        if (!res.ok || !d.secret) {
+          showFeedback(d.error || 'Failed to reveal ingest secret', 'error');
+          if (revealBtn) revealBtn.textContent = 'Reveal';
+        } else {
+          revealedSecret = d.secret;
+          if (secretInput) {
+            secretInput.type = 'text';
+            secretInput.value = d.secret;
+          }
+          if (revealBtn) revealBtn.textContent = 'Hide';
+        }
+      } catch (e: any) {
+        showFeedback(e.message || 'Error revealing secret', 'error');
+        if (revealBtn) revealBtn.textContent = 'Reveal';
+      }
+    });
+
+    // Copy Secret
+    document.getElementById('btn-copy-secret')?.addEventListener('click', async () => {
+      if (revealedSecret) {
+        navigator.clipboard.writeText(revealedSecret);
+        showFeedback('Ingest secret copied to clipboard.', 'success');
+      } else {
+        try {
+          const wsId = currentAccount?.workspace_id;
+          const res = await fetch('/api/secrets/reveal', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ workspace_id: wsId }),
+          });
+          const d = await res.json();
+          if (res.ok && d.secret) {
+            revealedSecret = d.secret;
+            navigator.clipboard.writeText(d.secret);
+            showFeedback('Ingest secret copied to clipboard.', 'success');
+          } else {
+            showFeedback(d.error || 'Failed to fetch secret for copy', 'error');
+          }
+        } catch (e: any) {
+          showFeedback(e.message || 'Error copying secret', 'error');
+        }
+      }
+    });
+
+    // Copy Payload Buttons
+    document.querySelectorAll('.btn-copy-payload').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        const targetId = (e.currentTarget as HTMLElement).getAttribute('data-target');
+        if (!targetId) return;
+        const codeEl = document.getElementById(targetId);
+        if (codeEl) {
+          navigator.clipboard.writeText(codeEl.textContent || '');
+          showFeedback('Callback JSON body copied to clipboard.', 'success');
+        }
+      });
+    });
+
+    // Copy All Events
+    document.getElementById('btn-copy-all-events')?.addEventListener('click', () => {
+      const input = document.getElementById('input-all-events') as HTMLInputElement | null;
+      if (input?.value) {
+        navigator.clipboard.writeText(input.value);
+        showFeedback('Events list copied to clipboard.', 'success');
+      }
+    });
+
+    // Add Webhook Modal Handlers
+    const modal = document.getElementById('add-board-webhook-modal');
+    document.getElementById('btn-open-add-webhook-modal')?.addEventListener('click', () => {
+      modal?.classList.remove('hidden');
+      modal?.classList.add('flex');
+    });
+
+    const closeModal = () => {
+      modal?.classList.add('hidden');
+      modal?.classList.remove('flex');
+      const errEl = document.getElementById('modal-webhook-error');
+      if (errEl) errEl.classList.add('hidden');
+    };
+
+    document.getElementById('btn-close-webhook-modal')?.addEventListener('click', closeModal);
+    document.getElementById('btn-cancel-modal')?.addEventListener('click', closeModal);
+
+    document.getElementById('form-create-board-webhook')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const label = (document.getElementById('modal-hook-label') as HTMLInputElement).value.trim();
+      const url = (document.getElementById('modal-hook-url') as HTMLInputElement).value.trim();
+      const errEl = document.getElementById('modal-webhook-error');
+
+      if (!url.startsWith('https://')) {
+        if (errEl) {
+          errEl.textContent = 'URL must start with https://';
+          errEl.classList.remove('hidden');
+        }
+        return;
+      }
+
+      try {
+        const { data, error } = await createAccountWebhook({
+          account_id: accountId,
+          label: label || 'Board Channel',
+          webhook_url: url,
+          monthly_capacity: 500,
+          priority: 1,
+          is_active: true,
+          is_primary: false,
+        });
+
+        if (error) {
+          if (errEl) {
+            errEl.textContent = error;
+            errEl.classList.remove('hidden');
+          }
+          return;
+        }
+
+        // Set as assigned board channel
+        if (data?.id) {
+          await fetch('/api/accounts/board-channel', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ account_id: accountId, webhook_id: data.id }),
+          });
+        }
+
+        closeModal();
+        showFeedback('New board webhook created and assigned.', 'success');
+        await loadData();
+      } catch (err: any) {
+        if (errEl) {
+          errEl.textContent = err.message || 'Error creating webhook';
+          errEl.classList.remove('hidden');
+        }
+      }
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', init);
+</script>
