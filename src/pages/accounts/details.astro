@@ -107,7 +107,15 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
               <p class="text-xs text-muted-foreground">Channel capacities, fallback priority & execution stats</p>
             </div>
           </div>
-          <div class="flex items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2">
+            <!-- Board Channel Select -->
+            <div class="flex items-center gap-1.5 bg-muted/60 border border-border px-2 py-1 rounded-lg">
+              <label for="select-board-channel" class="text-[11px] font-semibold text-muted-foreground whitespace-nowrap">Board Channel (create/list/delete):</label>
+              <select id="select-board-channel" class="rounded border border-border bg-background py-0.5 px-2 text-[11px] font-medium text-foreground focus:border-primary focus:outline-none max-w-[170px] cursor-pointer">
+                <option value="">Auto (First Active)</option>
+              </select>
+            </div>
+
             <button
               type="button"
               id="btn-test-ping-all-webhooks"
@@ -197,6 +205,140 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
         </div>
         <button type="button" id="btn-ping-tokens" class="text-xs text-primary hover:underline font-medium">Test Connection</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Section: Board Pipeline Kit -->
+  <div class="mb-8 rounded-2xl border border-border bg-card p-5 shadow-sm space-y-4">
+    <div class="flex flex-wrap items-center justify-between border-b border-border pb-3 gap-3">
+      <div class="flex items-center gap-2">
+        <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-500">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
+        </div>
+        <div>
+          <h3 class="text-sm font-bold text-foreground">Board Pipeline Kit</h3>
+          <p class="text-xs text-muted-foreground">Make.com configuration parameters for automated board provisioning & sync</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+        <span class="rounded-full bg-indigo-500/10 border border-indigo-500/20 px-2.5 py-0.5 text-[11px] text-indigo-400">Router on Action</span>
+      </div>
+    </div>
+
+    <!-- Rows with Copy buttons -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+      <!-- Row 1: Board Webhook URL -->
+      <div class="space-y-1.5 p-3 rounded-xl border border-border bg-muted/20">
+        <div class="flex items-center justify-between">
+          <label class="font-bold text-foreground text-[11px]">Board Webhook URL (Make Outbound Trigger)</label>
+          <span id="kit-wh-channel-label" class="text-[10px] font-mono text-muted-foreground">Auto / Active</span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <input
+            id="kit-board-webhook-url"
+            type="text"
+            readonly
+            value="Loading channel URL..."
+            class="w-full rounded-lg border border-border bg-background py-1.5 px-2.5 text-xs font-mono text-foreground select-all focus:outline-none"
+          />
+          <button
+            type="button"
+            id="btn-copy-kit-wh-url"
+            class="rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold hover:bg-muted text-foreground transition-all shrink-0 cursor-pointer"
+            title="Copy Board Webhook URL"
+          >
+            📋 Copy
+          </button>
+        </div>
+      </div>
+
+      <!-- Row 2: Ingest URL -->
+      <div class="space-y-1.5 p-3 rounded-xl border border-border bg-muted/20">
+        <div class="flex items-center justify-between">
+          <label class="font-bold text-foreground text-[11px]">Ingest Callback URL (HTTP Target in Make)</label>
+          <span class="text-[10px] font-mono text-primary font-semibold">POST</span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <input
+            id="kit-ingest-url"
+            type="text"
+            readonly
+            value=""
+            class="w-full rounded-lg border border-border bg-background py-1.5 px-2.5 text-xs font-mono text-foreground select-all focus:outline-none"
+          />
+          <button
+            type="button"
+            id="btn-copy-kit-ingest-url"
+            class="rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold hover:bg-muted text-foreground transition-all shrink-0 cursor-pointer"
+            title="Copy Ingest Callback URL"
+          >
+            📋 Copy
+          </button>
+        </div>
+      </div>
+
+      <!-- Row 3: x-ingest-secret -->
+      <div class="space-y-1.5 p-3 rounded-xl border border-border bg-muted/20">
+        <div class="flex items-center justify-between">
+          <label class="font-bold text-foreground text-[11px]">Ingest Secret (x-ingest-secret header)</label>
+          <span class="text-[10px] font-mono text-amber-500 font-semibold">Header Auth</span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <input
+            id="kit-secret-input"
+            type="password"
+            readonly
+            value="••••••••••••••••••••••••"
+            class="w-full rounded-lg border border-border bg-background py-1.5 px-2.5 text-xs font-mono text-foreground select-all focus:outline-none"
+          />
+          <button
+            type="button"
+            id="btn-reveal-kit-secret"
+            class="rounded-lg border border-primary/30 bg-primary/10 px-2.5 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition-all shrink-0 cursor-pointer"
+          >
+            Reveal
+          </button>
+          <button
+            type="button"
+            id="btn-copy-kit-secret"
+            class="rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold hover:bg-muted text-foreground transition-all shrink-0 cursor-pointer"
+            title="Copy Ingest Secret"
+          >
+            📋 Copy
+          </button>
+        </div>
+      </div>
+
+      <!-- Row 4: Events list -->
+      <div class="space-y-1.5 p-3 rounded-xl border border-border bg-muted/20">
+        <div class="flex items-center justify-between">
+          <label class="font-bold text-foreground text-[11px]">Supported Board Callback Events</label>
+          <span class="text-[10px] font-mono text-emerald-500 font-semibold">3 Handlers</span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <input
+            id="kit-events-input"
+            type="text"
+            readonly
+            value="board.created, boards.list, board.deleted"
+            class="w-full rounded-lg border border-border bg-background py-1.5 px-2.5 text-xs font-mono text-foreground select-all focus:outline-none"
+          />
+          <button
+            type="button"
+            id="btn-copy-kit-events"
+            class="rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold hover:bg-muted text-foreground transition-all shrink-0 cursor-pointer"
+            title="Copy Events List"
+          >
+            📋 Copy
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer note -->
+    <div class="pt-2 border-t border-border flex items-center justify-between text-[11px] text-muted-foreground">
+      <p class="italic">Paste these into your Make board scenario (Router on action).</p>
+      <span class="font-mono text-[10px]">Content-Type: application/json</span>
     </div>
   </div>
 
@@ -1051,6 +1193,7 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
     initFilterInputs();
     setupFilterListeners();
     setupModalListeners();
+    setupBoardPipelineKitListeners();
 
     await loadAllData();
   }
@@ -2425,7 +2568,174 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
 
       container.innerHTML = cardsHtml;
     }
+
+    // Populate Board Channel dropdown
+    const boardChannelSelect = document.getElementById('select-board-channel') as HTMLSelectElement | null;
+    if (boardChannelSelect) {
+      const currentSelected = currentAccount?.board_webhook_id || currentAccount?.board_creation_webhook_id || '';
+      boardChannelSelect.innerHTML = `<option value="">Auto (First Active)</option>` +
+        (activeAccountWebhooks || []).map((w) => {
+          const cap = w.monthly_capacity ?? 500;
+          const usage = w.monthly_usage ?? 0;
+          const rem = Math.max(0, cap - usage);
+          const isSel = w.id === currentSelected ? 'selected' : '';
+          return `<option value="${w.id}" ${isSel}>${escapeHtml(w.label)} (${rem}/${cap} runs)</option>`;
+        }).join('');
+    }
+
+    updateBoardPipelineKit();
     bindWebhookCardListeners();
+  }
+
+  let revealedIngestSecret: string | null = null;
+
+  function updateBoardPipelineKit() {
+    // 1. Ingest URL
+    const ingestUrlInput = document.getElementById('kit-ingest-url') as HTMLInputElement | null;
+    if (ingestUrlInput && typeof window !== 'undefined') {
+      ingestUrlInput.value = `${window.location.origin}/api/internal/pinterest/ingest`;
+    }
+
+    // 2. Board Webhook URL & Label
+    const whInput = document.getElementById('kit-board-webhook-url') as HTMLInputElement | null;
+    const channelLabel = document.getElementById('kit-wh-channel-label');
+    if (whInput) {
+      const targetWhId = currentAccount?.board_webhook_id || currentAccount?.board_creation_webhook_id;
+      let targetWh = targetWhId ? activeAccountWebhooks.find(w => w.id === targetWhId) : null;
+      if (!targetWh) {
+        targetWh = activeAccountWebhooks.find(w => w.is_active && /board/i.test(w.label)) ||
+                   activeAccountWebhooks.find(w => w.is_active) ||
+                   activeAccountWebhooks[0];
+      }
+      if (targetWh) {
+        whInput.value = targetWh.webhook_url;
+        if (channelLabel) channelLabel.textContent = `${targetWh.label} (#${targetWh.priority || 1})`;
+      } else {
+        whInput.value = 'No active webhook found';
+        if (channelLabel) channelLabel.textContent = 'None';
+      }
+    }
+  }
+
+  function setupBoardPipelineKitListeners() {
+    // Select board channel change listener
+    const boardChannelSelect = document.getElementById('select-board-channel') as HTMLSelectElement | null;
+    boardChannelSelect?.addEventListener('change', async (e) => {
+      const val = (e.target as HTMLSelectElement).value || null;
+      try {
+        const res = await fetch('/api/accounts/board-channel', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ account_id: accountId, webhook_id: val }),
+        });
+        const d = await res.json();
+        if (!res.ok) {
+          showFeedbackBanner(d.error || 'Failed to update board channel', 'error');
+        } else {
+          if (currentAccount) {
+            currentAccount.board_webhook_id = val;
+            currentAccount.board_creation_webhook_id = val;
+          }
+          updateBoardPipelineKit();
+          showFeedbackBanner('Board channel updated successfully.', 'success');
+        }
+      } catch (err: any) {
+        showFeedbackBanner(err.message || 'Error updating board channel', 'error');
+      }
+    });
+
+    // Copy buttons
+    document.getElementById('btn-copy-kit-wh-url')?.addEventListener('click', () => {
+      const v = (document.getElementById('kit-board-webhook-url') as HTMLInputElement)?.value;
+      if (v && v.startsWith('http')) {
+        navigator.clipboard.writeText(v);
+        showFeedbackBanner('Board Webhook URL copied to clipboard.', 'success');
+      }
+    });
+
+    document.getElementById('btn-copy-kit-ingest-url')?.addEventListener('click', () => {
+      const v = (document.getElementById('kit-ingest-url') as HTMLInputElement)?.value;
+      if (v) {
+        navigator.clipboard.writeText(v);
+        showFeedbackBanner('Ingest Callback URL copied to clipboard.', 'success');
+      }
+    });
+
+    document.getElementById('btn-copy-kit-events')?.addEventListener('click', () => {
+      const v = (document.getElementById('kit-events-input') as HTMLInputElement)?.value;
+      if (v) {
+        navigator.clipboard.writeText(v);
+        showFeedbackBanner('Events list copied to clipboard.', 'success');
+      }
+    });
+
+    // Reveal secret
+    const revealBtn = document.getElementById('btn-reveal-kit-secret');
+    const secretInput = document.getElementById('kit-secret-input') as HTMLInputElement | null;
+    const copySecretBtn = document.getElementById('btn-copy-kit-secret');
+
+    revealBtn?.addEventListener('click', async () => {
+      if (revealedIngestSecret) {
+        revealedIngestSecret = null;
+        if (secretInput) {
+          secretInput.type = 'password';
+          secretInput.value = '••••••••••••••••••••••••';
+        }
+        if (revealBtn) revealBtn.textContent = 'Reveal';
+        return;
+      }
+
+      try {
+        if (revealBtn) revealBtn.textContent = 'Revealing...';
+        const wsId = currentAccount?.workspace_id;
+        const res = await fetch('/api/secrets/reveal', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ workspace_id: wsId }),
+        });
+        const d = await res.json();
+        if (!res.ok || !d.secret) {
+          showFeedbackBanner(d.error || 'Failed to reveal ingest secret', 'error');
+          if (revealBtn) revealBtn.textContent = 'Reveal';
+        } else {
+          revealedIngestSecret = d.secret;
+          if (secretInput) {
+            secretInput.type = 'text';
+            secretInput.value = d.secret;
+          }
+          if (revealBtn) revealBtn.textContent = 'Hide';
+        }
+      } catch (e: any) {
+        showFeedbackBanner(e.message || 'Error revealing secret', 'error');
+        if (revealBtn) revealBtn.textContent = 'Reveal';
+      }
+    });
+
+    copySecretBtn?.addEventListener('click', async () => {
+      if (revealedIngestSecret) {
+        navigator.clipboard.writeText(revealedIngestSecret);
+        showFeedbackBanner('Ingest secret copied to clipboard.', 'success');
+      } else {
+        try {
+          const wsId = currentAccount?.workspace_id;
+          const res = await fetch('/api/secrets/reveal', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ workspace_id: wsId }),
+          });
+          const d = await res.json();
+          if (res.ok && d.secret) {
+            revealedIngestSecret = d.secret;
+            navigator.clipboard.writeText(d.secret);
+            showFeedbackBanner('Ingest secret copied to clipboard.', 'success');
+          } else {
+            showFeedbackBanner(d.error || 'Failed to fetch secret for copy', 'error');
+          }
+        } catch (e: any) {
+          showFeedbackBanner(e.message || 'Error copying secret', 'error');
+        }
+      }
+    });
   }
 
   function bindWebhookCardListeners() {

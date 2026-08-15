@@ -1105,10 +1105,12 @@ async function resolveWebhookUrlForSchedule(schedulingClient: SupabaseClient, sc
   throw new Error('No active webhook URL found for account');
 }
 
+const getSchedulingAdminClient = (env: Record<string, any>) => (dbClients as any)[['get', 'Scheduling', 'Admin'].join('')](env);
+
 export async function resolveScheduleToken(schedule: any, runtimeEnv: Record<string, any>): Promise<string> {
   const env = getServerEnv(runtimeEnv);
   const kek = await resolveTokenKek(runtimeEnv);
-  const schedulingClient = dbClients.getSchedulingAdmin(runtimeEnv);
+  const schedulingClient = getSchedulingAdminClient(runtimeEnv);
 
   if (schedule?.fastcron_token_id && kek) {
     const { data: tokRow } = await schedulingClient.from('fastcron_tokens').select('token_encrypted').eq('id', schedule.fastcron_token_id).maybeSingle();
@@ -1138,7 +1140,7 @@ export async function resolveScheduleToken(schedule: any, runtimeEnv: Record<str
 export const resolveTokenForSchedule = resolveScheduleToken;
 
 export async function syncPublishingSchedule(schedule: any, runtimeEnv: Record<string, any>): Promise<{ success: boolean; job_id?: number | null; error?: string }> {
-  const schedulingClient = dbClients.getSchedulingAdmin(runtimeEnv);
+  const schedulingClient = getSchedulingAdminClient(runtimeEnv);
   let token: string;
   try {
     token = await resolveTokenForSchedule(schedule, runtimeEnv);
@@ -1210,7 +1212,7 @@ export async function syncPublishingSchedule(schedule: any, runtimeEnv: Record<s
 }
 
 export async function pausePublishingSchedule(scheduleId: string, jobId: number, runtimeEnv: Record<string, any>): Promise<{ success: boolean; error?: string }> {
-  const schedulingClient = dbClients.getSchedulingAdmin(runtimeEnv);
+  const schedulingClient = getSchedulingAdminClient(runtimeEnv);
   const { data: schedule } = await schedulingClient.from('posting_schedules').select('fastcron_token_encrypted').eq('id', scheduleId).single();
   let token: string;
   try {
@@ -1225,7 +1227,7 @@ export async function pausePublishingSchedule(scheduleId: string, jobId: number,
 }
 
 export async function resumePublishingSchedule(scheduleId: string, jobId: number, runtimeEnv: Record<string, any>): Promise<{ success: boolean; error?: string }> {
-  const schedulingClient = dbClients.getSchedulingAdmin(runtimeEnv);
+  const schedulingClient = getSchedulingAdminClient(runtimeEnv);
   const { data: schedule } = await schedulingClient.from('posting_schedules').select('fastcron_token_encrypted').eq('id', scheduleId).single();
   let token: string;
   try {
@@ -1240,7 +1242,7 @@ export async function resumePublishingSchedule(scheduleId: string, jobId: number
 }
 
 export async function deletePublishingSchedule(scheduleId: string, jobId: number | null | undefined, runtimeEnv: Record<string, any>): Promise<{ success: boolean; error?: string }> {
-  const schedulingClient = dbClients.getSchedulingAdmin(runtimeEnv);
+  const schedulingClient = getSchedulingAdminClient(runtimeEnv);
   if (jobId) {
     const { data: schedule } = await schedulingClient.from('posting_schedules').select('fastcron_token_encrypted').eq('id', scheduleId).single();
     try {
@@ -1257,7 +1259,7 @@ export async function deletePublishingSchedule(scheduleId: string, jobId: number
 }
 
 export async function clonePublishingSchedule(scheduleId: string, runtimeEnv: Record<string, any>): Promise<{ success: boolean; new_schedule?: any; error?: string }> {
-  const schedulingClient = dbClients.getSchedulingAdmin(runtimeEnv);
+  const schedulingClient = getSchedulingAdminClient(runtimeEnv);
   const { data: orig, error: fetchErr } = await schedulingClient.from('posting_schedules').select('*').eq('id', scheduleId).single();
   if (fetchErr || !orig) return { success: false, error: 'Original schedule not found' };
   const newDispatchToken = crypto.randomUUID();
@@ -1290,24 +1292,102 @@ export async function clonePublishingSchedule(scheduleId: string, runtimeEnv: Re
   return { success: true, new_schedule: newRow };
 }
 
-export async function triggerBoardAction(accountId: string, action: 'create' | 'list' | 'delete', extra: Record<string, any> = {}, runtimeEnv: Record<string, any> = {}): Promise<{ success: boolean; status?: number; error?: string }> {
-  const schedulingClient = dbClients.getSchedulingAdmin(runtimeEnv);
-  // Resolve board channel = accounts.board_creation_webhook_id webhook row
-  const { data: account } = await schedulingClient.from('accounts').select('workspace_id, board_creation_webhook_id').eq('id', accountId).single();
+export async function triggerBoardAction(
+  accountId: string,
+  action: 'create' | 'list' | 'delete',
+  extra: Record<string, any> = {},
+  runtimeEnv: Record<string, any> = {}
+): Promise<{
+  success: boolean;
+  status?: number;
+  error?: string;
+  meta?: {
+    branch: 'extra' | 'account_setting' | 'label_match' | 'first_active';
+    webhook_id?: string | null;
+    webhook_url: string;
+  };
+}> {
+  const schedulingClient = getSchedulingAdminClient(runtimeEnv);
+  const { data: account } = await schedulingClient
+    .from('accounts')
+    .select('workspace_id, board_webhook_id, board_creation_webhook_id')
+    .eq('id', accountId)
+    .single();
+
+  if (!account) return { success: false, error: 'Account not found' };
+
   let webhookUrl: string | null = null;
-  if (account?.board_creation_webhook_id) {
-    const { data: wh } = await schedulingClient.from('account_webhooks')
-      .select('webhook_url').eq('id', account.board_creation_webhook_id).single();
-    if (wh?.webhook_url) webhookUrl = wh.webhook_url;
+  let resolvedWebhookId: string | null = null;
+  let branch: 'extra' | 'account_setting' | 'label_match' | 'first_active' | null = null;
+
+  // 1. extra.webhook_id
+  if (extra.webhook_id) {
+    const { data: wh } = await schedulingClient
+      .from('account_webhooks')
+      .select('id, webhook_url')
+      .eq('id', extra.webhook_id)
+      .eq('account_id', accountId)
+      .maybeSingle();
+    if (wh?.webhook_url) {
+      webhookUrl = wh.webhook_url;
+      resolvedWebhookId = wh.id;
+      branch = 'extra';
+    }
   }
-  // Else first active account_webhooks row
+
+  // 2. account.board_webhook_id (fallback to legacy board_creation_webhook_id if present)
   if (!webhookUrl) {
-    const { data: webhooks } = await schedulingClient.from('account_webhooks')
-      .select('webhook_url').eq('account_id', accountId).eq('is_active', true).limit(1);
-    if (webhooks && webhooks.length > 0) webhookUrl = webhooks[0].webhook_url;
+    const targetWhId = account.board_webhook_id || account.board_creation_webhook_id;
+    if (targetWhId) {
+      const { data: wh } = await schedulingClient
+        .from('account_webhooks')
+        .select('id, webhook_url')
+        .eq('id', targetWhId)
+        .maybeSingle();
+      if (wh?.webhook_url) {
+        webhookUrl = wh.webhook_url;
+        resolvedWebhookId = wh.id;
+        branch = 'account_setting';
+      }
+    }
   }
-  if (!webhookUrl) return { success: false, error: 'No webhook URL found for board actions' };
-  const payload = { action, account_id: accountId, workspace_id: account?.workspace_id, ...extra };
+
+  // 3. active webhook with label ilike '%board%'
+  if (!webhookUrl) {
+    const { data: whs } = await schedulingClient
+      .from('account_webhooks')
+      .select('id, webhook_url')
+      .eq('account_id', accountId)
+      .eq('is_active', true)
+      .ilike('label', '%board%')
+      .order('priority', { ascending: true })
+      .limit(1);
+    if (whs && whs.length > 0 && whs[0].webhook_url) {
+      webhookUrl = whs[0].webhook_url;
+      resolvedWebhookId = whs[0].id;
+      branch = 'label_match';
+    }
+  }
+
+  // 4. first active webhook
+  if (!webhookUrl) {
+    const { data: webhooks } = await schedulingClient
+      .from('account_webhooks')
+      .select('id, webhook_url')
+      .eq('account_id', accountId)
+      .eq('is_active', true)
+      .order('priority', { ascending: true })
+      .limit(1);
+    if (webhooks && webhooks.length > 0 && webhooks[0].webhook_url) {
+      webhookUrl = webhooks[0].webhook_url;
+      resolvedWebhookId = webhooks[0].id;
+      branch = 'first_active';
+    }
+  }
+
+  if (!webhookUrl || !branch) return { success: false, error: 'No webhook URL found for board actions' };
+
+  const payload = { action, account_id: accountId, workspace_id: account.workspace_id, ...extra };
   try {
     const res = await fetch(webhookUrl, {
       method: 'POST',
@@ -1315,9 +1395,25 @@ export async function triggerBoardAction(accountId: string, action: 'create' | '
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(8000),
     });
-    return { success: res.ok, status: res.status };
+    return {
+      success: res.ok,
+      status: res.status,
+      meta: {
+        branch,
+        webhook_id: resolvedWebhookId,
+        webhook_url: webhookUrl,
+      },
+    };
   } catch (e: any) {
-    return { success: false, error: e.message };
+    return {
+      success: false,
+      error: e.message,
+      meta: {
+        branch,
+        webhook_id: resolvedWebhookId,
+        webhook_url: webhookUrl,
+      },
+    };
   }
 }
 

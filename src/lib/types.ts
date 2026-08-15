@@ -62,6 +62,7 @@ export interface Account {
   last_published_at?: string | null;
   auto_create_missing_boards?: boolean;
   board_creation_webhook_id?: string | null;
+  board_webhook_id?: string | null;
   active_days?: string[] | string;
 }
 

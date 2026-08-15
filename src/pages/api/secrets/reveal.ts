@@ -24,9 +24,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return new Response(JSON.stringify({ error: 'Service unavailable: ingest secret not configured on server.' }), { status: 503, headers: { 'Content-Type': 'application/json' } });
   }
   const admin = dbClients.getSchedulingAdmin(runtimeEnv);
-  await admin.from('audit_log').insert({
-    table_name: 'ingest_secrets', record_id: wsId,
-    action: 'SECRET_REVEAL', new_data: { source: st.source }, changed_by: user.id,
-  }).then(() => {}).catch(() => {});
+  try {
+    await admin.from('audit_log').insert({
+      table_name: 'ingest_secrets', record_id: wsId,
+      action: 'SECRET_REVEAL', new_data: { source: st.source }, changed_by: user.id,
+    });
+  } catch {}
   return new Response(JSON.stringify({ success: true, secret: st.secret, source: st.source }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 };

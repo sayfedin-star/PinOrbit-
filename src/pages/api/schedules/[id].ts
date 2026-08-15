@@ -77,8 +77,8 @@ export const DELETE: APIRoute = async ({ params, locals }) => {
   const runtimeEnv = (locals as any)?.runtime?.env || (locals as any)?.runtimeEnv || {};
   const { id } = params;
 
-  if (!user || !schedulingClient || !workspaceId) {
-    return new Response(JSON.stringify({ error: 'Unauthorized or missing workspace' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+  if (!user || !schedulingClient || !workspaceId || !id) {
+    return new Response(JSON.stringify({ error: 'Unauthorized or missing workspace/schedule ID' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
   }
 
   try {
