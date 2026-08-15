@@ -3,7 +3,14 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 import { assertWorkspaceAccess } from '../../../../server/auth/workspace-guard';
 import { dbClients } from '../../../../server/db/clients';
-import { pausePublishingSchedule, resumePublishingSchedule, clonePublishingSchedule, deletePublishingSchedule, fastcronService } from '../../../../server/services/fastcron-service';
+import {
+  pausePublishingSchedule,
+  resumePublishingSchedule,
+  clonePublishingSchedule,
+  deletePublishingSchedule,
+  resolveScheduleToken,
+  fastcronService,
+} from '../../../../server/services/fastcron-service';
 
 export const POST: APIRoute = async ({ request, params, locals }) => {
   const user = locals.user;
@@ -55,7 +62,6 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     if (action === 'run') {
       if (schedule.fastcron_job_id) {
         try {
-          const { resolveScheduleToken } = await import('../../../../server/services/fastcron-service');
           const token = await resolveScheduleToken(schedule, runtimeEnv);
           if (token) {
             const res = await fastcronService.fastcronCall('cron_run', { id: schedule.fastcron_job_id }, token);
@@ -93,7 +99,7 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     if (action === 'delete') {
       const result = await deletePublishingSchedule(id, schedule.fastcron_job_id, runtimeEnv);
       if (!result.success) throw new Error(result.error);
-      return new Response(JSON.stringify({ success: true }), { status: 200 });
+      return new Response(JSON.stringify({ success: true, remote_deleted: result.remote_deleted, remote_error: result.remote_error }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
   } catch (err: any) {
     return new Response(JSON.stringify({ error: err.message || 'Action failed' }), { status: 500, headers: { 'Content-Type': 'application/json' } });

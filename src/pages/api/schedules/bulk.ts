@@ -4,10 +4,14 @@ import type { APIRoute } from 'astro';
 import { validateUserSession } from '../../../server/auth/session';
 import { assertWorkspaceAccess } from '../../../server/auth/workspace-guard';
 import { dbClients } from '../../../server/db/clients';
-import { pausePublishingSchedule, resumePublishingSchedule, clonePublishingSchedule, deletePublishingSchedule, syncPublishingSchedule } from '../../../server/services/fastcron-service';
-import { fastcronService } from '../../../server/services/fastcron-service';
-import { getServerEnv } from '../../../server/db/clients';
-import { decryptToken } from '../../../server/lib/token-crypto';
+import {
+  pausePublishingSchedule,
+  resumePublishingSchedule,
+  clonePublishingSchedule,
+  deletePublishingSchedule,
+  resolveScheduleToken,
+  fastcronService,
+} from '../../../server/services/fastcron-service';
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const user = locals.user;
@@ -38,7 +42,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   try {
     await assertWorkspaceAccess(schedulingClient, workspaceId, user.id, 'admin');
     const adminClient = dbClients.getSchedulingAdmin(runtimeEnv);
-    const results: { id: string; success: boolean; error?: string }[] = [];
+    const results: { id: string; success: boolean; error?: string; remote_deleted?: boolean; remote_error?: string }[] = [];
 
     for (const id of ids) {
       try {
@@ -50,13 +54,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
         if (action === 'run') {
           if (schedule.fastcron_job_id) {
-            const env = getServerEnv(runtimeEnv);
-            let token: string | undefined;
-            if (schedule.fastcron_token_encrypted) {
-              const dec = await decryptToken(schedule.fastcron_token_encrypted, env.TOKEN_KEK);
-              if (dec) token = dec.trim();
-            }
-            if (!token && env.FASTCRON_API_TOKEN) token = env.FASTCRON_API_TOKEN.trim();
+            const token = await resolveScheduleToken(schedule, runtimeEnv);
             if (token) {
               const res = await fastcronService.fastcronCall('cron_run', { id: schedule.fastcron_job_id }, token);
               if (!res.success) throw new Error(res.error);
@@ -76,7 +74,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
         } else if (action === 'delete') {
           const result = await deletePublishingSchedule(id, schedule.fastcron_job_id, runtimeEnv);
           if (!result.success) throw new Error(result.error);
-          results.push({ id, success: true });
+          results.push({
+            id,
+            success: true,
+            remote_deleted: result.remote_deleted,
+            remote_error: result.remote_error,
+          });
         } else if (action === 'clone') {
           const result = await clonePublishingSchedule(id, runtimeEnv);
           if (!result.success) throw new Error(result.error);
@@ -87,7 +90,14 @@ export const POST: APIRoute = async ({ request, locals }) => {
       }
     }
 
-    const summary = { total: ids.length, success: results.filter(r => r.success).length, failed: results.filter(r => !r.success).length, results };
+    const remoteOrphans = results.filter(r => r.success && r.remote_error).length;
+    const summary = {
+      total: ids.length,
+      success: results.filter(r => r.success).length,
+      failed: results.filter(r => !r.success).length,
+      remote_orphans: remoteOrphans,
+      results,
+    };
     return new Response(JSON.stringify(summary), { status: 200, headers: { 'Content-Type': 'application/json' } });
   } catch (err: any) {
     return new Response(JSON.stringify({ error: err.message || 'Bulk action failed' }), { status: 500, headers: { 'Content-Type': 'application/json' } });

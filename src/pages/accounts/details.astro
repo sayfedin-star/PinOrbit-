@@ -3232,8 +3232,11 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
         showFeedbackBanner(d.error || JSON.stringify(d), 'error');
         alert(d.error || JSON.stringify(d));
       } else {
-        const msg = `Bulk ${action}: Total: ${d.total}, Success: ${d.success}, Failed: ${d.failed}`;
-        showFeedbackBanner(msg, d.failed === 0 ? 'success' : 'info');
+        let msg = `Bulk ${action}: Total: ${d.total}, Success: ${d.success}, Failed: ${d.failed}`;
+        if (d.remote_orphans && d.remote_orphans > 0) {
+          msg = `Bulk ${action}: Success: ${d.success} (remote orphans: ${d.remote_orphans}), Failed: ${d.failed}`;
+        }
+        showFeedbackBanner(msg, d.failed === 0 && (!d.remote_orphans || d.remote_orphans === 0) ? 'success' : 'info');
         alert(msg);
       }
       selectedScheduleIds.clear();
@@ -3545,7 +3548,11 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
       showFeedbackBanner(d.error || JSON.stringify(d), 'error');
       alert(d.error || JSON.stringify(d));
     } else {
-      showFeedbackBanner(`Schedule action "${act}" completed.`, 'success');
+      if (d.remote_error) {
+        showFeedbackBanner(`Schedule deleted (remote error: ${d.remote_error}).`, 'info');
+      } else {
+        showFeedbackBanner(`Schedule action "${act}" completed.`, 'success');
+      }
     }
     await loadSchedules();
   }

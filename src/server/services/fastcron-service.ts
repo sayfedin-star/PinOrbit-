@@ -1213,12 +1213,12 @@ export async function syncPublishingSchedule(schedule: any, runtimeEnv: Record<s
 
 export async function pausePublishingSchedule(scheduleId: string, jobId: number, runtimeEnv: Record<string, any>): Promise<{ success: boolean; error?: string }> {
   const schedulingClient = getSchedulingAdminClient(runtimeEnv);
-  const { data: schedule } = await schedulingClient.from('posting_schedules').select('fastcron_token_encrypted').eq('id', scheduleId).single();
+  const { data: schedule } = await schedulingClient.from('posting_schedules').select('*').eq('id', scheduleId).single();
   let token: string;
   try {
     token = await resolveScheduleToken(schedule, runtimeEnv);
   } catch (e: any) {
-    return { success: false, error: e.message || 'Token not configured' };
+    return { success: false, error: e.message || 'FastCron API token not configured' };
   }
   const res = await fastcronService.fastcronCall('cron_disable', { id: jobId }, token);
   if (!res.success) return { success: false, error: res.error };
@@ -1228,12 +1228,12 @@ export async function pausePublishingSchedule(scheduleId: string, jobId: number,
 
 export async function resumePublishingSchedule(scheduleId: string, jobId: number, runtimeEnv: Record<string, any>): Promise<{ success: boolean; error?: string }> {
   const schedulingClient = getSchedulingAdminClient(runtimeEnv);
-  const { data: schedule } = await schedulingClient.from('posting_schedules').select('fastcron_token_encrypted').eq('id', scheduleId).single();
+  const { data: schedule } = await schedulingClient.from('posting_schedules').select('*').eq('id', scheduleId).single();
   let token: string;
   try {
     token = await resolveScheduleToken(schedule, runtimeEnv);
   } catch (e: any) {
-    return { success: false, error: e.message || 'Token not configured' };
+    return { success: false, error: e.message || 'FastCron API token not configured' };
   }
   const res = await fastcronService.fastcronCall('cron_enable', { id: jobId }, token);
   if (!res.success) return { success: false, error: res.error };
@@ -1241,21 +1241,40 @@ export async function resumePublishingSchedule(scheduleId: string, jobId: number
   return { success: true };
 }
 
-export async function deletePublishingSchedule(scheduleId: string, jobId: number | null | undefined, runtimeEnv: Record<string, any>): Promise<{ success: boolean; error?: string }> {
+export async function deletePublishingSchedule(
+  scheduleId: string,
+  jobId: number | null | undefined,
+  runtimeEnv: Record<string, any>
+): Promise<{ success: boolean; remote_deleted?: boolean; remote_error?: string; error?: string }> {
   const schedulingClient = getSchedulingAdminClient(runtimeEnv);
+  let remoteError: string | undefined;
+  let remoteDeleted = false;
+
   if (jobId) {
-    const { data: schedule } = await schedulingClient.from('posting_schedules').select('fastcron_token_encrypted').eq('id', scheduleId).single();
+    const { data: schedule } = await schedulingClient.from('posting_schedules').select('*').eq('id', scheduleId).maybeSingle();
     try {
       const token = await resolveScheduleToken(schedule, runtimeEnv);
       if (token) {
-        await fastcronService.fastcronCall('cron_delete', { id: jobId }, token);
+        const res = await fastcronService.fastcronCall('cron_delete', { id: jobId }, token);
+        if (res.success) {
+          remoteDeleted = true;
+        } else {
+          remoteError = res.error || 'FastCron remote delete failed';
+        }
+      } else {
+        remoteError = 'FastCron API token not configured';
       }
-    } catch {
-      // Ignore token resolution error on delete so DB row can still be cleaned up
+    } catch (e: any) {
+      remoteError = e.message || 'FastCron API token not configured';
     }
   }
-  await schedulingClient.from('posting_schedules').delete().eq('id', scheduleId);
-  return { success: true };
+
+  const { error: dbErr } = await schedulingClient.from('posting_schedules').delete().eq('id', scheduleId);
+  if (dbErr) {
+    return { success: false, error: dbErr.message, remote_error: remoteError };
+  }
+
+  return { success: true, remote_deleted: remoteDeleted, remote_error: remoteError };
 }
 
 export async function clonePublishingSchedule(scheduleId: string, runtimeEnv: Record<string, any>): Promise<{ success: boolean; new_schedule?: any; error?: string }> {

@@ -20,7 +20,7 @@ export const GET: APIRoute = async ({ url, params, locals }) => {
   try {
     await assertWorkspaceAccess(schedulingClient, workspaceId, user.id);
     const adminClient = dbClients.getSchedulingAdmin(runtimeEnv);
-    const { data: schedule } = await adminClient.from('posting_schedules').select('fastcron_job_id, fastcron_token_encrypted, workspace_id').eq('id', id).single();
+    const { data: schedule } = await adminClient.from('posting_schedules').select('*').eq('id', id).single();
     if (!schedule || schedule.workspace_id !== workspaceId) {
       return new Response(JSON.stringify({ error: 'Schedule not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
     }
@@ -31,10 +31,10 @@ export const GET: APIRoute = async ({ url, params, locals }) => {
     let token: string | undefined;
     try {
       token = await resolveScheduleToken(schedule, runtimeEnv);
-    } catch {
-      return new Response(JSON.stringify({ error: 'Token not configured' }), { status: 400 });
+    } catch (e: any) {
+      return new Response(JSON.stringify({ error: e.message || 'FastCron API token not configured' }), { status: 400 });
     }
-    if (!token) return new Response(JSON.stringify({ error: 'Token not configured' }), { status: 400 });
+    if (!token) return new Response(JSON.stringify({ error: 'FastCron API token not configured' }), { status: 400 });
 
     let action = 'cron_logs';
     if (view === 'failures') action = 'cron_failures';
