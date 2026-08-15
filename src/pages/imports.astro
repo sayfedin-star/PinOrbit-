@@ -285,8 +285,6 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
     getPins,
     bulkInsertPins,
     getAccountWebhooks,
-    createBoardViaWebhook,
-    bulkCreateMissingBoardsViaWebhook,
     updateAccountAutoBoardSettings,
   } from '../lib/supabase';
   import { formatDate, escapeHtml } from '../lib/ui-helpers';
@@ -1006,25 +1004,34 @@ Keto Cauliflower Rice Bowl,https://images.unsplash.com/photo-1546069901-ba9599a7
     hideSuccess();
 
     const webhookId = await getSelectedWebhookId();
-    const res = await createBoardViaWebhook({
-      accountId: selectedAccount.id,
-      boardName,
-      webhookId,
-      triggerSource: 'import_manual',
-    });
-
-    if (res.success && res.board) {
-      showSuccess(`Successfully created board "${boardName}" in Pinterest via webhook! Revalidating staged rows...`);
-      // Update account boards in memory
-      accountBoards.push(res.board);
-      // Re-run validation instantly on stored CSV text
-      if (lastCsvText) {
-        await parseAndValidateCSV(lastCsvText);
+    try {
+      const r = await fetch('/api/boards/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          account_id: selectedAccount.id,
+          action: 'create',
+          board_name: boardName,
+          webhook_id: webhookId
+        })
+      });
+      const d = await r.json();
+      if (r.ok) {
+        showSuccess(`Successfully dispatched creation for board "${boardName}"! Revalidating staged rows...`);
+        accountBoards.push({
+          id: `temp-${Date.now()}`,
+          account_id: selectedAccount.id,
+          board_name: boardName,
+          created_at: new Date().toISOString()
+        } as any);
+        if (lastCsvText) {
+          await parseAndValidateCSV(lastCsvText);
+        }
+      } else {
+        showError(d.error || `Failed to create board "${boardName}". Affected rows remain invalid.`);
       }
-    } else {
-      const hookSelect = document.getElementById('board-creation-webhook-select') as HTMLSelectElement | null;
-      const hookLabel = hookSelect ? hookSelect.options[hookSelect.selectedIndex]?.text : 'Webhook';
-      showError(res.error || `Failed to create board "${boardName}" via webhook "${hookLabel}". Affected rows remain invalid.`);
+    } catch (err: any) {
+      showError(err.message || `Failed to create board "${boardName}". Affected rows remain invalid.`);
     }
   }
 
@@ -1039,26 +1046,49 @@ Keto Cauliflower Rice Bowl,https://images.unsplash.com/photo-1546069901-ba9599a7
     const boardNames = Array.from(missingBoardGroups.values()).map((g) => g.rawName);
     const webhookId = await getSelectedWebhookId();
 
-    const res = await bulkCreateMissingBoardsViaWebhook({
-      accountId: selectedAccount.id,
-      boardNames,
-      webhookId,
-      triggerSource: isAuto ? 'import_auto' : 'import_manual',
-    });
+    let createdCount = 0;
+    const errors: string[] = [];
+
+    for (const boardName of boardNames) {
+      try {
+        const r = await fetch('/api/boards/action', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            account_id: selectedAccount.id,
+            action: 'create',
+            board_name: boardName,
+            webhook_id: webhookId
+          })
+        });
+        const d = await r.json();
+        if (r.ok) {
+          createdCount++;
+          accountBoards.push({
+            id: `temp-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
+            account_id: selectedAccount.id,
+            board_name: boardName,
+            created_at: new Date().toISOString()
+          } as any);
+        } else {
+          errors.push(`"${boardName}": ${d.error || 'Failed'}`);
+        }
+      } catch (err: any) {
+        errors.push(`"${boardName}": ${err.message || 'Error'}`);
+      }
+    }
 
     if (bulkBtn) bulkBtn.disabled = false;
 
-    if (res.boards.length > 0) {
-      // Add all newly created boards to memory
-      accountBoards.push(...res.boards);
-      showSuccess(`Successfully created ${res.createdCount} board(s) (reused ${res.reusedCount}) via webhook! All affected staged rows revalidated.`);
+    if (createdCount > 0) {
+      showSuccess(`Dispatched creation for ${createdCount} board(s)! All affected staged rows revalidated.`);
       if (lastCsvText) {
         await parseAndValidateCSV(lastCsvText);
       }
     }
 
-    if (res.errors.length > 0) {
-      showError(`Board creation warning: ${res.errors.join('; ')}`);
+    if (errors.length > 0) {
+      showError(`Board creation warning: ${errors.join('; ')}`);
     }
   }
 

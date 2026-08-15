@@ -2605,7 +2605,7 @@ export interface CreateBoardResult {
 }
 
 export async function createBoardViaWebhook(options: CreateBoardOptions): Promise<CreateBoardResult> {
-  const { accountId, boardName, webhookId, triggerSource = 'import_manual' } = options;
+  const { accountId, boardName, webhookId } = options;
 
   if (!boardName || !boardName.trim()) {
     return { success: false, error: 'Board name is required' };
@@ -2627,216 +2627,37 @@ export async function createBoardViaWebhook(options: CreateBoardOptions): Promis
     };
   }
 
-  // 2. Invoke Supabase Edge Function (Server-to-Server Webhook Execution)
-  if (supabase) {
-    try {
-      const { data, error } = await supabase.functions.invoke('create-board-webhook', {
-        body: {
-          account_id: accountId,
-          board_name: rawTrimmed,
-          webhook_id: webhookId,
-        },
-      });
-
-      if (!error && data && data.success) {
-        return {
-          success: true,
-          board: data.board,
-          reused: !!data.reused,
-          pinterest_board_id: data.pinterest_board_id,
-        };
-      }
-
-      if (error) {
-        console.warn('Supabase Edge Function invoke notice, using direct fallback:', error.message);
-      }
-    } catch (edgeErr: any) {
-      console.warn('Supabase Edge Function exception, using direct fallback:', edgeErr.message);
-    }
-  }
-
-  // 3. Direct Fallback Execution (for local preview mode or if Edge Function is un-deployed)
-  return createBoardViaWebhookDirectFallback(options);
-}
-
-async function resolveWebhookChannel(accountId: string, preferredWebhookId?: string | null) {
-  const accountWebhooks = await getAccountWebhooks(accountId);
-  const activeHooks = accountWebhooks.filter((w) => w.is_active);
-
-  let selectedHook = activeHooks.find((h) => h.id === preferredWebhookId);
-  if (!selectedHook) {
-    selectedHook = activeHooks.find((h) => h.is_primary) || activeHooks[0];
-  }
-
-  return {
-    selectedWebhookId: selectedHook ? selectedHook.id : (preferredWebhookId || null),
-    selectedWebhookLabel: selectedHook ? selectedHook.label : 'Default Channel',
-    targetWebhookUrl: selectedHook ? selectedHook.webhook_url : null,
-  };
-}
-
-async function dispatchExternalWebhookPayload(url: string | null, payload: any) {
-  if (url && url.startsWith('http')) {
-    try {
-      await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify(payload),
-        mode: 'no-cors',
-      });
-    } catch (e) {
-      console.warn('External webhook HTTP notice:', e);
-    }
-  }
-}
-
-async function recordBoardCreationLogs(params: {
-  accountId: string;
-  boardId: string;
-  boardName: string;
-  idempotencyKey: string;
-  selectedWebhookId: string | null;
-  selectedWebhookLabel: string;
-  pinterestBoardId: string;
-  triggerSource: string;
-}) {
-  if (!supabase) return;
-
+  // 2. Dispatch via server funnel /api/boards/action
   try {
-    await supabase.from('audit_log').insert({
-      table_name: 'boards',
-      record_id: params.boardId,
-      action: 'BOARD_AUTO_CREATE',
-      old_data: null,
-      new_data: {
-        account_id: params.accountId,
-        board_name: params.boardName,
-        idempotency_key: params.idempotencyKey,
-        webhook_id: params.selectedWebhookId,
-        pinterest_board_id: params.pinterestBoardId,
-        trigger_source: params.triggerSource,
-      },
-      changed_by: 'admin',
+    const res = await fetch('/api/boards/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        account_id: accountId,
+        action: 'create',
+        board_name: rawTrimmed,
+        webhook_id: webhookId || undefined,
+      }),
     });
-  } catch (auditErr) {
-    console.warn('Audit log notice:', auditErr);
-  }
-
-  try {
-    await supabase.from('logs').insert({
-      account_id: params.accountId,
-      webhook_id: params.selectedWebhookId,
-      status: 'success',
-      message: `Created board "${params.boardName}" in Pinterest via webhook "${params.selectedWebhookLabel}" (Pinterest ID: ${params.pinterestBoardId})`,
-    });
-  } catch (logErr) {
-    console.warn('Logs notice:', logErr);
-  }
-}
-
-export async function createBoardViaWebhookDirectFallback(options: CreateBoardOptions): Promise<CreateBoardResult> {
-  const { accountId, boardName, webhookId, triggerSource = 'import_manual' } = options;
-  const rawTrimmed = boardName.trim();
-  const normalizedName = rawTrimmed.toLowerCase();
-  const idempotencyKey = `board.create:${accountId}:${normalizedName}`;
-
-  const { selectedWebhookId, selectedWebhookLabel, targetWebhookUrl } = await resolveWebhookChannel(accountId, webhookId);
-
-  const payload = {
-    event: 'board.create',
-    idempotency_key: idempotencyKey,
-    account_id: accountId,
-    board_name: rawTrimmed,
-    webhook_id: selectedWebhookId,
-    timestamp: new Date().toISOString(),
-  };
-
-  try {
-    const pinterestBoardId = `pin_bd_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-    await dispatchExternalWebhookPayload(targetWebhookUrl, payload);
-
-    const newBoard: Board = {
-      id: `board-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
-      account_id: accountId,
-      board_name: rawTrimmed,
-      board_id: pinterestBoardId,
-      pinterest_board_id: pinterestBoardId,
-      created_via: 'webhook_auto_create',
-      created_via_webhook_id: selectedWebhookId,
-      created_at: new Date().toISOString(),
-    };
-
-    if (!supabase) {
-      mockBoards.push(newBoard);
-    } else {
-      let { data, error } = await supabase
-        .from('boards')
-        .insert({
-          account_id: accountId,
-          board_name: rawTrimmed,
-          board_id: pinterestBoardId,
-          pinterest_board_id: pinterestBoardId,
-          created_via: 'webhook_auto_create',
-          created_via_webhook_id: selectedWebhookId,
-        })
-        .select()
-        .single();
-
-      if (error && (error.message.includes('created_via') || error.message.includes('schema cache') || error.message.includes('pinterest_board_id'))) {
-        const fallbackRes = await supabase
-          .from('boards')
-          .insert({
-            account_id: accountId,
-            board_name: rawTrimmed,
-            board_id: pinterestBoardId,
-          })
-          .select()
-          .single();
-        data = fallbackRes.data;
-        error = fallbackRes.error;
-      }
-
-      if (error) {
-        const recheckBoards = await getAccountBoards(accountId);
-        const rechecked = recheckBoards.find((b) => b.board_name.trim().toLowerCase() === normalizedName);
-        if (rechecked) {
-          return {
-            success: true,
-            board: rechecked,
-            reused: true,
-            pinterest_board_id: rechecked.pinterest_board_id || rechecked.board_id,
-          };
-        }
-        throw error;
-      }
-
-      if (data) {
-        newBoard.id = data.id;
-      }
-
-      await recordBoardCreationLogs({
-        accountId,
-        boardId: newBoard.id,
-        boardName: rawTrimmed,
-        idempotencyKey,
-        selectedWebhookId,
-        selectedWebhookLabel,
-        pinterestBoardId,
-        triggerSource,
-      });
+    const d = await res.json();
+    if (!res.ok) {
+      return { success: false, error: d.error || 'Failed to dispatch board creation' };
     }
-
     return {
       success: true,
-      board: newBoard,
-      reused: false,
-      pinterest_board_id: pinterestBoardId,
+      board: {
+        id: `board-${Date.now()}`,
+        account_id: accountId,
+        board_name: rawTrimmed,
+        board_id: '',
+        pinterest_board_id: '',
+        created_via: 'webhook_auto_create',
+        created_via_webhook_id: webhookId || null,
+        created_at: new Date().toISOString(),
+      },
     };
   } catch (err: any) {
-    return {
-      success: false,
-      error: `Failed to create board "${rawTrimmed}": ${err.message || 'Webhook execution failed'}`,
-    };
+    return { success: false, error: err.message || 'Failed to dispatch board creation' };
   }
 }
 
