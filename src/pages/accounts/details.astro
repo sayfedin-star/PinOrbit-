@@ -1020,7 +1020,6 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
     updateAccountScheduling,
     updateAccountDailyLimit,
     toggleAccountActive,
-    createBoardViaWebhook,
     rescheduleAccountPendingPins,
   } from '../../lib/supabase';
   import { renderStatusBadge, formatDate, formatTime, renderEmptyStateHTML, escapeHtml } from '../../lib/ui-helpers';
@@ -2228,13 +2227,14 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
     // ── Submit ──
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      if (!currentAccount) return;
+      const accId = accountId || currentAccount?.id;
+      if (!accId) return;
 
       resetFeedback();
-      const boardName = nameInput.value.trim();
-      const webhookId = hookSelect.value || undefined;
+      const name = nameInput.value.trim();
+      const selectedWebhookId = hookSelect.value || undefined;
 
-      if (!boardName) {
+      if (!name) {
         showError('Please enter a board name.');
         nameInput.focus();
         return;
@@ -2243,27 +2243,26 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
       setSubmitting(true);
 
       try {
-        const res = await createBoardViaWebhook({
-          accountId: currentAccount.id,
-          boardName,
-          webhookId,
-          triggerSource: 'account_details_manual',
+        const r = await fetch('/api/boards/action', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ account_id: accId, action: 'create', board_name: name, webhook_id: selectedWebhookId })
         });
-
+        const d = await r.json();
         setSubmitting(false);
 
-        if (res.success && res.reused) {
-          showReused(`Board "${boardName}" already exists on this account — reusing it.`);
-          setTimeout(() => { closeModal(); loadAllData(); }, 1800);
-        } else if (res.success && res.board) {
-          showSuccess(`Board "${boardName}" created successfully!`);
-          setTimeout(() => { closeModal(); loadAllData(); }, 1200);
+        if (!r.ok) {
+          showError(d.error || 'Failed to create board');
+          alert(d.error || 'Failed');
         } else {
-          showError(res.error || 'Failed to create board. Please try again.');
+          closeModal();
+          showFeedbackBanner(`Board "${name}" creation dispatched.`, 'success');
+          setTimeout(() => loadAllData(), 1200);
         }
       } catch (err: any) {
         setSubmitting(false);
         showError('An unexpected error occurred. Please try again.');
+        alert('Failed: ' + (err.message || 'Unknown error'));
       }
     });
 
@@ -2571,11 +2570,12 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
         const id = (e.currentTarget as HTMLElement).getAttribute('data-wh-test') || '';
         const hook = activeAccountWebhooks.find(h => h.id === id);
         if (!hook?.webhook_url) return;
+        const pingEndpoint = hook.webhook_url;
         const latencyEl = document.getElementById(`wh-ping-latency-${id}`);
         if (latencyEl) latencyEl.textContent = 'pinging...';
         const t0 = performance.now();
         try {
-          await fetch(hook.webhook_url, {
+          await fetch(pingEndpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ event: 'ping' }),
@@ -2602,11 +2602,12 @@ import KPIStatCard from '../../components/ui/KPIStatCard.astro';
       let totalLatency = 0;
       let count = 0;
       for (const hook of activeHooks) {
+        const pingEndpoint = hook.webhook_url;
         const latencyEl = document.getElementById(`wh-ping-latency-${hook.id}`);
         if (latencyEl) latencyEl.textContent = 'pinging...';
         const t0 = performance.now();
         try {
-          await fetch(hook.webhook_url, {
+          await fetch(pingEndpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ event: 'ping' }),
