@@ -222,11 +222,19 @@ export const POST: APIRoute = async ({ request, locals }) => {
         return new Response(JSON.stringify({ success: false, error: 'Account does not belong to workspace.' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
       }
 
-      const { error: delErr } = await admin
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(bId);
+      let query = admin
         .from('boards')
         .delete()
-        .eq('account_id', accId)
-        .or(`board_id.eq.${bId},pinterest_board_id.eq.${bId},id.eq.${bId}`);
+        .eq('account_id', accId);
+
+      if (isUuid) {
+        query = query.or(`id.eq.${bId},board_id.eq.${bId},pinterest_board_id.eq.${bId}`);
+      } else {
+        query = query.or(`board_id.eq.${bId},pinterest_board_id.eq.${bId}`);
+      }
+
+      const { error: delErr } = await query;
 
       if (delErr) {
         return new Response(JSON.stringify({ success: false, error: delErr.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });

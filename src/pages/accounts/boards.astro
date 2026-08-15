@@ -651,6 +651,7 @@ export const prerender = false;
 
       let deletedCount = 0;
       let failedCount = 0;
+      let lastError = '';
 
       for (const b of stagedBoards) {
         try {
@@ -663,14 +664,26 @@ export const prerender = false;
               board_id: b.board_id || b.id,
             }),
           });
-          if (res.ok) deletedCount++;
-          else failedCount++;
-        } catch {
+          const d = await res.json();
+          if (res.ok && d.success) {
+            deletedCount++;
+          } else {
+            failedCount++;
+            lastError = d.error || 'Failed to delete';
+          }
+        } catch (err: any) {
           failedCount++;
+          lastError = err.message || 'Network error';
         }
       }
 
-      showFeedback(`Successfully purged ${deletedCount} staged board(s)${failedCount > 0 ? ` (${failedCount} failed)` : ''}.`, 'success');
+      if (failedCount > 0 && deletedCount === 0) {
+        showFeedback(`Failed to purge staged boards: ${lastError}`, 'error');
+      } else if (failedCount > 0) {
+        showFeedback(`Purged ${deletedCount} board(s), but ${failedCount} failed: ${lastError}`, 'error');
+      } else {
+        showFeedback(`Successfully purged ${deletedCount} staged board(s).`, 'success');
+      }
       await loadData();
     });
 

@@ -54,11 +54,19 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
     // Handle delete_local: DB row deletion ONLY, no Pinterest/Make webhook dispatch
     if (action === 'delete_local') {
-      const { error: delErr } = await adminClient
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(board_id);
+      let query = adminClient
         .from('boards')
         .delete()
-        .eq('account_id', account_id)
-        .or(`board_id.eq.${board_id},id.eq.${board_id},pinterest_board_id.eq.${board_id}`);
+        .eq('account_id', account_id);
+
+      if (isUuid) {
+        query = query.or(`id.eq.${board_id},board_id.eq.${board_id},pinterest_board_id.eq.${board_id}`);
+      } else {
+        query = query.or(`board_id.eq.${board_id},pinterest_board_id.eq.${board_id}`);
+      }
+
+      const { error: delErr } = await query;
 
       if (delErr) {
         return new Response(JSON.stringify({ error: delErr.message || 'Failed to delete local board' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
