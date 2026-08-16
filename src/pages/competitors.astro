@@ -664,12 +664,14 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
           </div></td>`,
         type: `<td class="py-4 px-4"><span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold border ${isOwn ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' : 'bg-purple-500/10 text-purple-500 border-purple-500/20'}">${isOwn ? '👤 My Account' : '🎯 Competitor'}</span></td>`,
         niche: `<td class="py-4 px-4"><span class="inline-flex items-center rounded-md bg-muted px-2 py-1 text-[11px] font-medium text-foreground">${escHtml(c.niche || 'General')}</span></td>`,
-        reach: `<td class="py-4 px-4 font-bold text-emerald-500" title="${fmtFull(c.profile_reach)}">${fmtCompact(c.profile_reach)}</td>`,
-        views: `<td class="py-4 px-4 font-semibold text-foreground" title="${fmtFull(c.profile_views)}">${fmtCompact(c.profile_views)}</td>`,
-        followers: `<td class="py-4 px-4 font-semibold text-foreground" title="${fmtFull(c.follower_count)}">${fmtCompact(c.follower_count)}</td>`,
-        pins: `<td class="py-4 px-4 text-foreground" title="${fmtFull(c.pin_count)}">${fmtCompact(c.pin_count)}</td>`,
+        reach: `<td class="py-4 px-4 font-bold text-emerald-500">${fmtFull(c.profile_reach || 0)}</td>`,
+        views: `<td class="py-4 px-4 font-semibold text-foreground">${fmtFull(c.profile_views || 0)}</td>`,
+        followers: `<td class="py-4 px-4 font-semibold text-foreground">${fmtFull(c.follower_count || 0)}</td>`,
+        pins: `<td class="py-4 px-4 text-foreground">${fmtFull(c.pin_count || 0)}</td>`,
         boards_count: `<td class="py-4 px-4"><span class="inline-flex items-center rounded-md bg-muted/60 px-2 py-1 text-[11px] font-semibold text-foreground">${c.boards_count ?? 0}</span></td>`,
-        last_pin: `<td class="py-4 px-4 text-[11px]"><span class="inline-flex items-center gap-1.5 ${act.text}"><span class="h-1.5 w-1.5 rounded-full ${act.dot}"></span><span>${timeAgo(c.last_pin_at)}</span></span></td>`,
+        last_pin: `<td class="py-4 px-4 text-[11px] ${act.text}" title="${escHtml(c.last_pin_at || '')}">
+          <span class="inline-flex items-center gap-1.5"><span class="h-1.5 w-1.5 rounded-full ${act.dot}"></span><span>${timeAgo(c.last_pin_at)}${c.last_pin_at ? ' · ' + new Date(c.last_pin_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''}</span></span>
+        </td>`,
         strategy_age: `<td class="py-4 px-4"><span class="rounded bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">${c.strategy_age_days ? `${c.strategy_age_days}d active` : 'Unknown'}</span></td>`,
         actions: `<td class="py-4 px-4 text-right">
           <div class="flex items-center justify-end gap-1.5">

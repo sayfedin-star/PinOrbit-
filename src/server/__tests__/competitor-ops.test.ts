@@ -243,6 +243,54 @@ describe('Competitor Ops Console API Endpoints', () => {
       expect(res.status).toBe(401);
     });
 
+    it('GET returns competitor list with aggregated boards_count', async () => {
+      mockCompetitorsClient.from.mockImplementation((table: string) => {
+        if (table === 'competitors') {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                order: vi.fn().mockResolvedValue({
+                  data: [
+                    { id: 'comp-1', username: 'recipestower', workspace_id: 'ws-123' },
+                    { id: 'comp-2', username: 'betterhomebase', workspace_id: 'ws-123' },
+                  ],
+                  error: null,
+                }),
+              }),
+            }),
+          };
+        }
+        if (table === 'competitor_boards') {
+          return {
+            select: vi.fn().mockReturnValue({
+              in: vi.fn().mockResolvedValue({
+                data: [
+                  { competitor_id: 'comp-1' },
+                  { competitor_id: 'comp-1' },
+                  { competitor_id: 'comp-2' },
+                ],
+                error: null,
+              }),
+            }),
+          };
+        }
+        return {};
+      });
+
+      const req = new Request('http://localhost/api/admin/competitors?workspace_id=ws-123');
+      const res = await getCompetitors({
+        request: req,
+        locals: { user: { id: 'admin-user' }, supabase: {} as any, activeWorkspaceId: 'ws-123' },
+      } as any);
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.success).toBe(true);
+      expect(body.competitors).toHaveLength(2);
+      expect(body.competitors[0].boards_count).toBe(2);
+      expect(body.competitors[1].boards_count).toBe(1);
+    });
+
     it('POST creates competitor in Competitors DB', async () => {
       mockCompetitorsClient.from.mockReturnValue({
         insert: vi.fn().mockReturnValue({

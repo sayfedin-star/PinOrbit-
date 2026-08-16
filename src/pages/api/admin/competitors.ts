@@ -24,7 +24,16 @@ export const GET: APIRoute = async ({ request, locals }) => {
   if (!id) {
     const { data, error } = await g.ok!.db.from('competitors').select('*')
       .eq('workspace_id', g.ok!.ws).order('created_at', { ascending: false });
-    return error ? json({ error: error.message }, 500) : json({ success: true, competitors: data || [] });
+    if (error) return json({ error: error.message }, 500);
+    const comps = data || [];
+    const ids = comps.map((c: any) => c.id);
+    const countMap: Record<string, number> = {};
+    if (ids.length) {
+      const { data: bRows } = await g.ok!.db.from('competitor_boards')
+        .select('competitor_id').in('competitor_id', ids);
+      for (const b of (bRows || []) as any[]) countMap[b.competitor_id] = (countMap[b.competitor_id] || 0) + 1;
+    }
+    return json({ success: true, competitors: comps.map((c: any) => ({ ...c, boards_count: countMap[c.id] || 0 })) });
   }
   const db = g.ok!.db;
   const comp = await db.from('competitors').select('*').eq('id', id).eq('workspace_id', g.ok!.ws).maybeSingle();
