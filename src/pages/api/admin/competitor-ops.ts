@@ -4,6 +4,7 @@ import type { APIRoute } from 'astro';
 import { assertWorkspaceAccess } from '../../../server/auth/workspace-guard';
 import { dbClients } from '../../../server/db/clients';
 import { errorStatus } from '../../../server/lib/http-error';
+import { isCompetitorKekActive } from '../../../server/lib/competitor-kek';
 
 function getRuntimeEnv(locals: any): Record<string, any> {
   return locals?.runtime?.env || locals?.runtimeEnv || {};
@@ -84,10 +85,13 @@ export const GET: APIRoute = async ({ request, locals }) => {
 
     if (jobsErr) throw jobsErr;
 
+    const kekActive = await isCompetitorKekActive(competitorsClient);
+
     return jsonResponse(
       {
         success: true,
         settings: pipelineSettings || fallbackSettings,
+        kekActive,
         competitors: competitors || [],
         jobs: jobs || [],
       },
@@ -240,55 +244,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
     if (jobErr) throw jobErr;
 
-    // 2. Best-effort GitHub Actions repository_dispatch
-    const token =
-      runtimeEnv.GITHUB_DISPATCH_TOKEN ??
-      (typeof process !== 'undefined' ? process.env.GITHUB_DISPATCH_TOKEN : undefined);
-    const repo =
-      runtimeEnv.GITHUB_REPO ??
-      (typeof process !== 'undefined' ? process.env.GITHUB_REPO : undefined) ??
-      'sayfedin-star/pinorbit-v2';
-
-    let dispatched = false;
-    let warning: string | null = null;
-
-    if (token) {
-      try {
-        const res = await fetch(`https://api.github.com/repos/${repo}/dispatches`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: 'application/vnd.github+json',
-            'User-Agent': 'pinorbit-console',
-          },
-          body: JSON.stringify({
-            event_type: 'update-competitor',
-            client_payload: {
-              job_id: job.id,
-              username: username || null,
-              workspace_id: workspaceId,
-            },
-          }),
-          signal: AbortSignal.timeout(8000),
-        });
-
-        dispatched = res.status === 204;
-        if (!dispatched) {
-          warning = `GitHub dispatch failed: HTTP ${res.status}`;
-        }
-      } catch (e: any) {
-        warning = `GitHub dispatch error: ${e.message}`;
-      }
-    } else {
-      warning = 'GITHUB_DISPATCH_TOKEN not configured — job queued; run GitHub Action manually.';
-    }
-
+    // Queue-only: the 5-minute poller job in GitHub Actions adopts queued jobs.
     return jsonResponse(
       {
         success: true,
         job_id: job.id,
-        dispatched,
-        warning,
+        queued: true,
+        note: 'Poller will pick this up within 5 minutes.',
       },
       202
     );

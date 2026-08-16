@@ -3,7 +3,8 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 import { assertWorkspaceAccess } from '../../../server/auth/workspace-guard';
 import { dbClients } from '../../../server/db/clients';
-import { resolveTokenKek, encryptToken } from '../../../server/lib/token-crypto';
+import { encryptToken } from '../../../server/lib/token-crypto';
+import { resolveCompetitorKek } from '../../../server/lib/competitor-kek';
 import { errorStatus } from '../../../server/lib/http-error';
 
 function getRuntimeEnv(locals: any): Record<string, any> {
@@ -84,9 +85,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
   }
 
   try {
-    const kek = await resolveTokenKek(runtimeEnv);
+    const kek = await resolveCompetitorKek(competitorsClient);
     if (!kek) {
-      return jsonResponse({ success: false, error: 'TOKEN_KEK is not configured on the server' }, 500);
+      return jsonResponse({ success: false, error: 'KEK unavailable' }, 500);
     }
 
     const encryptedValue = await encryptToken(cookieValue.trim(), kek);

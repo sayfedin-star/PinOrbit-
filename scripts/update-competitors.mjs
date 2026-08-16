@@ -1,492 +1,262 @@
+// Node 22. Secrets: reuses EXISTING GitHub secrets only (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY).
+// KEK: self-provisioned in DB table competitor_kek. Cookies: vault-only + ONE-TIME legacy auto-import.
+// Workspaces: auto-discovered. Jobs: per-workspace daily jobs + queued-job adoption (poller).
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'node:crypto';
 
-// ─── Cryptographic Decryption ───────────────────────────────────────────────
+const enc = new TextEncoder(); const dec = new TextDecoder();
+const b64 = b => btoa(String.fromCharCode(...(b instanceof Uint8Array ? b : new Uint8Array(b))));
+const ub64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+
+// ── AES-GCM (same format as token-crypto.ts: v1:iv:ct, key=SHA-256(kek)) ──
+async function aesKey(kek, usage) {
+  const raw = await crypto.subtle.digest('SHA-256', enc.encode(kek));
+  return crypto.subtle.importKey('raw', raw, { name: 'AES-GCM' }, false, [usage]);
+}
+export async function encryptCookieValue(plain, kek) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await aesKey(kek, 'encrypt'), enc.encode(plain));
+  return `v1:${b64(iv)}:${b64(ct)}`;
+}
 export async function decryptCookieValue(stored, kek) {
   if (!stored || typeof stored !== 'string') return null;
-  if (!stored.startsWith('v1:')) return stored; // Backward compatibility with raw cookies
-
-  const parts = stored.split(':');
-  if (parts.length !== 3) return null;
-  const [, ivB64, ctB64] = parts;
-
+  if (!stored.startsWith('v1:')) return stored;
+  const [, ivB64, ctB64] = stored.split(':');
+  if (!ivB64 || !ctB64) return null;
   try {
-    const enc = new TextEncoder();
-    const dec = new TextDecoder();
-    const rawKey = await crypto.subtle.digest('SHA-256', enc.encode(kek));
-    const cryptoKey = await crypto.subtle.importKey('raw', rawKey, { name: 'AES-GCM' }, false, ['decrypt']);
-
-    const iv = Uint8Array.from(atob(ivB64), (c) => c.charCodeAt(0));
-    const ct = Uint8Array.from(atob(ctB64), (c) => c.charCodeAt(0));
-
-    const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, cryptoKey, ct);
-    return dec.decode(decrypted);
-  } catch (err) {
-    console.error('❌ Cookie decryption failed:', err.message);
-    return null;
-  }
+    return dec.decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: ub64(ivB64) }, await aesKey(kek, 'decrypt'), ub64(ctB64)));
+  } catch { return null; }
 }
 
-// ─── Network Resiliency & Headers ───────────────────────────────────────────
-export function getPinterestHeaders(username, cookie) {
+// ── KEK: read-or-self-provision from DB ──
+async function resolveKek(db) {
+  const { data } = await db.from('competitor_kek').select('kek').limit(1).maybeSingle();
+  if (data?.kek) return data.kek;
+  const hex = crypto.randomBytes(32).toString('hex');
+  await db.from('competitor_kek').upsert({ id: true, kek: hex }, { onConflict: 'id' });
+  const { data: d2 } = await db.from('competitor_kek').select('kek').limit(1).maybeSingle();
+  return d2?.kek || null;
+}
+
+export function getPinterestHeaders(u, cookie) {
   return {
-    accept: 'application/json, text/javascript, */*, q=0.01',
+    accept: 'application/json, text/javascript, */*; q=0.01',
     'accept-language': 'en-US,en;q=0.9',
-    priority: 'u=1, i',
-    'sec-ch-ua': '"Not=A?Brand";v="99", "Chromium";v="130"',
-    'sec-ch-ua-mobile': '?0',
-    'sec-ch-ua-platform': '"Windows"',
-    'sec-fetch-dest': 'empty',
-    'sec-fetch-mode': 'cors',
-    'sec-fetch-site': 'same-origin',
-    'x-app-version': '9302641',
-    'x-pinterest-appstate': 'background',
-    'x-pinterest-pws-handler': 'www/[username].js',
-    'x-pinterest-source-url': `/${username}/`,
+    'sec-fetch-dest': 'empty', 'sec-fetch-mode': 'cors', 'sec-fetch-site': 'same-origin',
     'x-requested-with': 'XMLHttpRequest',
-    Referer: `https://www.pinterest.com/${username}/`,
+    referer: `https://www.pinterest.com/${u}/`,
+    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
     cookie: cookie || '',
   };
 }
 
 export async function fetchWithRetry(url, options = {}, maxRetries = 3) {
   let attempt = 0;
-  while (attempt <= maxRetries) {
+  for (;;) {
     try {
-      const res = await fetch(url, {
-        ...options,
-        signal: AbortSignal.timeout(15000),
-      });
-
+      const res = await fetch(url, { ...options, signal: AbortSignal.timeout(15000) });
       if (res.status === 429 || (res.status >= 500 && res.status < 600)) {
-        if (attempt === maxRetries) return res;
-        const delay = Math.pow(2, attempt) * 1000 + Math.random() * 500;
-        console.warn(`⚠️ HTTP ${res.status} received. Retrying in ${Math.round(delay)}ms (Attempt ${attempt + 1}/${maxRetries})`);
-        await new Promise((r) => setTimeout(r, delay));
-        attempt++;
-        continue;
+        if (attempt >= maxRetries) return res;
+        await new Promise(r => setTimeout(r, 2 ** attempt * 1000 + Math.random() * 500)); attempt++; continue;
       }
-
       return res;
-    } catch (err) {
-      if (attempt === maxRetries) throw err;
-      const delay = Math.pow(2, attempt) * 1000 + Math.random() * 500;
-      console.warn(`⚠️ Network fetch error: ${err.message}. Retrying in ${Math.round(delay)}ms (Attempt ${attempt + 1}/${maxRetries})`);
-      await new Promise((r) => setTimeout(r, delay));
-      attempt++;
+    } catch (e) {
+      if (attempt >= maxRetries) throw e;
+      await new Promise(r => setTimeout(r, 2 ** attempt * 500)); attempt++;
     }
   }
 }
 
-// ─── Active Cookie Picker ───────────────────────────────────────────────────
-export async function pickActiveCookie(db, wsId, kek) {
-  let query = db
-    .from('pinterest_cookies')
-    .select('id, cookie_value, last_used_at')
-    .eq('is_active', true)
-    .order('last_used_at', { ascending: true, nullsFirst: true })
-    .limit(5);
+const resourceUrl = (u, res, options) =>
+  `https://www.pinterest.com/resource/${res}/get/?source_url=%2F${u}%2F&data=${encodeURIComponent(JSON.stringify({ options, context: {} }))}&_=${Date.now()}`;
 
-  if (wsId) {
-    query = query.eq('workspace_id', wsId);
-  }
-
-  const { data: candidates, error } = await query;
-
-  if (!error && candidates && candidates.length > 0) {
-    // Pick random among least recently used candidates
-    const chosen = candidates[Math.floor(Math.random() * candidates.length)];
-    const decrypted = await decryptCookieValue(chosen.cookie_value, kek);
-
-    if (decrypted) {
-      // Update last_used_at timestamp
-      await db
-        .from('pinterest_cookies')
-        .update({ last_used_at: new Date().toISOString() })
-        .eq('id', chosen.id);
-      return decrypted;
-    }
-  }
-
-  // Fallback to environment variable if configured
-  if (process.env.PINTEREST_COOKIE) {
-    console.log('ℹ️ Using fallback PINTEREST_COOKIE environment variable');
-    return process.env.PINTEREST_COOKIE;
-  }
-
-  return null;
-}
-
-// ─── Pinterest Ingestion Handlers ───────────────────────────────────────────
-export async function fetchProfile(username, cookie, maxRetries = 3) {
-  const userUrl = `https://www.pinterest.com/resource/UserResource/get/?source_url=%2F${username}%2F&data=${encodeURIComponent(
-    JSON.stringify({ options: { username, field_set_key: 'profile' }, context: {} })
-  )}&_=${Date.now()}`;
-
-  const res = await fetchWithRetry(userUrl, { method: 'GET', headers: getPinterestHeaders(username, cookie) }, maxRetries);
-  if (!res.ok) {
-    throw new Error(`UserResource HTTP ${res.status}`);
-  }
-
-  const payload = await res.json();
-  const userData = payload?.resource_response?.data;
-  if (!userData) {
-    throw new Error('UserResource returned empty payload');
-  }
-
-  const profileViews = Number(userData.profile_views || userData.monthly_views || 0);
-  const profileReach = Number(userData.profile_reach || userData.monthly_views || profileViews);
-  const followerCount = Number(userData.follower_count || 0);
-  const pinCount = Number(userData.pin_count || 0);
-  const fullName = userData.full_name || username;
-  const avatarUrl = userData.image_xlarge_url || userData.image_medium_url || null;
-  const websiteUrl = userData.website_url || (userData.domain_url ? `https://${userData.domain_url}` : null);
-  const domainVerified = Boolean(userData.domain_verified);
-  const lastPinAt = userData.last_pin_save_time ? new Date(userData.last_pin_save_time).toISOString() : null;
-
+export async function fetchProfile(u, cookie, mr) {
+  const res = await fetchWithRetry(resourceUrl(u, 'UserResource', { username: u, field_set_key: 'profile' }), { headers: getPinterestHeaders(u, cookie) }, mr);
+  if (!res.ok) throw new Error(`UserResource HTTP ${res.status}`);
+  const d = (await res.json())?.resource_response?.data;
+  if (!d) throw new Error('UserResource empty payload');
   return {
-    profileReach,
-    profileViews,
-    followerCount,
-    pinCount,
-    fullName,
-    avatarUrl,
-    websiteUrl,
-    domainVerified,
-    lastPinAt,
+    reach: Number(d.profile_reach || d.monthly_views || 0),
+    views: Number(d.profile_views || d.monthly_views || 0),
+    followers: Number(d.follower_count || 0),
+    pins: Number(d.pin_count || 0),
+    fullName: d.full_name || u,
+    avatar: d.image_xlarge_url || d.image_medium_url || null,
+    website: d.website_url || (d.domain_url ? `https://${d.domain_url}` : null),
+    domainVerified: Boolean(d.domain_verified),
+    lastPinAt: d.last_pin_save_time ? new Date(d.last_pin_save_time).toISOString() : null,
   };
 }
 
-export async function fetchBoards(username, cookie, maxRetries = 3) {
-  const allBoards = [];
-  let bookmark = null;
-  let hasMore = true;
-  let pageCount = 0;
-  const maxPages = 20;
-
-  while (hasMore && pageCount < maxPages) {
-    pageCount++;
-    const optionsPayload = {
-      username,
-      field_set_key: 'profile_grid_item',
-      privacy_filter: 'all',
-      sort: 'last_pinned_to',
-      filter_stories: false,
-      page_size: 50,
-      group_by: 'visibility',
-      include_archived: true,
-      filter_all_pins: false,
-    };
-
-    if (bookmark) optionsPayload.bookmarks = [bookmark];
-
-    const boardsUrl = `https://www.pinterest.com/resource/BoardsResource/get/?source_url=%2F${username}%2F&data=${encodeURIComponent(
-      JSON.stringify({ options: optionsPayload, context: {} })
-    )}&_=${Date.now()}`;
-
-    const res = await fetchWithRetry(boardsUrl, { method: 'GET', headers: getPinterestHeaders(username, cookie) }, maxRetries);
-    if (!res.ok) {
-      console.warn(`⚠️ BoardsResource HTTP ${res.status} on page ${pageCount} for @${username}`);
-      break;
-    }
-
-    const payload = await res.json();
-    const resData = payload?.resource_response;
-    const boardsList = resData?.data || [];
-    const actualBoards = boardsList.filter((b) => b.type === 'board' || !b.type);
-    allBoards.push(...actualBoards);
-
-    const nextBookmark = resData?.bookmark;
-    if (nextBookmark && nextBookmark !== '-end-' && boardsList.length > 0) {
-      bookmark = nextBookmark;
-    } else {
-      hasMore = false;
-    }
+export async function fetchBoards(u, cookie, mr) {
+  const out = []; let bookmark = null, pages = 0;
+  while (pages < 20) {
+    pages++;
+    const opts = { username: u, field_set_key: 'profile_grid_item', privacy_filter: 'all', sort: 'last_pinned_to', filter_stories: false, page_size: 50, include_archived: true };
+    if (bookmark) opts.bookmarks = [bookmark];
+    const res = await fetchWithRetry(resourceUrl(u, 'BoardsResource', opts), { headers: getPinterestHeaders(u, cookie) }, mr);
+    if (!res.ok) break;
+    const rd = (await res.json())?.resource_response;
+    const list = rd?.data || [];
+    out.push(...list.filter(b => b.type === 'board' || !b.type));
+    if (rd?.bookmark && rd.bookmark !== '-end-' && list.length) bookmark = rd.bookmark; else break;
   }
-
-  return allBoards;
+  return out;
 }
 
-export async function fetchTopPins(username, cookie, maxRetries = 3) {
-  const allPins = [];
-  let bookmark = null;
-  let hasMore = true;
-  let pageCount = 0;
-  const maxPages = 10;
-
-  while (hasMore && pageCount < maxPages) {
-    pageCount++;
-    const optionsPayload = {
-      username,
-      field_set_key: 'detailed',
-      page_size: 25,
-    };
-
-    if (bookmark) optionsPayload.bookmarks = [bookmark];
-
-    const pinsUrl = `https://www.pinterest.com/resource/UserPinsResource/get/?source_url=%2F${username}%2F&data=${encodeURIComponent(
-      JSON.stringify({ options: optionsPayload, context: {} })
-    )}&_=${Date.now()}`;
-
+export async function fetchTopPins(u, cookie, mr) {
+  const out = []; let bookmark = null, pages = 0;
+  while (pages < 10) {
+    pages++;
+    const opts = { username: u, field_set_key: 'detailed', page_size: 25 };
+    if (bookmark) opts.bookmarks = [bookmark];
     try {
-      const res = await fetchWithRetry(pinsUrl, { method: 'GET', headers: getPinterestHeaders(username, cookie) }, maxRetries);
+      const res = await fetchWithRetry(resourceUrl(u, 'UserPinsResource', opts), { headers: getPinterestHeaders(u, cookie) }, mr);
       if (!res.ok) break;
-
-      const payload = await res.json();
-      const resData = payload?.resource_response;
-      const pinsList = resData?.data || [];
-      allPins.push(...pinsList);
-
-      const nextBookmark = resData?.bookmark;
-      if (nextBookmark && nextBookmark !== '-end-' && pinsList.length > 0) {
-        bookmark = nextBookmark;
-      } else {
-        hasMore = false;
-      }
-    } catch {
-      break;
-    }
+      const rd = (await res.json())?.resource_response;
+      const list = rd?.data || [];
+      out.push(...list.filter(p => p?.id));
+      if (rd?.bookmark && rd.bookmark !== '-end-' && list.length) bookmark = rd.bookmark; else break;
+    } catch { break; }
   }
-
-  return allPins;
+  return out;
 }
 
-// ─── Main Execution Contract ────────────────────────────────────────────────
-async function main() {
-  // Step 1: Validate Mandatory Environment Variables
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const tokenKek = process.env.TOKEN_KEK;
-
-  if (!supabaseUrl || !serviceRoleKey || !tokenKek) {
-    console.error('❌ FATAL: Missing SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, or TOKEN_KEK.');
-    process.exit(1);
-  }
-
-  const db = createClient(supabaseUrl, serviceRoleKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-
-  // Step 2: Read Pipeline Settings Singleton
-  const { data: pipe } = await db.from('competitor_pipeline_settings').select('*').limit(1).maybeSingle();
-
-  if (!pipe) {
-    console.log('⚠️ No competitor_pipeline_settings row found — continuing with defaults (is_enabled=true, dry_run=false, max_retries=3)');
-  }
-
-  const isEnabled = pipe ? Boolean(pipe.is_enabled) : true;
-  const forceRun = Boolean(process.env.FORCE_RUN && process.env.FORCE_RUN !== 'false');
-
-  if (!isEnabled && !forceRun) {
-    console.log('⏸️ Pipeline disabled. Ingestion skipped cleanly.');
-    process.exit(0);
-  }
-
-  const wsId = process.env.WORKSPACE_ID || pipe?.workspace_id || null;
-  const DRY_RUN = Boolean(process.env.DRY_RUN && process.env.DRY_RUN !== 'false') || Boolean(pipe?.dry_run);
-  const MAX_RETRIES = pipe?.max_retries || 3;
-
-  console.log(`🚀 Starting Ingestion: wsId=${wsId || 'global'}, DRY_RUN=${DRY_RUN}, MAX_RETRIES=${MAX_RETRIES}`);
-
-  // Step 3: Job Adoption
-  let jobId = process.env.JOB_ID || null;
-  if (jobId) {
-    await db
-      .from('competitor_ingestion_jobs')
-      .update({ status: 'running', started_at: new Date().toISOString() })
-      .eq('id', jobId);
-  } else {
-    const { data: newJob } = await db
-      .from('competitor_ingestion_jobs')
-      .insert({
-        workspace_id: wsId,
-        status: 'running',
-        started_at: new Date().toISOString(),
-      })
-      .select('id')
-      .single();
-    jobId = newJob?.id || null;
-  }
-
-  // Step 4: Cookie Selection & Rotation
-  const activeCookie = await pickActiveCookie(db, wsId, tokenKek);
-  if (!activeCookie) {
-    console.error('❌ No Pinterest cookie available in vault or environment.');
-    if (jobId) {
-      await db
-        .from('competitor_ingestion_jobs')
-        .update({
-          status: 'failed',
-          error_message: 'No Pinterest cookie available',
-          completed_at: new Date().toISOString(),
-        })
-        .eq('id', jobId);
+// ── Vault cookie per workspace + ONE-TIME legacy auto-import ──
+async function getWorkspaceCookie(db, wsId, kek) {
+  const { data } = await db.from('pinterest_cookies').select('id, cookie_value')
+    .eq('workspace_id', wsId).eq('is_active', true)
+    .order('last_used_at', { ascending: true, nullsFirst: true }).limit(5);
+  for (const c of data || []) {
+    const plain = await decryptCookieValue(c.cookie_value, kek);
+    if (plain) {
+      await db.from('pinterest_cookies').update({ last_used_at: new Date().toISOString() }).eq('id', c.id);
+      return plain;
     }
-    process.exit(1);
+  }
+  // ONE-TIME migration: vault empty + legacy env present → encrypt & store, then use.
+  const legacy = process.env.PINTEREST_COOKIE;
+  if (legacy && legacy.trim().length >= 20) {
+    const encrypted = await encryptCookieValue(legacy.trim(), kek);
+    await db.from('pinterest_cookies').insert({ workspace_id: wsId, cookie_value: encrypted, is_active: true });
+    console.log(`🔐 Legacy PINTEREST_COOKIE auto-imported into vault for ws ${wsId}. You may now delete that GitHub secret.`);
+    return legacy.trim();
+  }
+  return null;
+}
+
+async function processWorkspace(db, wsId, opts) {
+  const { kek, dryRun, maxRetries, now, today, targetCompetitorId, targetUsername } = opts;
+  const cookie = await getWorkspaceCookie(db, wsId, kek);
+  if (!cookie) {
+    return { ok: false, error: 'No Pinterest cookie available in vault for this workspace' };
   }
 
-  // Step 5: Build Competitor Query
-  let compQuery = db.from('competitors').select('id, workspace_id, username');
-  if (wsId) compQuery = compQuery.eq('workspace_id', wsId);
+  let q = db.from('competitors').select('id, workspace_id, username').eq('workspace_id', wsId);
+  if (targetUsername) q = q.ilike('username', targetUsername);
+  else if (targetCompetitorId) q = q.eq('id', targetCompetitorId);
+  else q = q.eq('is_active', true);
+  const { data: comps, error } = await q;
+  if (error || !comps) return { ok: false, error: error?.message || 'fetch failed' };
+  if (comps.length === 0) return { ok: true, processed: 0, errors: [], total: 0 };
 
-  const targetUsername = process.env.TARGET_USERNAME?.trim();
-  if (targetUsername) {
-    compQuery = compQuery.ilike('username', targetUsername);
-  } else {
-    compQuery = compQuery.eq('is_active', true);
-  }
-
-  const { data: competitors, error: fetchErr } = await compQuery;
-  if (fetchErr || !competitors) {
-    console.error('❌ Failed to fetch competitors:', fetchErr?.message);
-    if (jobId) {
-      await db
-        .from('competitor_ingestion_jobs')
-        .update({
-          status: 'failed',
-          error_message: fetchErr?.message || 'Failed to fetch competitors',
-          completed_at: new Date().toISOString(),
-        })
-        .eq('id', jobId);
-    }
-    process.exit(1);
-  }
-
-  console.log(`📋 Found ${competitors.length} competitor(s) to process.`);
-
-  // Step 6: Ingestion Loop
-  let successCount = 0;
-  const errors = [];
-  const nowIso = new Date().toISOString();
-  const todayDate = nowIso.slice(0, 10);
-
-  for (const comp of competitors) {
-    const u = comp.username.trim();
-    console.log(`\n🔍 Processing @${u}...`);
-
+  const errors = []; let success = 0;
+  for (const c of comps) {
+    const u = c.username.trim();
+    console.log(`\n🔍 [${wsId.slice(0, 8)}] @${u}`);
     try {
-      // Fetch Profile, Boards, and Top Pins
-      const profile = await fetchProfile(u, activeCookie, MAX_RETRIES);
-      const boards = await fetchBoards(u, activeCookie, MAX_RETRIES);
-      const pins = await fetchTopPins(u, activeCookie, MAX_RETRIES);
-
-      if (!DRY_RUN) {
-        // 1. Update Competitor Profile
-        await db
-          .from('competitors')
-          .update({
-            profile_reach: profile.profileReach,
-            profile_views: profile.profileViews,
-            follower_count: profile.followerCount,
-            pin_count: profile.pinCount,
-            avatar_url: profile.avatarUrl,
-            full_name: profile.fullName,
-            website_url: profile.websiteUrl,
-            domain_verified: profile.domainVerified,
-            last_pin_at: profile.lastPinAt,
-            last_checked_at: nowIso,
-          })
-          .eq('id', comp.id);
-
-        // 2. Insert Snapshot (ONLY recorded_at, NO created_at)
-        await db.from('competitor_snapshots').insert({
-          competitor_id: comp.id,
-          profile_reach: profile.profileReach,
-          profile_views: profile.profileViews,
-          follower_count: profile.followerCount,
-          pin_count: profile.pinCount,
-          recorded_at: nowIso,
-        });
-
-        // 3. Upsert Daily Snapshot
-        await db.from('competitor_daily_snapshots').upsert(
-          {
-            competitor_id: comp.id,
-            snapshot_date: todayDate,
-            profile_reach: profile.profileReach,
-            profile_views: profile.profileViews,
-            follower_count: profile.followerCount,
-            pin_count: profile.pinCount,
-          },
-          { onConflict: 'competitor_id, snapshot_date' }
-        );
-
-        // 4. Upsert Boards
-        if (boards.length > 0) {
-          const boardsToUpsert = boards.map((b) => ({
-            competitor_id: comp.id,
-            workspace_id: comp.workspace_id || wsId,
-            board_id: String(b.id || b.node_id),
-            name: b.name || 'Untitled Board',
-            description: b.description || '',
-            pin_count: Number(b.pin_count || 0),
-            follower_count: Number(b.follower_count || 0),
-            url: b.url ? (b.url.startsWith('http') ? b.url : `https://www.pinterest.com${b.url}`) : null,
-            board_created_at: b.created_at ? new Date(b.created_at).toISOString() : nowIso,
-            last_pinned_at: b.last_pinned_at ? new Date(b.last_pinned_at).toISOString() : nowIso,
-            updated_at: nowIso,
-          }));
-          await db.from('competitor_boards').upsert(boardsToUpsert, { onConflict: 'competitor_id, board_id' });
-        }
-
-        // 5. Upsert Top Pins
-        if (pins.length > 0) {
-          const pinsToUpsert = pins.map((p) => ({
-            competitor_id: comp.id,
-            pin_id: String(p.id),
-            title: p.title || p.grid_title || null,
-            description: p.description || null,
-            image_url: p.images?.orig?.url || p.images?.['736x']?.url || null,
-            save_count: Number(p.aggregated_pin_data?.aggregated_stats?.saves || p.repin_count || 0),
-            comment_count: Number(p.aggregated_pin_data?.aggregated_stats?.comments || p.comment_count || 0),
-            link: p.link || null,
-            captured_at: nowIso,
-          }));
-          await db.from('competitor_top_pins').upsert(pinsToUpsert, { onConflict: 'competitor_id, pin_id' });
-        }
-
-        // 6. Update Competitor Settings last_manual_update
-        await db.from('competitor_settings').upsert(
-          {
-            competitor_id: comp.id,
-            last_manual_update: nowIso,
-            updated_at: nowIso,
-          },
-          { onConflict: 'competitor_id' }
-        );
-
-        console.log(`✅ @${u} synchronized successfully (reach=${profile.profileReach}, boards=${boards.length}, pins=${pins.length}).`);
+      const p = await fetchProfile(u, cookie, maxRetries);
+      const boards = await fetchBoards(u, cookie, maxRetries);
+      const pins = await fetchTopPins(u, cookie, maxRetries);
+      if (!dryRun) {
+        await db.from('competitors').update({
+          profile_reach: p.reach, profile_views: p.views, follower_count: p.followers, pin_count: p.pins,
+          full_name: p.fullName, avatar_url: p.avatar, website_url: p.website,
+          domain_verified: p.domainVerified, last_pin_at: p.lastPinAt, last_checked_at: now,
+        }).eq('id', c.id);
+        await db.from('competitor_snapshots').insert({ competitor_id: c.id, profile_reach: p.reach, profile_views: p.views, follower_count: p.followers, pin_count: p.pins, recorded_at: now });
+        await db.from('competitor_daily_snapshots').upsert({ competitor_id: c.id, snapshot_date: today, profile_reach: p.reach, profile_views: p.views, follower_count: p.followers, pin_count: p.pins }, { onConflict: 'competitor_id,snapshot_date' });
+        if (boards.length) await db.from('competitor_boards').upsert(boards.map(b => ({
+          competitor_id: c.id, workspace_id: c.workspace_id, board_id: String(b.id || b.node_id),
+          name: b.name || 'Untitled', description: b.description || '',
+          pin_count: Number(b.pin_count || 0), follower_count: Number(b.follower_count || 0),
+          url: b.url?.startsWith('http') ? b.url : (b.url ? `https://www.pinterest.com${b.url}` : null),
+          board_created_at: b.created_at ? new Date(b.created_at).toISOString() : null,
+          last_pinned_at: b.board_order_modified_at ? new Date(b.board_order_modified_at).toISOString() : null,
+          updated_at: now,
+        })), { onConflict: 'competitor_id,board_id' });
+        if (pins.length) await db.from('competitor_top_pins').upsert(pins.slice(0, 10).map(pn => ({
+          competitor_id: c.id, pin_id: String(pn.id), title: pn.title || pn.grid_title || null,
+          description: pn.description || null,
+          image_url: pn.images?.orig?.url || pn.images?.['736x']?.url || null,
+          save_count: Number(pn.aggregated_pin_data?.aggregated_stats?.saves || pn.repin_count || 0),
+          comment_count: Number(pn.aggregated_pin_data?.aggregated_stats?.comments || pn.comment_count || 0),
+          link: pn.link || null, captured_at: now,
+        })), { onConflict: 'competitor_id,pin_id' });
       } else {
-        console.log(`   [DRY-RUN] Would update @${u}: reach=${profile.profileReach}, views=${profile.profileViews}, boards=${boards.length}, pins=${pins.length}`);
+        console.log(`   [DRY-RUN] would write reach=${p.reach} boards=${boards.length} pins=${pins.length}`);
       }
-
-      successCount++;
-    } catch (err) {
-      console.error(`❌ Ingestion failed for @${u}:`, err.message);
-      errors.push(`@${u}: ${err.message}`);
-    }
+      success++;
+    } catch (e) { console.error(`   ❌ ${e.message}`); errors.push(`@${u}: ${e.message}`); }
   }
-
-  // Step 7: Finalize Ingestion Job
-  const isFailed = successCount === 0 && competitors.length > 0;
-  const finalStatus = isFailed ? 'failed' : 'completed';
-
-  if (jobId) {
-    await db
-      .from('competitor_ingestion_jobs')
-      .update({
-        status: finalStatus,
-        items_processed: DRY_RUN ? 0 : successCount,
-        error_message: errors.length > 0 ? errors.join(' | ').slice(0, 2000) : null,
-        completed_at: new Date().toISOString(),
-      })
-      .eq('id', jobId);
-  }
-
-  console.log(`\n🎉 Ingestion complete: ${successCount}/${competitors.length} profiles processed (status=${finalStatus}).`);
-
-  // Step 8: Exit cleanly unless entire run failed
-  process.exit(isFailed ? 1 : 0);
+  return { ok: true, processed: success, errors, total: comps.length };
 }
 
-main();
+async function main() {
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!SUPABASE_URL || !SERVICE_KEY) { console.error('❌ Missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY'); process.exit(1); }
+  const db = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
+
+  const kek = await resolveKek(db);
+  if (!kek) { console.error('❌ KEK unavailable'); process.exit(1); }
+
+  const pipe = (await db.from('competitor_pipeline_settings').select('*').limit(1).maybeSingle()).data;
+  if (pipe && pipe.is_enabled === false && !process.env.FORCE_RUN) { console.log('⏸️ Pipeline disabled from dashboard.'); process.exit(0); }
+  const DRY_RUN = process.env.DRY_RUN === 'true' || pipe?.dry_run === true;
+  const MAX_RETRIES = parseInt(process.env.MAX_RETRIES || String(pipe?.max_retries ?? 3), 10);
+  const now = new Date().toISOString(); const today = now.slice(0, 10);
+  const targetUsername = process.env.TARGET_USERNAME?.trim() || null;
+
+  // ── Mode A: adopt queued job (poller / dashboard button) ──
+  if (process.env.POLL_QUEUED === 'true' && !process.env.JOB_ID) {
+    const { data: q } = await db.from('competitor_ingestion_jobs')
+      .select('id, competitor_id, workspace_id').eq('status', 'queued')
+      .order('created_at', { ascending: true }).limit(1);
+    if (!q || q.length === 0) { console.log('🕐 No queued jobs.'); process.exit(0); }
+    const job = q[0];
+    await db.from('competitor_ingestion_jobs').update({ status: 'running', started_at: now }).eq('id', job.id);
+    const r = await processWorkspace(db, job.workspace_id, { kek, dryRun: DRY_RUN, maxRetries: MAX_RETRIES, now, today, targetCompetitorId: job.competitor_id, targetUsername });
+    await db.from('competitor_ingestion_jobs').update({
+      status: !r.ok || (r.total > 0 && r.processed === 0) ? 'failed' : 'completed',
+      items_processed: DRY_RUN ? 0 : (r.processed || 0),
+      error_message: r.ok ? (r.errors.length ? r.errors.join(' | ').slice(0, 2000) : null) : r.error,
+      completed_at: new Date().toISOString(),
+    }).eq('id', job.id);
+    process.exit(!r.ok ? 1 : 0);
+  }
+
+  // ── Mode B: daily / manual full run across all active workspaces ──
+  const { data: wsRows } = await db.from('competitors').select('workspace_id').eq('is_active', true);
+  const workspaces = [...new Set((wsRows || []).map(r => r.workspace_id))];
+  console.log(`🚀 Full run: ${workspaces.length} workspace(s) | DRY_RUN=${DRY_RUN}`);
+
+  let anyFatal = false; let grandProcessed = 0;
+  for (const wsId of workspaces) {
+    const { data: job } = await db.from('competitor_ingestion_jobs')
+      .insert({ workspace_id: wsId, status: 'running', started_at: now }).select('id').single();
+    const r = await processWorkspace(db, wsId, { kek, dryRun: DRY_RUN, maxRetries: MAX_RETRIES, now, today, targetCompetitorId: null, targetUsername });
+    if (job) await db.from('competitor_ingestion_jobs').update({
+      status: !r.ok || (r.total > 0 && r.processed === 0) ? 'failed' : 'completed',
+      items_processed: DRY_RUN ? 0 : (r.processed || 0),
+      error_message: r.ok ? (r.errors.length ? r.errors.join(' | ').slice(0, 2000) : null) : r.error,
+      completed_at: new Date().toISOString(),
+    }).eq('id', job.id);
+    if (!r.ok) { anyFatal = true; console.error(`❌ ws ${wsId}: ${r.error}`); }
+    grandProcessed += r.processed || 0;
+  }
+  console.log(`\n🎉 Full run done: ${grandProcessed} profile(s) across ${workspaces.length} workspace(s).`);
+  process.exit(anyFatal && grandProcessed === 0 ? 1 : 0);
+}
+
+main().catch(e => { console.error('💥 Fatal:', e); process.exit(1); });

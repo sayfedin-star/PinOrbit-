@@ -27,6 +27,11 @@ vi.mock('../auth/workspace-guard', () => ({
   }),
 }));
 
+vi.mock('../lib/competitor-kek', () => ({
+  resolveCompetitorKek: vi.fn().mockResolvedValue('test_competitor_kek_00000000_1234567890'),
+  isCompetitorKekActive: vi.fn().mockResolvedValue(true),
+}));
+
 vi.mock('../lib/token-crypto', () => ({
   resolveTokenKek: vi.fn().mockResolvedValue('test_token_kek_00000000_1234567890'),
   encryptToken: vi.fn().mockResolvedValue('v1:aXZfdGVzdA==:Y3RfdGVzdA=='),
@@ -98,7 +103,7 @@ describe('Competitor Ops Console API Endpoints', () => {
       expect(body.cookies[0].cookie_value).toBeUndefined();
     });
 
-    it('POST validates cookie length and encrypts at rest', async () => {
+    it('POST validates cookie length and encrypts at rest using competitor KEK', async () => {
       mockCompetitorsClient.from.mockReturnValue({
         insert: vi.fn().mockReturnValue({
           select: vi.fn().mockReturnValue({
@@ -141,7 +146,7 @@ describe('Competitor Ops Console API Endpoints', () => {
   });
 
   describe('Competitor Ops API (/api/admin/competitor-ops)', () => {
-    it('GET returns pipeline settings, joined competitors, and jobs', async () => {
+    it('GET returns pipeline settings, kekActive status, joined competitors, and jobs', async () => {
       mockCompetitorsClient.from.mockImplementation((table: string) => {
         if (table === 'competitor_pipeline_settings') {
           return {
@@ -194,11 +199,12 @@ describe('Competitor Ops Console API Endpoints', () => {
       const body = await res.json();
       expect(body.success).toBe(true);
       expect(body.settings.is_enabled).toBe(true);
+      expect(body.kekActive).toBe(true);
       expect(body.competitors).toHaveLength(1);
       expect(body.jobs).toHaveLength(1);
     });
 
-    it('POST enqueues job and returns 202 without throwing even if dispatch token is missing', async () => {
+    it('POST enqueues job and returns 202 queued:true for poller adoption', async () => {
       mockCompetitorsClient.from.mockReturnValue({
         insert: vi.fn().mockReturnValue({
           select: vi.fn().mockReturnValue({
@@ -224,8 +230,7 @@ describe('Competitor Ops Console API Endpoints', () => {
       const body = await res.json();
       expect(body.success).toBe(true);
       expect(body.job_id).toBe('job-uuid-123');
-      expect(body.dispatched).toBe(false);
-      expect(body.warning).toBeDefined();
+      expect(body.queued).toBe(true);
     });
   });
 });

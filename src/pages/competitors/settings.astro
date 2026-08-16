@@ -53,7 +53,10 @@ import SectionHeader from '../../components/ui/SectionHeader.astro';
           <div>
             <div class="flex items-center justify-between">
               <span class="text-xs font-bold text-foreground">Pipeline Status</span>
-              <span id="pipeline-status-badge" class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-emerald-500/10 text-emerald-500">Active</span>
+              <div class="flex items-center gap-1.5">
+                <span id="kek-badge" class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-muted text-muted-foreground">🔑 KEK —</span>
+                <span id="pipeline-status-badge" class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-emerald-500/10 text-emerald-500">Active</span>
+              </div>
             </div>
             <p class="text-[11px] text-muted-foreground mt-1">When disabled, automated cron runs and background workers cleanly skip execution.</p>
           </div>
@@ -489,6 +492,14 @@ import SectionHeader from '../../components/ui/SectionHeader.astro';
       ]);
 
       if (opsData.success) {
+        const kekBadge = $('kek-badge');
+        if (opsData.kekActive) {
+          kekBadge.className = 'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-emerald-500/10 text-emerald-500';
+          kekBadge.textContent = '🔑 KEK active';
+        } else {
+          kekBadge.className = 'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-muted text-muted-foreground';
+          kekBadge.textContent = '🔑 KEK —';
+        }
         renderPipelineSettings(opsData.settings);
         renderCompetitorsMatrix(opsData.competitors);
         renderJobs(opsData.jobs);
@@ -538,11 +549,7 @@ import SectionHeader from '../../components/ui/SectionHeader.astro';
         method: 'POST',
         body: JSON.stringify({}),
       });
-      if (res.dispatched) {
-        toast(`Dispatched full update (job ${res.job_id?.slice(0, 8)})`, 'success');
-      } else {
-        toast(`Queued: ${res.warning || 'Job recorded'}`, 'info');
-      }
+      toast(`Queued full update (job ${res.job_id?.slice(0, 8)}) — runs within 5 min`, 'success');
       loadAllState();
     } catch (err: any) {
       toast(`Dispatch failed: ${err.message}`, 'error');
@@ -665,11 +672,7 @@ import SectionHeader from '../../components/ui/SectionHeader.astro';
           method: 'POST',
           body: JSON.stringify({ competitor_id, username }),
         });
-        if (res.dispatched) {
-          toast(`Updating @${username}… (job ${res.job_id?.slice(0, 8)})`, 'success');
-        } else {
-          toast(`Queued @${username}: ${res.warning || 'Job recorded'}`, 'info');
-        }
+        toast(`Queued @${username} (job ${res.job_id?.slice(0, 8)}) — runs within 5 min`, 'success');
         loadAllState();
       } catch (err: any) {
         toast(`Dispatch failed: ${err.message}`, 'error');
