@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GET as getCookies, POST as postCookies, PATCH as patchCookies, DELETE as deleteCookies } from '../../pages/api/admin/pinterest-cookies';
 import { GET as getOps, PUT as putOps, PATCH as patchOps, POST as postOps } from '../../pages/api/admin/competitor-ops';
+import { GET as getCompetitors, POST as postCompetitor, PATCH as patchCompetitor, DELETE as deleteCompetitor } from '../../pages/api/admin/competitors';
+import { POST as ingestPayload } from '../../pages/api/admin/competitors/ingest';
 
 const mockCompetitorsClient = {
   from: vi.fn(),
@@ -231,6 +233,42 @@ describe('Competitor Ops Console API Endpoints', () => {
       expect(body.success).toBe(true);
       expect(body.job_id).toBe('job-uuid-123');
       expect(body.queued).toBe(true);
+    });
+  });
+
+  describe('Competitors CRUD API (/api/admin/competitors)', () => {
+    it('returns 401 when unauthenticated', async () => {
+      const req = new Request('http://localhost/api/admin/competitors');
+      const res = await getCompetitors({ request: req, locals: {} } as any);
+      expect(res.status).toBe(401);
+    });
+
+    it('POST creates competitor in Competitors DB', async () => {
+      mockCompetitorsClient.from.mockReturnValue({
+        insert: vi.fn().mockReturnValue({
+          select: vi.fn().mockReturnValue({
+            single: vi.fn().mockResolvedValue({
+              data: { id: 'comp-new', username: 'bitesizedbash', workspace_id: 'ws-123' },
+              error: null,
+            }),
+          }),
+        }),
+      });
+
+      const req = new Request('http://localhost/api/admin/competitors', {
+        method: 'POST',
+        body: JSON.stringify({ username: 'bitesizedbash' }),
+      });
+
+      const res = await postCompetitor({
+        request: req,
+        locals: { user: { id: 'admin-user' }, supabase: {} as any, activeWorkspaceId: 'ws-123' },
+      } as any);
+
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.success).toBe(true);
+      expect(body.competitor.username).toBe('bitesizedbash');
     });
   });
 });

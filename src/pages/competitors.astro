@@ -337,12 +337,25 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
 </style>
 
 <script>
-  import {
-    getCompetitors, addCompetitor, deleteCompetitor, updateCompetitor,
-    parsePinterestPayload, ingestDevToolsPayload, getCompetitorDetails,
-  } from '../lib/competitors';
+  import { parsePinterestPayload } from '../lib/competitors';
   import { getActiveWorkspaceId } from '../lib/workspaces';
   import type { Competitor, CompetitorDeltaStats } from '../lib/types';
+
+  // ─── Server-only CRUD for Project 2 (via admin endpoints) ───
+  async function apiJSON(url: string, opts: RequestInit = {}) {
+    const r = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...opts });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error((d as any).error || `HTTP ${r.status}`);
+    return d as any;
+  }
+  async function getCompetitors() { return (await apiJSON('/api/admin/competitors')).competitors as any[]; }
+  async function getCompetitorDetails(id: string) { return apiJSON(`/api/admin/competitors?id=${encodeURIComponent(id)}`); }
+  async function addCompetitor(data: any) { return (await apiJSON('/api/admin/competitors', { method: 'POST', body: JSON.stringify(data) })).competitor; }
+  async function updateCompetitor(id: string, data: any) { return (await apiJSON('/api/admin/competitors', { method: 'PATCH', body: JSON.stringify({ id, ...data }) })).competitor; }
+  async function deleteCompetitor(id: string) { await apiJSON('/api/admin/competitors', { method: 'DELETE', body: JSON.stringify({ id }) }); return true; }
+  async function ingestDevToolsPayload(competitorId: string, payloadText: string) {
+    return apiJSON('/api/admin/competitors/ingest', { method: 'POST', body: JSON.stringify({ competitor_id: competitorId, payload: payloadText }) });
+  }
 
   // ─── State ────────────────────────────────────────────────────────────────
   let competitorsList: Competitor[] = [];
@@ -976,7 +989,6 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
       await addCompetitor({
         username: u, niche, notes, tags,
         account_type: (typeRadio?.value as any) || 'competitor',
-        workspace_id: getActiveWorkspaceId(),
       });
       hideOverlay($('add-competitor-modal'));
       toast(`Started tracking @${u.replace(/^@/, '')}`);
@@ -1116,8 +1128,7 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
   async function loadWorkspaceData() {
     renderSkeleton();
     try {
-      const wsId = getActiveWorkspaceId();
-      competitorsList = await getCompetitors(wsId);
+      competitorsList = await getCompetitors();
       populateTagDropdown();
       renderKPIs();
       renderTable();
