@@ -6,20 +6,20 @@ import { errorStatus } from '../../../server/lib/http-error';
 
 const json = (o: any, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { 'Content-Type': 'application/json' } });
 
-async function guard(locals: any, explicitWs?: string) {
+async function guard(locals: any, explicitWs?: string, role: 'member' | 'admin' = 'admin') {
   const user = locals.user, schedulingClient = locals.supabase;
   if (!user || !schedulingClient) return { err: json({ error: 'Unauthorized: missing session' }, 401) };
   const workspaceId = explicitWs || locals.activeWorkspaceId;
   if (!workspaceId) return { err: json({ error: 'Unauthorized: missing workspace identifier' }, 401) };
   try {
-    const wsCtx = await assertWorkspaceAccess(schedulingClient, workspaceId, user.id, 'admin');
+    const wsCtx = await assertWorkspaceAccess(schedulingClient, workspaceId, user.id, role);
     return { ok: { ws: wsCtx.workspaceId, db: dbClients.getCompetitors(locals.runtime?.env) } };
   } catch (e: any) { return { err: json({ error: e.message || 'Forbidden' }, errorStatus(e)) }; }
 }
 
 // GET: list all (no id) OR detail with snapshots/boards (with id)
 export const GET: APIRoute = async ({ request, locals }) => {
-  const g = await guard(locals); if (g.err) return g.err;
+  const g = await guard(locals, undefined, 'member'); if (g.err) return g.err;
   const id = new URL(request.url).searchParams.get('id');
   if (!id) {
     const { data, error } = await g.ok!.db.from('competitors').select('*')
@@ -43,7 +43,27 @@ export const GET: APIRoute = async ({ request, locals }) => {
     db.from('competitor_boards').select('*').eq('competitor_id', id).order('pin_count', { ascending: false }),
     db.from('competitor_top_pins').select('*').eq('competitor_id', id).order('save_count', { ascending: false }).limit(10),
   ]);
-  return json({ success: true, competitor: comp.data, snapshots: snaps.data || [], boards: boards.data || [], topPins: topPins.data || [] });
+  const snapsList = snaps.data || [];
+  let deltas: any = null;
+  if (snapsList.length >= 2) {
+    const curr = snapsList[snapsList.length - 1];
+    const prev = snapsList[snapsList.length - 2];
+    const calc = (c: number, p: number) => ({
+      change: c - p,
+      percent: p > 0 ? Number((((c - p) / p) * 100).toFixed(1)) : 0,
+    });
+    deltas = {
+      reachChange: calc(curr.profile_reach || 0, prev.profile_reach || 0).change,
+      reachPercent: calc(curr.profile_reach || 0, prev.profile_reach || 0).percent,
+      viewsChange: calc(curr.profile_views || 0, prev.profile_views || 0).change,
+      viewsPercent: calc(curr.profile_views || 0, prev.profile_views || 0).percent,
+      followersChange: calc(curr.follower_count || 0, prev.follower_count || 0).change,
+      followersPercent: calc(curr.follower_count || 0, prev.follower_count || 0).percent,
+      pinsChange: calc(curr.pin_count || 0, prev.pin_count || 0).change,
+      pinsPercent: calc(curr.pin_count || 0, prev.pin_count || 0).percent,
+    };
+  }
+  return json({ success: true, competitor: comp.data, snapshots: snapsList, boards: boards.data || [], topPins: topPins.data || [], deltas });
 };
 
 // POST: add new competitor to Competitors DB

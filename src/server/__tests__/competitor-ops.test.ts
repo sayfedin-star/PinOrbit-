@@ -3,6 +3,7 @@ import { GET as getCookies, POST as postCookies, PATCH as patchCookies, DELETE a
 import { GET as getOps, PUT as putOps, PATCH as patchOps, POST as postOps } from '../../pages/api/admin/competitor-ops';
 import { GET as getCompetitors, POST as postCompetitor, PATCH as patchCompetitor, DELETE as deleteCompetitor } from '../../pages/api/admin/competitors';
 import { POST as ingestPayload } from '../../pages/api/admin/competitors/ingest';
+import { DELETE as deleteSnapshot } from '../../pages/api/admin/competitors/snapshot';
 
 const mockCompetitorsClient = {
   from: vi.fn(),
@@ -317,6 +318,101 @@ describe('Competitor Ops Console API Endpoints', () => {
       const body = await res.json();
       expect(body.success).toBe(true);
       expect(body.competitor.username).toBe('bitesizedbash');
+    });
+
+    it('GET succeeds for member role (read-only allowed for members)', async () => {
+      mockCompetitorsClient.from.mockImplementation((table: string) => {
+        if (table === 'competitors') {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                order: vi.fn().mockResolvedValue({
+                  data: [{ id: 'comp-1', username: 'recipestower', workspace_id: 'ws-123' }],
+                  error: null,
+                }),
+              }),
+            }),
+          };
+        }
+        if (table === 'competitor_boards') {
+          return {
+            select: vi.fn().mockReturnValue({
+              in: vi.fn().mockResolvedValue({
+                data: [{ competitor_id: 'comp-1' }],
+                error: null,
+              }),
+            }),
+          };
+        }
+        return {};
+      });
+
+      const req = new Request('http://localhost/api/admin/competitors?workspace_id=ws-123');
+      const res = await getCompetitors({
+        request: req,
+        locals: { user: { id: 'member-only-user' }, supabase: {} as any, activeWorkspaceId: 'ws-123' },
+      } as any);
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.success).toBe(true);
+    });
+  });
+
+  describe('Competitors Snapshot DELETE API (/api/admin/competitors/snapshot)', () => {
+    it('returns 401 when unauthenticated', async () => {
+      const req = new Request('http://localhost/api/admin/competitors/snapshot', { method: 'DELETE' });
+      const res = await deleteSnapshot({ request: req, locals: {} } as any);
+      expect(res.status).toBe(401);
+    });
+
+    it('DELETE successfully deletes snapshot scoped to workspace', async () => {
+      mockCompetitorsClient.from.mockImplementation((table: string) => {
+        if (table === 'competitor_snapshots') {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: { id: 'snap-1', competitor_id: 'comp-1' },
+                  error: null,
+                }),
+              }),
+            }),
+            delete: vi.fn().mockReturnValue({
+              eq: vi.fn().mockResolvedValue({ error: null }),
+            }),
+          };
+        }
+        if (table === 'competitors') {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                eq: vi.fn().mockReturnValue({
+                  maybeSingle: vi.fn().mockResolvedValue({
+                    data: { id: 'comp-1' },
+                    error: null,
+                  }),
+                }),
+              }),
+            }),
+          };
+        }
+        return {};
+      });
+
+      const req = new Request('http://localhost/api/admin/competitors/snapshot', {
+        method: 'DELETE',
+        body: JSON.stringify({ snapshot_id: 'snap-1' }),
+      });
+
+      const res = await deleteSnapshot({
+        request: req,
+        locals: { user: { id: 'admin-user' }, supabase: {} as any, activeWorkspaceId: 'ws-123' },
+      } as any);
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.success).toBe(true);
     });
   });
 });
