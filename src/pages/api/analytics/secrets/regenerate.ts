@@ -61,6 +61,28 @@ export const POST: APIRoute = async ({ request, locals }) => {
       );
     }
 
+    // NEW CHECK: Global scope requires platform-level admin
+    if (scope === 'global') {
+      const { data: platformAdmin } = await schedulingClient
+        .from('admin_users')
+        .select('user_id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (!platformAdmin) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'Forbidden: Platform admin role required for global secret rotation.',
+          }),
+          {
+            status: 403,
+            headers: { 'Content-Type': 'application/json' },
+          }
+        );
+      }
+    }
+
     const nextSecret = await regenerate(
       scope,
       scope === 'workspace' ? workspaceId : undefined,

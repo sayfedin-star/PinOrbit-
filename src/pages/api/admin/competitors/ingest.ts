@@ -42,6 +42,14 @@ export const POST: APIRoute = async ({ request, locals }) => {
     }).eq('id', comp.data.id);
     await db.from('competitor_snapshots').insert({ competitor_id: comp.data.id, profile_reach: reach, profile_views: views, follower_count: fol, pin_count: pins, recorded_at: now });
     await db.from('competitor_daily_snapshots').upsert({ competitor_id: comp.data.id, snapshot_date: now.slice(0, 10), profile_reach: reach, profile_views: views, follower_count: fol, pin_count: pins }, { onConflict: 'competitor_id,snapshot_date' });
+
+    // Prune raw snapshots older than 30 days for this competitor
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
+    await db.from('competitor_snapshots')
+      .delete()
+      .eq('competitor_id', comp.data.id)
+      .lt('recorded_at', thirtyDaysAgo);
+
     return json({ success: true, type: parsed.type, message: 'Profile payload ingested.' });
   }
 

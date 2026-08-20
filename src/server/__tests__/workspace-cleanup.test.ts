@@ -18,8 +18,8 @@ vi.mock('../services/fastcron-service', () => ({
 }));
 
 describe('Safety-Critical Workspace Cleanup Suite (V19 Strict Mandate C)', () => {
-  const targetWsId = 'ws-target-0000-1111';
-  const otherWsId = 'ws-other-2222-3333';
+  const targetWsId = '00000000-0000-0000-0000-000000000001';
+  const otherWsId = '00000000-0000-0000-0000-000000000002';
   const pristineGlobalSecret = 'pristine-global-uuid-9999-8888-7777';
 
   let mockKvStore: Map<string, string>;

@@ -58,33 +58,22 @@ export const GET: APIRoute = async ({ params, request, locals }) => {
       workspaceId,
       connectionId,
       from,
-      to
+      to,
+      {
+        query,
+        sortField,
+        sortDir: isDesc ? 'desc' : 'asc',
+        page,
+        pageSize,
+      }
     );
-
-    let rows = result.rows;
-
-    if (query) {
-      rows = rows.filter(r => r.metric_date.toLowerCase().includes(query));
-    }
-
-    rows.sort((a: any, b: any) => {
-      let valA = a[sortField];
-      let valB = b[sortField];
-      if (valA < valB) return isDesc ? 1 : -1;
-      if (valA > valB) return isDesc ? -1 : 1;
-      return 0;
-    });
-
-    const total = rows.length;
-    const start = (page - 1) * pageSize;
-    const pagedRows = rows.slice(start, start + pageSize);
 
     return new Response(JSON.stringify({ 
       success: true, 
       data: {
-        rows: pagedRows,
-        total,
-        totals: result.totals
+        rows: result.rows,
+        total: result.total,
+        totals: result.totals,
       }
     }), {
       status: 200,

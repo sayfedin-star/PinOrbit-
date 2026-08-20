@@ -108,7 +108,7 @@ describe('Pinner Analytics API & Ingest Endpoint Security Suite', () => {
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
         single: vi.fn().mockResolvedValue({
-          data: { id: 'm1', workspace_id: 'ws-1', user_id: 'u-1', role: 'owner' },
+          data: { id: 'm1', workspace_id: '00000000-0000-0000-0000-000000000001', user_id: '00000000-0000-0000-0000-000000000002', role: 'owner' },
           error: null,
         }),
       })),
@@ -116,8 +116,8 @@ describe('Pinner Analytics API & Ingest Endpoint Security Suite', () => {
 
     const chunks = await pinnerAnalyticsService.generateHistoricalBackfillChunks(
       mockScheduling as any,
-      'u-1',
-      'ws-1',
+      '00000000-0000-0000-0000-000000000002',
+      '00000000-0000-0000-0000-000000000001',
       'conn-1',
       90
     );

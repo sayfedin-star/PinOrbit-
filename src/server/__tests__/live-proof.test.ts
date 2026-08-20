@@ -1,19 +1,44 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { GET as getLeaderboard } from '../../pages/api/analytics/connections/[id]/pin-leaderboard';
+
+vi.mock('../../server/db/analytics', () => ({
+  analyticsDb: {
+    getPinLeaderboard: vi.fn().mockResolvedValue([
+      {
+        pin_id: '123456789',
+        title: 'Delicious Recipe',
+        destination_url: 'https://example.com/recipe',
+        appearances: 5,
+        best_rank: 1,
+        total_impressions: 5000,
+        total_engagements: 250,
+        engagement_rate: 0.05,
+        total_outbound_clicks: 50,
+        outbound_click_rate: 0.01,
+        total_pin_clicks: 100,
+        pin_click_rate: 0.02,
+        total_saves: 25,
+        save_rate: 0.005,
+        last_seen: '2026-08-20',
+        trend: 'STABLE',
+      },
+    ]),
+  },
+}));
 
 describe('Live Endpoint Verification & Proof Generation (V36)', () => {
   const connectionId = '8aa5b660-e54a-4e44-b8bd-28e9d3ab8596';
   const workspaceId = '9f08ca03-e79c-46fa-9518-6858216daf65';
 
   const mockLocals = {
-    user: { id: 'u1' },
+    user: { id: '00000000-0000-0000-0000-000000000002' },
     supabase: {
       from: () => ({
         select: () => ({
           eq: () => ({
             eq: () => ({
               single: async () => ({
-                data: { id: 'm1', workspace_id: workspaceId, user_id: 'u1', role: 'owner' },
+                data: { id: 'm1', workspace_id: workspaceId, user_id: '00000000-0000-0000-0000-000000000002', role: 'owner' },
                 error: null,
               }),
             }),

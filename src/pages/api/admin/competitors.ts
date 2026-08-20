@@ -24,16 +24,19 @@ export const GET: APIRoute = async ({ request, locals }) => {
   const g = await guard(locals, undefined, 'member'); if (g.err) return g.err;
   const searchParams = new URL(request.url).searchParams;
   const id = searchParams.get('id');
-  const lite = searchParams.get('lite');
-  const boardsOnly = searchParams.get('boards_only');
+  const rawLite = searchParams.get('lite');
+  const rawBoardsOnly = searchParams.get('boards_only');
 
   // Flags must be exactly "1" if present
-  if (lite && lite !== '1') {
+  if (rawLite !== null && rawLite !== '1') {
     return json({ success: false, error: 'Invalid lite flag value.' }, 400);
   }
-  if (boardsOnly && boardsOnly !== '1') {
+  if (rawBoardsOnly !== null && rawBoardsOnly !== '1') {
     return json({ success: false, error: 'Invalid boards_only flag value.' }, 400);
   }
+
+  const lite = rawLite === '1';
+  const boardsOnly = rawBoardsOnly === '1';
 
   if (!id) {
     const { data, error } = await g.ok!.db.from('competitors').select('*')
@@ -42,12 +45,57 @@ export const GET: APIRoute = async ({ request, locals }) => {
     const comps = data || [];
     const ids = comps.map((c: any) => c.id);
     const countMap: Record<string, number> = {};
+    const deltasMap: Record<string, any> = {};
+
     if (ids.length) {
-      const { data: bRows } = await g.ok!.db.from('competitor_boards')
-        .select('competitor_id').in('competitor_id', ids);
-      for (const b of (bRows || []) as any[]) countMap[b.competitor_id] = (countMap[b.competitor_id] || 0) + 1;
+      const [bRowsRes, deltasList] = await Promise.all([
+        g.ok!.db.from('competitor_boards').select('competitor_id').in('competitor_id', ids),
+        Promise.all(ids.map(async (compId: string) => {
+          const { data: snaps } = await g.ok!.db.from('competitor_snapshots')
+            .select('profile_reach, profile_views, follower_count, pin_count, recorded_at')
+            .eq('competitor_id', compId)
+            .order('recorded_at', { ascending: false })
+            .limit(2);
+          const sList = snaps || [];
+          if (sList.length < 2) return { id: compId, deltas: null };
+          const curr = sList[0];
+          const prev = sList[1];
+          const calc = (c: number, p: number) => ({
+            change: c - p,
+            percent: p > 0 ? Number((((c - p) / p) * 100).toFixed(1)) : 0,
+          });
+          return {
+            id: compId,
+            deltas: {
+              reachChange: calc(curr.profile_reach || 0, prev.profile_reach || 0).change,
+              reachPercent: calc(curr.profile_reach || 0, prev.profile_reach || 0).percent,
+              viewsChange: calc(curr.profile_views || 0, prev.profile_views || 0).change,
+              viewsPercent: calc(curr.profile_views || 0, prev.profile_views || 0).percent,
+              followersChange: calc(curr.follower_count || 0, prev.follower_count || 0).change,
+              followersPercent: calc(curr.follower_count || 0, prev.follower_count || 0).percent,
+              pinsChange: calc(curr.pin_count || 0, prev.pin_count || 0).change,
+              pinsPercent: calc(curr.pin_count || 0, prev.pin_count || 0).percent,
+              reach: calc(curr.profile_reach || 0, prev.profile_reach || 0),
+              views: calc(curr.profile_views || 0, prev.profile_views || 0),
+              followers: calc(curr.follower_count || 0, prev.follower_count || 0),
+              pins: calc(curr.pin_count || 0, prev.pin_count || 0),
+            }
+          };
+        }))
+      ]);
+
+      for (const b of (bRowsRes.data || []) as any[]) countMap[b.competitor_id] = (countMap[b.competitor_id] || 0) + 1;
+      for (const d of deltasList) deltasMap[d.id] = d.deltas;
     }
-    return json({ success: true, competitors: comps.map((c: any) => ({ ...c, boards_count: countMap[c.id] || 0 })) });
+
+    return json({
+      success: true,
+      competitors: comps.map((c: any) => ({
+        ...c,
+        boards_count: countMap[c.id] || 0,
+        deltas: deltasMap[c.id] || null,
+      }))
+    });
   }
 
   // Validate ID format before querying
@@ -56,49 +104,54 @@ export const GET: APIRoute = async ({ request, locals }) => {
   }
 
   const db = g.ok!.db;
-
-  if (boardsOnly === '1') {
-    const boards = await db.from('competitor_boards').select('*').eq('competitor_id', id).order('pin_count', { ascending: false });
-    return json({ success: true, boards: boards.data || [] });
+  if (boardsOnly) {
+    const comp = await db.from('competitors').select('id').eq('id', id).eq('workspace_id', g.ok!.ws).maybeSingle();
+    if (!comp.data) return json({ error: 'Not found in workspace' }, 404);
+    const { data: boards, error: bErr } = await db.from('competitor_boards').select('*').eq('competitor_id', id).order('pin_count', { ascending: false });
+    if (bErr) return json({ error: bErr.message }, 500);
+    return json({ success: true, boards: boards || [] });
   }
 
   const comp = await db.from('competitors').select('*').eq('id', id).eq('workspace_id', g.ok!.ws).maybeSingle();
   if (!comp.data) return json({ error: 'Not found in workspace' }, 404);
 
-  if (lite === '1') {
-    const [snaps, topPins] = await Promise.all([
-      db.from('competitor_snapshots').select('*').eq('competitor_id', id).order('recorded_at', { ascending: true }),
+  let snapsList: any[] = [];
+  let boardsList: any[] = [];
+  let topPinsList: any[] = [];
+  let strategy_age_days: number | null = null;
+  let oldest_board_date: string | null = null;
+
+  if (lite) {
+    const [snaps, oldestBoard] = await Promise.all([
+      db.from('competitor_snapshots').select('*').eq('competitor_id', id).order('recorded_at', { ascending: false }).limit(100),
+      db.from('competitor_boards')
+        .select('board_created_at')
+        .eq('competitor_id', id)
+        .not('board_created_at', 'is', null)
+        .order('board_created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+    ]);
+    snapsList = (snaps.data || []).slice().reverse();
+    boardsList = [];
+    topPinsList = [];
+
+    if (oldestBoard?.data?.board_created_at) {
+      oldest_board_date = oldestBoard.data.board_created_at;
+      const diffMs = Date.now() - new Date(oldestBoard.data.board_created_at).getTime();
+      strategy_age_days = Math.max(0, Math.floor(diffMs / 86400000));
+    }
+  } else {
+    const [snaps, boards, topPins] = await Promise.all([
+      db.from('competitor_snapshots').select('*').eq('competitor_id', id).order('recorded_at', { ascending: false }).limit(100),
+      db.from('competitor_boards').select('*').eq('competitor_id', id).order('pin_count', { ascending: false }),
       db.from('competitor_top_pins').select('*').eq('competitor_id', id).order('save_count', { ascending: false }).limit(10),
     ]);
-    const snapsList = snaps.data || [];
-    let deltas: any = null;
-    if (snapsList.length >= 2) {
-      const curr = snapsList[snapsList.length - 1];
-      const prev = snapsList[snapsList.length - 2];
-      const calc = (c: number, p: number) => ({
-        change: c - p,
-        percent: p > 0 ? Number((((c - p) / p) * 100).toFixed(1)) : 0,
-      });
-      deltas = {
-        reachChange: calc(curr.profile_reach || 0, prev.profile_reach || 0).change,
-        reachPercent: calc(curr.profile_reach || 0, prev.profile_reach || 0).percent,
-        viewsChange: calc(curr.profile_views || 0, prev.profile_views || 0).change,
-        viewsPercent: calc(curr.profile_views || 0, prev.profile_views || 0).percent,
-        followersChange: calc(curr.follower_count || 0, prev.follower_count || 0).change,
-        followersPercent: calc(curr.follower_count || 0, prev.follower_count || 0).percent,
-        pinsChange: calc(curr.pin_count || 0, prev.pin_count || 0).change,
-        pinsPercent: calc(curr.pin_count || 0, prev.pin_count || 0).percent,
-      };
-    }
-    return json({ success: true, competitor: comp.data, snapshots: snapsList, boards: [], topPins: topPins.data || [], deltas });
+    snapsList = (snaps.data || []).slice().reverse();
+    boardsList = boards.data || [];
+    topPinsList = topPins.data || [];
   }
 
-  const [snaps, boards, topPins] = await Promise.all([
-    db.from('competitor_snapshots').select('*').eq('competitor_id', id).order('recorded_at', { ascending: true }),
-    db.from('competitor_boards').select('*').eq('competitor_id', id).order('pin_count', { ascending: false }),
-    db.from('competitor_top_pins').select('*').eq('competitor_id', id).order('save_count', { ascending: false }).limit(10),
-  ]);
-  const snapsList = snaps.data || [];
   let deltas: any = null;
   if (snapsList.length >= 2) {
     const curr = snapsList[snapsList.length - 1];
@@ -118,7 +171,11 @@ export const GET: APIRoute = async ({ request, locals }) => {
       pinsPercent: calc(curr.pin_count || 0, prev.pin_count || 0).percent,
     };
   }
-  return json({ success: true, competitor: comp.data, snapshots: snapsList, boards: boards.data || [], topPins: topPins.data || [], deltas });
+  const competitor = lite
+    ? { ...comp.data, strategy_age_days, oldest_board_date }
+    : comp.data;
+
+  return json({ success: true, competitor, snapshots: snapsList, boards: boardsList, topPins: topPinsList, deltas });
 };
 
 // POST: add new competitor to Competitors DB

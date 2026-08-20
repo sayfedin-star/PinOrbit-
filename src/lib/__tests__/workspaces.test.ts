@@ -1,8 +1,34 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { getDefaultWorkspaceId, getActiveWorkspaceId, DEFAULT_WORKSPACE_ID } from '../workspaces';
 import { setActiveWorkspaceId, deleteWorkspace, assertWorkspaceEmpty } from '../workspaces-client';
 import { getAccounts, getBoards, getPins } from '../supabase';
 import { getCompetitors } from '../competitors';
+
+vi.mock('../supabase', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../supabase')>();
+  return {
+    ...actual,
+    getAccounts: vi.fn().mockImplementation((wsId?: string) =>
+      Promise.resolve(wsId === '00000000-0000-0000-0000-000000000099' ? [] : [{ id: 'acc-1' }])
+    ),
+    getBoards: vi.fn().mockImplementation((wsId?: string) =>
+      Promise.resolve(wsId === '00000000-0000-0000-0000-000000000099' ? [] : [{ id: 'board-1' }])
+    ),
+    getPins: vi.fn().mockImplementation((_status?: string, _account?: string, wsId?: string) =>
+      Promise.resolve(wsId === '00000000-0000-0000-0000-000000000099' ? [] : [{ id: 'pin-1' }])
+    ),
+  };
+});
+
+vi.mock('../competitors', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../competitors')>();
+  return {
+    ...actual,
+    getCompetitors: vi.fn().mockImplementation((wsId?: string) =>
+      Promise.resolve(wsId === '00000000-0000-0000-0000-000000000099' ? [] : [{ id: 'comp-1' }])
+    ),
+  };
+});
 
 describe('Workspace Server & Client Helpers Test Suite', () => {
   beforeEach(() => {
