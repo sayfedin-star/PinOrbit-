@@ -42,7 +42,7 @@ BEGIN
   END IF;
 
   DELETE FROM public.pins
-  WHERE status = 'published'
+  WHERE status = 'posted'
     AND updated_at < NOW() - INTERVAL '30 days';
 
   UPDATE public.pins

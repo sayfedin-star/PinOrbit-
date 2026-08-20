@@ -2,6 +2,7 @@ export const prerender = false;
 
 import type { APIRoute } from 'astro';
 import { bootstrapAdminUser, type BootstrapOptions } from '../../../server/auth/bootstrap';
+import { timingSafeEqual } from '../../../server/lib/timing-safe';
 
 /**
  * Server-only administrative bootstrap endpoint.
@@ -31,7 +32,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     request.headers.get('x-bootstrap-key') ||
     request.headers.get('x-bootstrap-secret');
 
-  if (!providedSecret || providedSecret !== expectedSecret) {
+  if (!providedSecret || !(await timingSafeEqual(providedSecret, expectedSecret))) {
     return new Response(
       JSON.stringify({
         success: false,

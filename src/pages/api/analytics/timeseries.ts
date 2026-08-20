@@ -1,6 +1,7 @@
 export const prerender = false;
 
 import type { APIRoute } from 'astro';
+import { assertWorkspaceAccess } from '../../../server/auth/workspace-guard';
 import { pinnerAnalyticsService } from '../../../server/services/pinner-analytics-service';
 import { getAnalyticsKV } from '../../../lib/edge-kv';
 import { errorStatus } from '../../../server/lib/http-error';
@@ -23,7 +24,17 @@ export const GET: APIRoute = async ({ request, locals }) => {
   const workspaceId = url.searchParams.get('workspace_id') || locals.activeWorkspaceId;
   const connectionId = url.searchParams.get('connection_id');
   const windowDays = parseInt(url.searchParams.get('window_days') || '30', 10);
-  const bypassCache = url.searchParams.get('cache_bypass') === '1';
+  const bypassCacheParam = url.searchParams.get('cache_bypass') === '1';
+  let bypassCache = false;
+
+  if (bypassCacheParam && workspaceId) {
+    try {
+      const access = await assertWorkspaceAccess(schedulingClient, workspaceId, user.id);
+      bypassCache = access.isAdmin || access.isOwner;
+    } catch {
+      bypassCache = false;
+    }
+  }
 
   if (!workspaceId || !connectionId) {
     return new Response(

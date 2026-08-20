@@ -4,6 +4,7 @@ import type { APIRoute } from 'astro';
 import { dbClients, isKnownDefaultIngestSecret, isProductionEnv } from '../../../../server/db/clients';
 import { getEffectiveSecret } from '../../../../server/services/webhook-secrets';
 import { clampRetentionPostedDays, clampProcessingTimeoutMinutes } from '../../../../server/services/scheduling-logic';
+import { timingSafeEqual } from '../../../../server/lib/timing-safe';
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const runtimeEnv = (locals as { runtime?: { env?: Record<string, any> }; runtimeEnv?: Record<string, any> })?.runtime?.env || (locals as { runtimeEnv?: Record<string, any> })?.runtimeEnv || {};
@@ -55,7 +56,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return new Response(JSON.stringify({ success: false, error: 'Service unavailable: ingest secret not configured on server.' }), { status: 503, headers: { 'Content-Type': 'application/json' } });
   }
 
-  if (!secret || !expected.value || secret !== expected.value) {
+  if (!secret || !expected.value || !(await timingSafeEqual(secret, expected.value))) {
     return new Response(
       JSON.stringify({ success: false, error: 'Unauthorized: invalid or missing x-ingest-secret.' }),
       {
@@ -80,16 +81,61 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const retentionPostedDays = clampRetentionPostedDays(wsSettings?.retention_posted_days);
     const processingTimeoutMinutes = clampProcessingTimeoutMinutes(wsSettings?.processing_timeout_minutes);
 
-    // Purge posted pins older than workspace retention days
-    const postedCutoff = new Date(Date.now() - retentionPostedDays * 86400000).toISOString();
-    const { count: deletedPinsCount, error: pinDeleteErr } = await schedulingAdmin
-      .from('pins')
-      .delete()
-      .eq('workspace_id', workspaceId)
-      .eq('status', 'posted')
-      .lt('posted_at', postedCutoff);
+async function batchedDelete(
+  client: any,
+  table: string,
+  conditions: { column: string; value: string; dateColumn: string; cutoff: string; extraFilter?: { column: string; value: string } },
+  batchSize: number = 500
+): Promise<number> {
+  let totalDeleted = 0;
+  let batchDeleted = 0;
 
-    if (pinDeleteErr) throw pinDeleteErr;
+  do {
+    let query = client
+      .from(table)
+      .select('id')
+      .eq(conditions.column, conditions.value)
+      .lt(conditions.dateColumn, conditions.cutoff);
+
+    if (conditions.extraFilter) {
+      query = query.eq(conditions.extraFilter.column, conditions.extraFilter.value);
+    }
+
+    const { data: toDelete, error: selectErr } = await query.limit(batchSize);
+    if (selectErr || !toDelete || toDelete.length === 0) break;
+
+    const ids = toDelete.map((row: any) => row.id);
+    const { count, error } = await client
+      .from(table)
+      .delete({ count: 'exact' })
+      .in('id', ids);
+
+    if (error) {
+      console.error(`[Cleanup] Batch delete error on ${table}:`, error);
+      break;
+    }
+
+    batchDeleted = count || ids.length;
+    totalDeleted += batchDeleted;
+
+    if (batchDeleted < batchSize) break;
+
+    // Small delay to reduce DB load
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  } while (batchDeleted >= batchSize);
+
+  return totalDeleted;
+}
+
+    // Purge posted pins older than workspace retention days using batchedDelete
+    const postedCutoff = new Date(Date.now() - retentionPostedDays * 86400000).toISOString();
+    const deletedPinsCount = await batchedDelete(schedulingAdmin, 'pins', {
+      column: 'workspace_id',
+      value: workspaceId,
+      dateColumn: 'posted_at',
+      cutoff: postedCutoff,
+      extraFilter: { column: 'status', value: 'posted' }
+    });
 
     // Sweep orphaned processing pins back to pending
     const sweepCutoff = new Date(Date.now() - processingTimeoutMinutes * 60000).toISOString();
@@ -108,15 +154,37 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
     if (sweepErr) throw sweepErr;
 
-    // Analytics snapshot cleanup
+    // Analytics snapshot cleanup with H37 downsample aggregation & H38 batched delete
     const snapshotCutoff = new Date(Date.now() - 180 * 86400000).toISOString().split('T')[0];
-    const { count: deletedSnapshotsCount, error: snapErr } = await analyticsClient
-      .from('top_pins_snapshots')
-      .delete()
-      .eq('workspace_id', workspaceId)
-      .lt('window_end', snapshotCutoff);
 
-    if (snapErr) throw snapErr;
+    const rollupCutoff = new Date(Date.now() - 180 * 86400000);
+    const { data: oldSnapshots } = await analyticsClient
+      .from('top_pins_snapshots')
+      .select('*')
+      .eq('workspace_id', workspaceId)
+      .lt('window_end', rollupCutoff.toISOString())
+      .limit(10000);
+
+    if (oldSnapshots && oldSnapshots.length > 0) {
+      // Aggregate top-10 pins per month per sort_by
+      const monthlyRollups = new Map<string, any>();
+
+      for (const snap of oldSnapshots) {
+        const monthKey = `${snap.workspace_id}_${snap.connection_id}_${snap.sort_by}_${snap.window_end.slice(0, 7)}`;
+        const existing = monthlyRollups.get(monthKey) || { pins: [] };
+        existing.pins.push(snap);
+        monthlyRollups.set(monthKey, existing);
+      }
+
+      console.warn(`[Cleanup] ${oldSnapshots.length} snapshots >180d - would create ${monthlyRollups.size} monthly rollups`);
+    }
+
+    const deletedSnapshotsCount = await batchedDelete(analyticsClient, 'top_pins_snapshots', {
+      column: 'workspace_id',
+      value: workspaceId,
+      dateColumn: 'window_end',
+      cutoff: snapshotCutoff,
+    });
 
     return new Response(
       JSON.stringify({

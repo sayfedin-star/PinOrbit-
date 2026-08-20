@@ -102,21 +102,20 @@ export const GET: APIRoute = async ({ request, locals }) => {
   let topPinsList: any[] = [];
 
   if (lite) {
-    const snaps = await db.from('competitor_snapshots').select('*').eq('competitor_id', id).order('recorded_at', { ascending: true });
-    snapsList = snaps.data || [];
+    const snaps = await db.from('competitor_snapshots').select('*').eq('competitor_id', id).order('recorded_at', { ascending: false }).limit(100);
+    snapsList = (snaps.data || []).slice().reverse();
     boardsList = [];
     topPinsList = [];
   } else {
     const [snaps, boards, topPins] = await Promise.all([
-      db.from('competitor_snapshots').select('*').eq('competitor_id', id).order('recorded_at', { ascending: true }),
+      db.from('competitor_snapshots').select('*').eq('competitor_id', id).order('recorded_at', { ascending: false }).limit(100),
       db.from('competitor_boards').select('*').eq('competitor_id', id).order('pin_count', { ascending: false }),
       db.from('competitor_top_pins').select('*').eq('competitor_id', id).order('save_count', { ascending: false }).limit(10),
     ]);
-    snapsList = snaps.data || [];
+    snapsList = (snaps.data || []).slice().reverse();
     boardsList = boards.data || [];
     topPinsList = topPins.data || [];
   }
-
   let deltas: any = null;
   if (snapsList.length >= 2) {
     const curr = snapsList[snapsList.length - 1];
