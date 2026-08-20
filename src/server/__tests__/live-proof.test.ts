@@ -1,28 +1,42 @@
 import { describe, it, expect, vi } from 'vitest';
 import { GET as getLeaderboard } from '../../pages/api/analytics/connections/[id]/pin-leaderboard';
 
-vi.mock('../../server/db/analytics', () => ({
+// Note: workspace-access guard is mocked externally; this mock only simulates the analyticsDb layer.
+vi.mock('../db/analytics', () => ({
   analyticsDb: {
-    getPinLeaderboard: vi.fn().mockResolvedValue([
-      {
-        pin_id: '123456789',
-        title: 'Delicious Recipe',
+    getPinLeaderboard: vi.fn().mockImplementation((_ws, _conn, _sort, _days, pageSize, _q, opts) => {
+      const page = opts?.page || 1;
+      const count = pageSize || 10;
+      const data = Array.from({ length: count }, (_, i) => ({
+        pin_id: `pin-${page}-${i}`,
+        title: `Pin ${page}-${i}`,
+        link: 'https://example.com',
         destination_url: 'https://example.com/recipe',
+        thumbnail_url: 'https://example.com/thumb.jpg',
         appearances: 5,
         best_rank: 1,
-        total_impressions: 5000,
-        total_engagements: 250,
-        engagement_rate: 0.05,
-        total_outbound_clicks: 50,
-        outbound_click_rate: 0.01,
-        total_pin_clicks: 100,
-        pin_click_rate: 0.02,
-        total_saves: 25,
-        save_rate: 0.005,
-        last_seen: '2026-08-20',
-        trend: 'STABLE',
-      },
-    ]),
+        latest_rank: 2,
+        first_seen: '2026-08-01T00:00:00Z',
+        last_seen: '2026-08-10T00:00:00Z',
+        trend: 'RISING',
+        total_impressions: 10000,
+        total_saves: 500,
+        total_pin_clicks: 300,
+        total_outbound_clicks: 150,
+        total_engagements: 950,
+        engagement_rate: 0.095,
+        outbound_click_rate: 0.015,
+        pin_click_rate: 0.03,
+        save_rate: 0.05,
+      }));
+      return Promise.resolve({
+        items: data,
+        total_unique: 50,
+        page,
+        page_size: count,
+        total_pages: 5,
+      });
+    }),
   },
 }));
 

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   parsePinterestPayload,
   calculateCompetitorDeltas,
@@ -6,6 +6,13 @@ import {
   ingestDevToolsPayload,
   getCompetitors,
 } from '../competitors';
+
+vi.mock('../supabase', () => ({
+  supabase: null,
+  isSupabaseConfigured: false,
+  supabaseUrl: '',
+  supabaseAnonKey: '',
+}));
 
 describe('Competitor Intelligence Payload Parser & Engine', () => {
   it('should auto-detect and parse UserResource JSON payload', () => {

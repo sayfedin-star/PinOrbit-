@@ -156,7 +156,7 @@ describe('Competitor Ops Console API Endpoints', () => {
             select: vi.fn().mockReturnValue({
               eq: vi.fn().mockReturnValue({
                 maybeSingle: vi.fn().mockResolvedValue({
-                  data: { id: true, is_enabled: true, dry_run: false, max_retries: 3 },
+                  data: { workspace_id: 'ws-123', is_enabled: true, dry_run: false, max_retries: 3 },
                   error: null,
                 }),
               }),
