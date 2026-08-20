@@ -422,6 +422,24 @@ describe('Competitor Ops Console API Endpoints', () => {
             }),
           };
         }
+        if (table === 'competitor_boards') {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                not: vi.fn().mockReturnValue({
+                  order: vi.fn().mockReturnValue({
+                    limit: vi.fn().mockReturnValue({
+                      maybeSingle: vi.fn().mockResolvedValue({
+                        data: { board_created_at: '2026-01-01T00:00:00Z' },
+                        error: null,
+                      }),
+                    }),
+                  }),
+                }),
+              }),
+            }),
+          };
+        }
         return {};
       });
 
@@ -437,6 +455,8 @@ describe('Competitor Ops Console API Endpoints', () => {
       expect(body.boards).toEqual([]);
       expect(body.topPins).toEqual([]);
       expect(body.deltas.reachChange).toBe(1000);
+      expect(body.competitor.oldest_board_date).toBe('2026-01-01T00:00:00Z');
+      expect(body.competitor.strategy_age_days).toBeGreaterThan(0);
     });
 
     it('GET with id and boards_only=1 returns only boards array', async () => {
