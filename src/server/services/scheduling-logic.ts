@@ -131,15 +131,29 @@ export function checkScheduleWindow(
       weekday: 'short',
       hour: '2-digit',
       minute: '2-digit',
-      hour12: false,
+      hourCycle: 'h23',
     }).formatToParts(now);
 
     day = parts.find((p) => p.type === 'weekday')?.value || '';
-    const hour = parts.find((p) => p.type === 'hour')?.value || '00';
+    let hour = parts.find((p) => p.type === 'hour')?.value || '00';
+    if (hour === '24') hour = '00';
     const minute = parts.find((p) => p.type === 'minute')?.value || '00';
     hm = `${hour}:${minute}`;
-  } catch {
-    // If invalid timezone, fallback to allowing
+  } catch (tzError) {
+    console.warn('[SchedulingLogic] Invalid timezone, falling back to UTC:', tzError);
+    const utcParts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'UTC',
+      weekday: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(now);
+
+    day = utcParts.find((p) => p.type === 'weekday')?.value || '';
+    let utcHour = utcParts.find((p) => p.type === 'hour')?.value || '00';
+    if (utcHour === '24') utcHour = '00';
+    const utcMinute = utcParts.find((p) => p.type === 'minute')?.value || '00';
+    hm = `${utcHour}:${utcMinute}`;
   }
 
   let activeDaysArr: string[] = [];
@@ -149,7 +163,10 @@ export function checkScheduleWindow(
     activeDaysArr = schedule.active_days.replace(/[{}"']/g, '').split(',').map((x) => x.trim()).filter(Boolean);
   }
 
-  if (day && activeDaysArr.length > 0 && !activeDaysArr.includes(day)) {
+  const normalizedDay = day.toLowerCase().slice(0, 3);
+  const normalizedActiveDays = activeDaysArr.map((d) => String(d).toLowerCase().slice(0, 3));
+
+  if (normalizedDay && normalizedActiveDays.length > 0 && !normalizedActiveDays.includes(normalizedDay)) {
     return { allowed: false, reason: 'day_off' };
   }
 

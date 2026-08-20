@@ -138,8 +138,12 @@ export async function bootstrapAdminUser(
         email,
         password,
         email_confirm: true,
-        user_metadata: {
+        app_metadata: {
           role: 'admin',
+          bootstrapped: true,
+          bootstrapped_at: timestamp,
+        },
+        user_metadata: {
           bootstrapped: true,
           bootstrapped_at: timestamp,
         },

@@ -39,11 +39,11 @@ export const GET: APIRoute = async ({ request, locals }) => {
   const comp = await db.from('competitors').select('*').eq('id', id).eq('workspace_id', g.ok!.ws).maybeSingle();
   if (!comp.data) return json({ error: 'Not found in workspace' }, 404);
   const [snaps, boards, topPins] = await Promise.all([
-    db.from('competitor_snapshots').select('*').eq('competitor_id', id).order('recorded_at', { ascending: true }),
+    db.from('competitor_snapshots').select('*').eq('competitor_id', id).order('recorded_at', { ascending: false }).limit(100),
     db.from('competitor_boards').select('*').eq('competitor_id', id).order('pin_count', { ascending: false }),
     db.from('competitor_top_pins').select('*').eq('competitor_id', id).order('save_count', { ascending: false }).limit(10),
   ]);
-  const snapsList = snaps.data || [];
+  const snapsList = (snaps.data || []).slice().reverse();
   let deltas: any = null;
   if (snapsList.length >= 2) {
     const curr = snapsList[snapsList.length - 1];

@@ -26,7 +26,17 @@ interface InMemoryCacheEntry<T> {
 }
 
 // In-Memory fallback store for SSR and local environments
+const MAX_MEMORY_ENTRIES = 500;
 const memoryCache = new Map<string, InMemoryCacheEntry<unknown>>();
+
+function setMemoryCache<T>(key: string, value: T, ttlMs: number): void {
+  // Evict oldest if at capacity
+  if (memoryCache.size >= MAX_MEMORY_ENTRIES) {
+    const oldestKey = memoryCache.keys().next().value;
+    if (oldestKey) memoryCache.delete(oldestKey);
+  }
+  memoryCache.set(key, { value, cachedAt: Date.now(), ttlMs });
+}
 
 const DEFAULT_TTL_SECONDS = 6 * 60 * 60; // 6 hours
 
@@ -106,11 +116,7 @@ export const edgeCache = {
         if (raw) {
           // 2 & 4: KV is fresh → refresh memory entry and return HIT (KV)
           const ttlMs = ttlSeconds * 1000;
-          memoryCache.set(key, {
-            value: raw,
-            cachedAt: now,
-            ttlMs,
-          });
+          setMemoryCache(key, raw, ttlMs);
           return {
             data: raw as T,
             status: 'HIT',
@@ -152,11 +158,7 @@ export const edgeCache = {
     const ttlMs = ttlSeconds * 1000;
 
     // 1. In-memory store
-    memoryCache.set(key, {
-      value,
-      cachedAt: now,
-      ttlMs,
-    });
+    setMemoryCache(key, value, ttlMs);
 
     // 2. Cloudflare KV namespace if provided
     if (kvNamespace && typeof kvNamespace.put === 'function') {
@@ -187,13 +189,17 @@ export const edgeCache = {
       }
     }
 
-    // KV list & delete if supported
+    // KV list & delete with cursor pagination if supported
     if (kvNamespace && typeof kvNamespace.list === 'function' && typeof kvNamespace.delete === 'function') {
       try {
-        const list = await kvNamespace.list({ prefix });
-        for (const k of list.keys || []) {
-          await kvNamespace.delete(k.name);
-        }
+        let cursor: string | undefined = undefined;
+        do {
+          const list = await kvNamespace.list({ prefix, cursor });
+          for (const k of list.keys || []) {
+            await kvNamespace.delete(k.name);
+          }
+          cursor = list.list_complete ? undefined : list.cursor;
+        } while (cursor);
       } catch (e) {
         console.warn(`[EdgeCache] KV invalidation error for prefix ${prefix}:`, e);
       }

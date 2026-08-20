@@ -18,6 +18,16 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
+    const authHeader = req.headers.get("Authorization");
+    const cronSecret = Deno.env.get("CRON_SECRET");
+    const expectedBearer = cronSecret ? `Bearer ${cronSecret}` : null;
+
+    if (!authHeader || !expectedBearer || authHeader !== expectedBearer) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -32,11 +42,44 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    const { data: account } = await supabase
+      .from("accounts")
+      .select("id, workspace_id")
+      .eq("id", account_id)
+      .maybeSingle();
+
+    if (!account) {
+      return new Response(JSON.stringify({ error: "Account not found" }), {
+        status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
     const rawTrimmed = board_name.trim();
     const normalizedName = rawTrimmed.toLowerCase();
     const idempotencyKey = `board.create:${account_id}:${normalizedName}`;
 
-    // 1. Check Idempotency: Existing board for this account
+    // 1. Check Idempotency: Existing board by idempotency key or name
+    const { data: existingByIdempotency } = await supabase
+      .from("boards")
+      .select("*")
+      .eq("account_id", account_id)
+      .eq("created_via_idempotency_key", idempotencyKey)
+      .maybeSingle();
+
+    if (existingByIdempotency) {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          board: existingByIdempotency,
+          reused: true,
+          idempotency_matched: true,
+          pinterest_board_id: existingByIdempotency.pinterest_board_id || existingByIdempotency.board_id,
+          board_name: existingByIdempotency.board_name,
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const { data: existingBoard } = await supabase
       .from("boards")
       .select("*")
@@ -137,6 +180,7 @@ Deno.serve(async (req: Request) => {
       pinterest_board_id: pinterestBoardId,
       created_via: "webhook_auto_create",
       created_via_webhook_id: selectedWebhookId,
+      created_via_idempotency_key: idempotencyKey,
       created_at: new Date().toISOString(),
     };
 
@@ -149,11 +193,12 @@ Deno.serve(async (req: Request) => {
         pinterest_board_id: pinterestBoardId,
         created_via: "webhook_auto_create",
         created_via_webhook_id: selectedWebhookId,
+        created_via_idempotency_key: idempotencyKey,
       })
       .select()
       .maybeSingle();
 
-    if (insertErr && (insertErr.message.includes("created_via") || insertErr.message.includes("schema cache") || insertErr.message.includes("pinterest_board_id"))) {
+    if (insertErr && (insertErr.message.includes("created_via") || insertErr.message.includes("created_via_idempotency_key") || insertErr.message.includes("schema cache") || insertErr.message.includes("pinterest_board_id"))) {
       const { data: fallbackBoard, error: fallbackErr } = await supabase
         .from("boards")
         .insert({

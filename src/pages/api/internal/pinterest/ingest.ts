@@ -4,6 +4,7 @@ import type { APIRoute } from 'astro';
 import { dbClients, isKnownDefaultIngestSecret, isProductionEnv } from '../../../../server/db/clients';
 import { getEffectiveSecret } from '../../../../server/services/webhook-secrets';
 import { pinnerETL } from '../../../../server/services/pinner-etl';
+import { timingSafeEqual } from '../../../../server/lib/timing-safe';
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const runtimeEnv = (locals as { runtime?: { env?: Record<string, any> }; runtimeEnv?: Record<string, any> })?.runtime?.env || (locals as { runtimeEnv?: Record<string, any> })?.runtimeEnv || {};
@@ -42,7 +43,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       return new Response(JSON.stringify({ success: false, error: 'Service unavailable: ingest secret not configured on server.' }), { status: 503, headers: { 'Content-Type': 'application/json' } });
     }
     const prov = request.headers.get('x-ingest-secret') || (typeof payload.ingest_secret === 'string' ? payload.ingest_secret : null);
-    if (!prov || !eff.value || prov !== eff.value) {
+    if (!prov || !eff.value || !(await timingSafeEqual(prov, eff.value))) {
       return new Response(JSON.stringify({ success: false, error: 'Unauthorized: missing or invalid x-ingest-secret header.' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
     }
 
@@ -50,7 +51,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     if (ev === 'pin.posted' || ev === 'pin.failed') {
       const internalId = payload.pin_id;
       if (!internalId) return new Response(JSON.stringify({ success: false, error: 'pin_id required.' }), { status: 422, headers: { 'Content-Type': 'application/json' } });
-      const { data: pin } = await admin.from('pins').select('*').eq('id', internalId).maybeSingle();
+      const { data: pin } = await admin.from('pins').select('*').eq('id', internalId).eq('workspace_id', wsId).maybeSingle();
       if (!pin) return new Response(JSON.stringify({ success: false, error: 'Pin not found.' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
       if (ev === 'pin.failed' || payload.success === false) {
         const rc = (pin.retry_count ?? 0) + 1;
@@ -63,7 +64,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
           last_failure_reason: payload.error || 'Make reported failure',
           last_attempt_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-        }).eq('id', internalId);
+        }).eq('id', internalId).eq('workspace_id', wsId);
         await admin.from('pin_delivery_logs').insert({ pin_id: internalId, attempt_no: pin.attempts, event_type: 'dispatch_failed', error_message: payload.error || null, metadata: { source: 'make_callback' } }).then(() => {});
         return new Response(JSON.stringify({ success: true, handled: 'pin_failed', exhausted }), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }
@@ -90,7 +91,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
         updateFields.image_url = payload.image_url.trim();
       }
 
-      await admin.from('pins').update(updateFields).eq('id', internalId);
+      await admin.from('pins').update(updateFields).eq('id', internalId).eq('workspace_id', wsId);
       await admin.from('pin_delivery_logs').insert({ pin_id: internalId, attempt_no: pin.attempts, event_type: 'dispatch_success', provider: 'pinterest', metadata: { pinterest_pin_id: payload.id || pin.pinterest_pin_id, board_id: payload.board_id, source: 'make_callback' } }).then(() => {});
       return new Response(JSON.stringify({ success: true, handled: 'pin_posted' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
@@ -179,38 +180,42 @@ export const POST: APIRoute = async ({ request, locals }) => {
         return new Response(JSON.stringify({ success: false, error: 'Account does not belong to workspace.' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
       }
 
+      const nowIso = new Date().toISOString();
+      const boardsToUpsert = rawBoards
+        .map((b: any) => {
+          const bId = String(b.id || b.board_id || '');
+          const bName = String(b.name || b.board_name || '');
+          if (!bId) return null;
+
+          return {
+            account_id: accId,
+            workspace_id: acc.workspace_id,
+            board_id: bId,
+            pinterest_board_id: bId,
+            board_name: bName || 'Untitled Board',
+            created_via: 'webhook_sync',
+            pin_count: parseCoerceInt(b.pin_count),
+            follower_count: parseCoerceInt(b.follower_count),
+            board_created_at: parseCoerceDate(b.board_created_at || b.created_at),
+            board_pins_modified_at: parseCoerceDate(b.board_pins_modified_at || b.pins_modified_at),
+            last_synced_at: nowIso,
+          };
+        })
+        .filter(Boolean);
+
       let syncedCount = 0;
       const errors: string[] = [];
-      const nowIso = new Date().toISOString();
 
-      for (const b of rawBoards) {
-        const bId = String(b.id || b.board_id || '');
-        const bName = String(b.name || b.board_name || '');
-        if (!bId) continue;
-
-        const pinCount = parseCoerceInt(b.pin_count);
-        const followerCount = parseCoerceInt(b.follower_count);
-        const boardCreatedAt = parseCoerceDate(b.board_created_at || b.created_at);
-        const boardPinsModifiedAt = parseCoerceDate(b.board_pins_modified_at || b.pins_modified_at);
-
-        const { error: upErr } = await admin.from('boards').upsert({
-          account_id: accId,
-          workspace_id: acc.workspace_id,
-          board_id: bId,
-          pinterest_board_id: bId,
-          board_name: bName || 'Untitled Board',
-          created_via: 'webhook_sync',
-          pin_count: pinCount,
-          follower_count: followerCount,
-          board_created_at: boardCreatedAt,
-          board_pins_modified_at: boardPinsModifiedAt,
-          last_synced_at: nowIso,
-        }, { onConflict: 'account_id, board_id' });
-
+      if (boardsToUpsert.length > 0) {
+        const { error: upErr } = await admin.from('boards').upsert(
+          boardsToUpsert,
+          { onConflict: 'account_id,board_id' }
+        );
         if (upErr) {
-          errors.push(`Board ${bId}: ${upErr.message}`);
+          errors.push(`Batch upsert: ${upErr.message}`);
+          console.warn('[IngestAPI] Batch board upsert error:', upErr.message);
         } else {
-          syncedCount++;
+          syncedCount = boardsToUpsert.length;
         }
       }
 
@@ -237,15 +242,20 @@ export const POST: APIRoute = async ({ request, locals }) => {
       }
 
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(bId);
+      const sanitizedId = String(bId).trim();
+      if (!/^[a-zA-Z0-9_-]{1,64}$/.test(sanitizedId)) {
+        return new Response(JSON.stringify({ success: false, error: 'Invalid board identifier format.' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      }
+
       let query = admin
         .from('boards')
         .delete()
         .eq('account_id', accId);
 
       if (isUuid) {
-        query = query.or(`id.eq.${bId},board_id.eq.${bId},pinterest_board_id.eq.${bId}`);
+        query = query.or(`id.eq.${sanitizedId},board_id.eq.${sanitizedId},pinterest_board_id.eq.${sanitizedId}`);
       } else {
-        query = query.or(`board_id.eq.${bId},pinterest_board_id.eq.${bId}`);
+        query = query.or(`board_id.eq.${sanitizedId},pinterest_board_id.eq.${sanitizedId}`);
       }
 
       const { error: delErr } = await query;
@@ -273,7 +283,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return new Response(JSON.stringify({ success: false, error: 'Service unavailable: ingest secret not configured on server.' }), { status: 503, headers: { 'Content-Type': 'application/json' } });
   }
   const providedSecret = request.headers.get('x-ingest-secret');
-  if (!providedSecret || !preEff.value || providedSecret !== preEff.value) {
+  if (!providedSecret || !preEff.value || !(await timingSafeEqual(providedSecret, preEff.value))) {
     return new Response(JSON.stringify({ success: false, error: 'Unauthorized: missing or invalid x-ingest-secret header.' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
   }
 
@@ -297,7 +307,15 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   // 6. Tenant boundary check & server-side injection
   if (payload.workspace_id && payload.workspace_id !== connection.workspace_id) {
-    console.warn('[IngestAPI] Client workspace_id mismatch — using connection.workspace_id', { client_ws: payload.workspace_id, connection_ws: connection.workspace_id });
+    return new Response(JSON.stringify({
+      success: false,
+      error: 'Forbidden: workspace_id in payload does not match connection workspace.'
+    }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  const targetSecret = await getEffectiveSecret(connection.workspace_id, runtimeEnv);
+  if (!targetSecret?.value || !providedSecret || !(await timingSafeEqual(providedSecret, targetSecret.value))) {
+    return new Response(JSON.stringify({ success: false, error: 'Unauthorized: invalid secret for connection workspace.' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
   }
   payload.workspace_id = connection.workspace_id;
 
