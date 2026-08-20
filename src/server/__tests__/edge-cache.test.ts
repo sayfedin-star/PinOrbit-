@@ -84,7 +84,7 @@ describe('Pinner Analytics Edge Cache Suite', () => {
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
         single: vi.fn().mockResolvedValue({
-          data: { id: 'm1', workspace_id: workspaceId, user_id: 'u1', role: 'owner' },
+          data: { id: 'm1', workspace_id: workspaceId, user_id: '00000000-0000-0000-0000-000000000002', role: 'owner' },
           error: null,
         }),
       })),
@@ -108,7 +108,7 @@ describe('Pinner Analytics Edge Cache Suite', () => {
     // 1. Overview with empty results
     const ovRes = await pinnerAnalyticsService.getOverview(
       mockScheduling as any,
-      'u1',
+      '00000000-0000-0000-0000-000000000002',
       workspaceId,
       connectionId,
       30
@@ -122,7 +122,7 @@ describe('Pinner Analytics Edge Cache Suite', () => {
     // 2. Top pins with empty results
     const tpRes = await pinnerAnalyticsService.getTopPins(
       mockScheduling as any,
-      'u1',
+      '00000000-0000-0000-0000-000000000002',
       workspaceId,
       connectionId,
       'IMPRESSION',
@@ -136,7 +136,7 @@ describe('Pinner Analytics Edge Cache Suite', () => {
     // 3. Timeseries with empty results
     const tsRes = await pinnerAnalyticsService.getTimeseries(
       mockScheduling as any,
-      'u1',
+      '00000000-0000-0000-0000-000000000002',
       workspaceId,
       connectionId,
       30
@@ -156,7 +156,7 @@ describe('Pinner Analytics Edge Cache Suite', () => {
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
         single: vi.fn().mockResolvedValue({
-          data: { id: 'm1', workspace_id: workspaceId, user_id: 'u1', role: 'owner' },
+          data: { id: 'm1', workspace_id: workspaceId, user_id: '00000000-0000-0000-0000-000000000002', role: 'owner' },
           error: null,
         }),
       })),
@@ -198,7 +198,7 @@ describe('Pinner Analytics Edge Cache Suite', () => {
     // Regular read returns HIT
     const normalRead = await pinnerAnalyticsService.getOverview(
       mockScheduling as any,
-      'u1',
+      '00000000-0000-0000-0000-000000000002',
       workspaceId,
       connectionId,
       30
@@ -209,7 +209,7 @@ describe('Pinner Analytics Edge Cache Suite', () => {
     // Bypass read returns BYPASS and refreshes cache with 48730
     const bypassRead = await pinnerAnalyticsService.getOverview(
       mockScheduling as any,
-      'u1',
+      '00000000-0000-0000-0000-000000000002',
       workspaceId,
       connectionId,
       30,
@@ -222,7 +222,7 @@ describe('Pinner Analytics Edge Cache Suite', () => {
     // Subsequent normal read is a HIT with refreshed value
     const postBypassRead = await pinnerAnalyticsService.getOverview(
       mockScheduling as any,
-      'u1',
+      '00000000-0000-0000-0000-000000000002',
       workspaceId,
       connectionId,
       30

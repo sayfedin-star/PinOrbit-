@@ -38,12 +38,25 @@ describe('PinOrbit v2 Multi-Project Server Architecture', () => {
       }),
     } as any;
 
+    const wsUuid = '11111111-1111-4111-8111-111111111111';
+    const userUuid = '22222222-2222-4222-8222-222222222222';
+
     await expect(
-      assertWorkspaceAccess(mockSupabase, 'ws-123', 'user-456')
+      assertWorkspaceAccess(mockSupabase, wsUuid, userUuid)
     ).rejects.toThrow('Forbidden: Access Denied.');
   });
 
+  it('assertWorkspaceAccess throws 400 when workspaceId or userId is not a valid UUID', async () => {
+    const mockSupabase = {} as any;
+    await expect(
+      assertWorkspaceAccess(mockSupabase, 'invalid-ws', 'invalid-user')
+    ).rejects.toThrow('Invalid workspace or user identifier format.');
+  });
+
   it('assertWorkspaceAccess returns workspace context when membership is verified', async () => {
+    const wsUuid = '11111111-1111-4111-8111-111111111111';
+    const userUuid = '22222222-2222-4222-8222-222222222222';
+
     const mockSupabase = {
       from: vi.fn().mockReturnValue({
         select: vi.fn().mockReturnValue({
@@ -51,8 +64,8 @@ describe('PinOrbit v2 Multi-Project Server Architecture', () => {
             eq: vi.fn().mockReturnValue({
               single: vi.fn().mockResolvedValue({
                 data: {
-                  workspace_id: 'ws-123',
-                  user_id: 'user-456',
+                  workspace_id: wsUuid,
+                  user_id: userUuid,
                   role: 'owner',
                 },
                 error: null,
@@ -63,8 +76,8 @@ describe('PinOrbit v2 Multi-Project Server Architecture', () => {
       }),
     } as any;
 
-    const result = await assertWorkspaceAccess(mockSupabase, 'ws-123', 'user-456');
-    expect(result.workspaceId).toBe('ws-123');
+    const result = await assertWorkspaceAccess(mockSupabase, wsUuid, userUuid);
+    expect(result.workspaceId).toBe(wsUuid);
     expect(result.isOwner).toBe(true);
     expect(result.isAdmin).toBe(true);
   });
