@@ -409,12 +409,14 @@ describe('Competitor Ops Console API Endpoints', () => {
           return {
             select: vi.fn().mockReturnValue({
               eq: vi.fn().mockReturnValue({
-                order: vi.fn().mockResolvedValue({
-                  data: [
-                    { profile_reach: 3000, profile_views: 1500, follower_count: 400, pin_count: 80, recorded_at: '2026-08-19T00:00:00Z' },
-                    { profile_reach: 4000, profile_views: 2000, follower_count: 500, pin_count: 100, recorded_at: '2026-08-20T00:00:00Z' },
-                  ],
-                  error: null,
+                order: vi.fn().mockReturnValue({
+                  limit: vi.fn().mockResolvedValue({
+                    data: [
+                      { profile_reach: 4000, profile_views: 2000, follower_count: 500, pin_count: 100, recorded_at: '2026-08-20T00:00:00Z' },
+                      { profile_reach: 3000, profile_views: 1500, follower_count: 400, pin_count: 80, recorded_at: '2026-08-19T00:00:00Z' },
+                    ],
+                    error: null,
+                  }),
                 }),
               }),
             }),
