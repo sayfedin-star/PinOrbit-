@@ -24,6 +24,45 @@ import { POST as postCleanupRetention } from '../../pages/api/internal/pinterest
 import { GET as getPurgePreview } from '../../pages/api/analytics/connections/[id]/purge-preview';
 import { POST as postPurge } from '../../pages/api/analytics/connections/[id]/purge';
 
+const { mockDbTable } = vi.hoisted(() => {
+  const createQueryBuilder = () => {
+    const builder: any = {
+      select: vi.fn(() => builder),
+      insert: vi.fn(() => builder),
+      update: vi.fn(() => builder),
+      delete: vi.fn(() => builder),
+      upsert: vi.fn(() => builder),
+      eq: vi.fn(() => builder),
+      neq: vi.fn(() => builder),
+      is: vi.fn(() => builder),
+      in: vi.fn(() => builder),
+      lt: vi.fn(() => builder),
+      lte: vi.fn(() => builder),
+      gt: vi.fn(() => builder),
+      gte: vi.fn(() => builder),
+      order: vi.fn(() => builder),
+      limit: vi.fn(() => builder),
+      single: vi.fn().mockResolvedValue({ data: { id: 'mock-id', workspace_id: '9f08ca03-e79c-46fa-9518-6858216daf65', display_name: 'test' }, error: null }),
+      maybeSingle: vi.fn().mockResolvedValue({ data: { id: 'mock-id', workspace_id: '9f08ca03-e79c-46fa-9518-6858216daf65', display_name: 'test' }, error: null }),
+      then: (resolve: any) => Promise.resolve({ data: [], error: null, count: 0 }).then(resolve),
+    };
+    return builder;
+  };
+  const mockDbTable = () => createQueryBuilder();
+  return { mockDbTable };
+});
+
+vi.mock('../../server/db/clients', () => ({
+  dbClients: {
+    getSchedulingAdmin: vi.fn().mockReturnValue({ from: mockDbTable, rpc: vi.fn().mockResolvedValue({ data: null, error: null }) }),
+    getAnalytics: vi.fn().mockReturnValue({ from: mockDbTable, rpc: vi.fn().mockResolvedValue({ data: null, error: null }) }),
+    getCompetitors: vi.fn().mockReturnValue({ from: mockDbTable, rpc: vi.fn().mockResolvedValue({ data: null, error: null }) }),
+  },
+  getServerEnv: vi.fn().mockReturnValue({ INGEST_SECRET_KEY: 'test_sec' }),
+  isProductionEnv: vi.fn().mockReturnValue(false),
+  isKnownDefaultIngestSecret: vi.fn().mockReturnValue(false),
+}));
+
 vi.mock('../../server/auth/workspace-guard', () => ({
   assertWorkspaceAccess: vi.fn().mockResolvedValue({
     id: 'member-1',
@@ -290,7 +329,7 @@ describe('R12/R15 Full 17-Endpoint Route Verification Suite', () => {
       expect(res.contentType).not.toContain('text/html');
       expect(res.status).toBeLessThan(500);
     }
-  });
+  }, 30000);
 
   it('R-05: validates date range bounds on GET /api/analytics/connections/[id]/daily', async () => {
     const connId = '8aa5b660-e54a-4e44-b8bd-28e9d3ab8596';

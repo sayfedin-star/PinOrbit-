@@ -1,8 +1,22 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { getDefaultWorkspaceId, getActiveWorkspaceId, DEFAULT_WORKSPACE_ID } from '../workspaces';
 import { setActiveWorkspaceId, deleteWorkspace, assertWorkspaceEmpty } from '../workspaces-client';
 import { getAccounts, getBoards, getPins } from '../supabase';
 import { getCompetitors } from '../competitors';
+
+vi.mock('../supabase', () => ({
+  supabase: null,
+  isSupabaseConfigured: false,
+  supabaseUrl: '',
+  supabaseAnonKey: '',
+  getAccounts: vi.fn((wsId) => Promise.resolve(wsId === '00000000-0000-0000-0000-000000000001' ? [{ id: 'acc-1', workspace_id: wsId }] : [])),
+  getBoards: vi.fn((wsId) => Promise.resolve(wsId === '00000000-0000-0000-0000-000000000001' ? [{ id: 'b-1', workspace_id: wsId }] : [])),
+  getPins: vi.fn((status, boardId, wsId) => Promise.resolve(wsId === '00000000-0000-0000-0000-000000000001' ? [{ id: 'p-1', workspace_id: wsId }] : [])),
+}));
+
+vi.mock('../competitors', () => ({
+  getCompetitors: vi.fn((wsId) => Promise.resolve(wsId === '00000000-0000-0000-0000-000000000001' ? [{ id: 'c-1', workspace_id: wsId }] : [])),
+}));
 
 describe('Workspace Server & Client Helpers Test Suite', () => {
   beforeEach(() => {
