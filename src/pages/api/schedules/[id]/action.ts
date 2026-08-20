@@ -42,8 +42,13 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
   try {
     await assertWorkspaceAccess(schedulingClient, workspaceId, user.id, 'admin');
     const adminClient = dbClients.getSchedulingAdmin(runtimeEnv);
-    const { data: schedule } = await adminClient.from('posting_schedules').select('*').eq('id', id).single();
-    if (!schedule || schedule.workspace_id !== workspaceId) {
+    const { data: schedule } = await adminClient
+      .from('posting_schedules')
+      .select('*')
+      .eq('id', id)
+      .eq('workspace_id', workspaceId)
+      .maybeSingle();
+    if (!schedule) {
       return new Response(JSON.stringify({ error: 'Schedule not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
     }
 

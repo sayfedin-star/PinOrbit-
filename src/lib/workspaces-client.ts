@@ -168,16 +168,16 @@ export async function deleteWorkspace(id: string): Promise<boolean> {
     throw new Error('Action blocked: The Default Workspace cannot be deleted.');
   }
 
-  await assertWorkspaceEmpty(id);
+  // Call server-side endpoint instead of client-side check
+  const response = await fetch('/api/workspaces/delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspace_id: id })
+  });
 
-  if (!isSupabaseConfigured || !supabase) {
-    setActiveWorkspaceId(DEFAULT_WORKSPACE_ID);
-    return true;
-  }
-
-  const { error } = await supabase.from('workspaces').delete().eq('id', id);
-  if (error) {
-    throw new Error(error.message);
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Failed to delete workspace' }));
+    throw new Error(error.error || 'Failed to delete workspace');
   }
 
   setActiveWorkspaceId(DEFAULT_WORKSPACE_ID);
