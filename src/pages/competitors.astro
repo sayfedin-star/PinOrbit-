@@ -149,7 +149,7 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
   <aside id="competitor-drawer" aria-label="Competitor details"
     class="fixed inset-y-0 right-0 z-50 w-full max-w-md transform translate-x-full transition-transform duration-300 bg-card border-l border-border shadow-2xl flex flex-col">
     <div class="flex items-center justify-between border-b border-border px-5 py-4">
-      <span class="text-sm font-bold text-foreground">Profile Deep-Dive</span>
+      <span class="text-sm font-bold text-foreground">Profile Overview</span>
       <button id="drawer-close" class="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
@@ -435,6 +435,11 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
     const up = change > 0;
     return `<span class="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${up ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}">${up ? '↑' : '↓'} ${Math.abs(percent).toFixed(1)}%</span>`;
   }
+  function formatDeltaSpan(diff: number | undefined | null): string {
+    if (diff === undefined || diff === null || diff === 0) return '';
+    const isPos = diff > 0;
+    return `<span class="ml-1.5 font-semibold text-[10px] ${isPos ? 'text-emerald-500' : 'text-rose-500'}">(${isPos ? '+' : ''}${fmtFull(diff)})</span>`;
+  }
   function sparkline(values: number[], cls: string): string {
     if (values.length < 2) return '<div class="text-[10px] text-muted-foreground py-2">Not enough history yet — ingest more snapshots.</div>';
     const w = 280, h = 48, pad = 3;
@@ -653,7 +658,7 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
             <img src="${avatar}" alt="${escHtml(c.username)}" loading="lazy" class="h-10 w-10 rounded-full object-cover border border-border shadow-sm flex-shrink-0" />
             <div class="flex flex-col min-w-0">
               <div class="flex items-center gap-1.5">
-                <button data-drawer-id="${c.id}" class="text-xs font-bold text-foreground hover:text-primary transition-colors truncate text-left">${escHtml(c.full_name || c.username)}</button>
+                <a href="/competitors/details?id=${c.id}" class="text-xs font-bold text-foreground hover:text-primary transition-colors truncate text-left">${escHtml(c.full_name || c.username)}</a>
                 <a href="https://www.pinterest.com/${escHtml(c.username)}/" target="_blank" rel="noopener noreferrer" class="text-muted-foreground/60 hover:text-primary" title="Open Pinterest">
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
                 </a>
@@ -664,10 +669,10 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
           </div></td>`,
         type: `<td class="py-4 px-4"><span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold border ${isOwn ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' : 'bg-purple-500/10 text-purple-500 border-purple-500/20'}">${isOwn ? '👤 My Account' : '🎯 Competitor'}</span></td>`,
         niche: `<td class="py-4 px-4"><span class="inline-flex items-center rounded-md bg-muted px-2 py-1 text-[11px] font-medium text-foreground">${escHtml(c.niche || 'General')}</span></td>`,
-        reach: `<td class="py-4 px-4 font-bold text-emerald-500">${fmtFull(c.profile_reach || 0)}</td>`,
-        views: `<td class="py-4 px-4 font-semibold text-foreground">${fmtFull(c.profile_views || 0)}</td>`,
-        followers: `<td class="py-4 px-4 font-semibold text-foreground">${fmtFull(c.follower_count || 0)}</td>`,
-        pins: `<td class="py-4 px-4 text-foreground">${fmtFull(c.pin_count || 0)}</td>`,
+        reach: `<td class="py-4 px-4 font-bold text-emerald-500">${fmtFull(c.profile_reach || 0)}${formatDeltaSpan(c.deltas?.reachChange ?? c.deltas?.reach?.change)}</td>`,
+        views: `<td class="py-4 px-4 font-semibold text-foreground">${fmtFull(c.profile_views || 0)}${formatDeltaSpan(c.deltas?.viewsChange ?? c.deltas?.views?.change)}</td>`,
+        followers: `<td class="py-4 px-4 font-semibold text-foreground">${fmtFull(c.follower_count || 0)}${formatDeltaSpan(c.deltas?.followersChange ?? c.deltas?.followers?.change)}</td>`,
+        pins: `<td class="py-4 px-4 text-foreground">${fmtFull(c.pin_count || 0)}${formatDeltaSpan(c.deltas?.pinsChange ?? c.deltas?.pins?.change)}</td>`,
         boards_count: `<td class="py-4 px-4"><span class="inline-flex items-center rounded-md bg-muted/60 px-2 py-1 text-[11px] font-semibold text-foreground">${c.boards_count ?? 0}</span></td>`,
         last_pin: `<td class="py-4 px-4 text-[11px] ${act.text}" title="${escHtml(c.last_pin_at || '')}">
           <span class="inline-flex items-center gap-1.5"><span class="h-1.5 w-1.5 rounded-full ${act.dot}"></span><span>${timeAgo(c.last_pin_at)}${c.last_pin_at ? ' · ' + new Date(c.last_pin_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''}</span></span>
@@ -678,10 +683,6 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
             <button data-drawer-id="${c.id}" class="rounded-lg border border-border p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground" title="Quick preview"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
             <button data-edit-id="${c.id}" class="rounded-lg border border-border p-1.5 text-muted-foreground hover:bg-amber-500/10 hover:text-amber-500" title="Edit"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
             <button data-paste-id="${c.id}" class="rounded-lg border border-border p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground" title="Paste DevTools Payload"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg></button>
-            <a href="/competitors/details?id=${c.id}" class="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2.5 py-1.5 text-[11px] font-semibold text-foreground hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all shadow-sm">
-              <span>Deep-Dive</span>
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-            </a>
             <button data-delete-id="${c.id}" data-username="${escHtml(c.username)}" class="rounded-lg p-1.5 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500" title="Delete"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button>
           </div></td>`,
       };
@@ -865,7 +866,7 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
           <div class="text-sm font-bold text-foreground truncate">${escHtml(c.full_name || c.username)}</div>
           <div class="text-xs text-muted-foreground">@${escHtml(c.username)}</div>
         </div>
-        <a href="/competitors/details?id=${c.id}" class="rounded-xl bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-sm hover:bg-primary/90">Full Deep-Dive →</a>
+        <a href="/competitors/details?id=${c.id}" class="rounded-xl bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-sm hover:bg-primary/90">Full Details →</a>
       </div>
       <div class="grid grid-cols-2 gap-3">
         <div class="rounded-xl border border-border bg-background p-3">
@@ -967,7 +968,7 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
           <tr><td class="py-2.5 px-4 font-semibold text-muted-foreground">Pins</td>${list.map(c => `<td class="py-2.5 px-4 text-foreground">${fmtCompact(c.pin_count)}</td>`).join('')}</tr>
           <tr><td class="py-2.5 px-4 font-semibold text-muted-foreground">Boards</td>${list.map(c => `<td class="py-2.5 px-4 text-foreground">${c.boards_count ?? 0}</td>`).join('')}</tr>
           <tr><td class="py-2.5 px-4 font-semibold text-muted-foreground">Last Pin</td>${list.map(c => `<td class="py-2.5 px-4 text-muted-foreground">${timeAgo(c.last_pin_at)}</td>`).join('')}</tr>
-          <tr><td class="py-2.5 px-4 font-semibold text-muted-foreground">Actions</td>${list.map(c => `<td class="py-2.5 px-4"><a href="/competitors/details?id=${c.id}" class="text-primary font-bold hover:underline">Deep-Dive →</a></td>`).join('')}</tr>
+          <tr><td class="py-2.5 px-4 font-semibold text-muted-foreground">Actions</td>${list.map(c => `<td class="py-2.5 px-4"><a href="/competitors/details?id=${c.id}" class="text-primary font-bold hover:underline">Details →</a></td>`).join('')}</tr>
         </tbody>
       </table>`;
     showOverlay($('compare-modal'));
