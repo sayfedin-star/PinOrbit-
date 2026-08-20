@@ -170,6 +170,7 @@ async function batchedDelete(
       const monthlyRollups = new Map<string, any>();
 
       for (const snap of oldSnapshots) {
+        if (!snap.window_end) continue;
         const monthKey = `${snap.workspace_id}_${snap.connection_id}_${snap.sort_by}_${snap.window_end.slice(0, 7)}`;
         const existing = monthlyRollups.get(monthKey) || { pins: [] };
         existing.pins.push(snap);

@@ -5,6 +5,8 @@ import { dbClients } from '../../../../server/db/clients';
 import { errorStatus } from '../../../../server/lib/http-error';
 import { parsePinterestPayload } from '../../../../lib/competitors';
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const json = (o: any, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { 'Content-Type': 'application/json' } });
 
 export const POST: APIRoute = async ({ request, locals }) => {
@@ -13,6 +15,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (!user || !schedulingClient || !ws) return json({ error: 'Unauthorized' }, 401);
   try { await assertWorkspaceAccess(schedulingClient, ws, user.id, 'admin'); }
   catch (e: any) { return json({ error: e.message || 'Forbidden' }, errorStatus(e)); }
+
+  if (!body.competitor_id || !UUID_REGEX.test(body.competitor_id)) {
+    return json({ success: false, error: 'Invalid competitor ID format.' }, 400);
+  }
 
   const db = dbClients.getCompetitors(locals.runtime?.env);
   const parsed = parsePinterestPayload(body.payload || '');

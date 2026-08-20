@@ -397,7 +397,7 @@ describe('Competitor Ops Console API Endpoints', () => {
               eq: vi.fn().mockReturnValue({
                 eq: vi.fn().mockReturnValue({
                   maybeSingle: vi.fn().mockResolvedValue({
-                    data: { id: 'comp-1', username: 'recipestower', workspace_id: 'ws-123' },
+                    data: { id: 'a0000000-0000-0000-0000-000000000001', username: 'recipestower', workspace_id: 'ws-123' },
                     error: null,
                   }),
                 }),
@@ -443,7 +443,7 @@ describe('Competitor Ops Console API Endpoints', () => {
         return {};
       });
 
-      const req = new Request('http://localhost/api/admin/competitors?id=comp-1&lite=1&workspace_id=ws-123');
+      const req = new Request('http://localhost/api/admin/competitors?id=a0000000-0000-0000-0000-000000000001&lite=1&workspace_id=ws-123');
       const res = await getCompetitors({
         request: req,
         locals: { user: { id: 'admin-user' }, supabase: {} as any, activeWorkspaceId: 'ws-123' },
@@ -467,7 +467,7 @@ describe('Competitor Ops Console API Endpoints', () => {
               eq: vi.fn().mockReturnValue({
                 eq: vi.fn().mockReturnValue({
                   maybeSingle: vi.fn().mockResolvedValue({
-                    data: { id: 'comp-1' },
+                    data: { id: 'a0000000-0000-0000-0000-000000000001' },
                     error: null,
                   }),
                 }),
@@ -493,7 +493,7 @@ describe('Competitor Ops Console API Endpoints', () => {
         return {};
       });
 
-      const req = new Request('http://localhost/api/admin/competitors?id=comp-1&boards_only=1&workspace_id=ws-123');
+      const req = new Request('http://localhost/api/admin/competitors?id=a0000000-0000-0000-0000-000000000001&boards_only=1&workspace_id=ws-123');
       const res = await getCompetitors({
         request: req,
         locals: { user: { id: 'admin-user' }, supabase: {} as any, activeWorkspaceId: 'ws-123' },

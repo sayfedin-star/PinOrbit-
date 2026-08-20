@@ -4,6 +4,8 @@ import { assertWorkspaceAccess } from '../../../server/auth/workspace-guard';
 import { dbClients } from '../../../server/db/clients';
 import { errorStatus } from '../../../server/lib/http-error';
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const json = (o: any, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { 'Content-Type': 'application/json' } });
 
 async function guard(locals: any, explicitWs?: string, role: 'member' | 'admin' = 'admin') {
@@ -20,10 +22,21 @@ async function guard(locals: any, explicitWs?: string, role: 'member' | 'admin' 
 // GET: list all (no id) OR detail with snapshots/boards (with id)
 export const GET: APIRoute = async ({ request, locals }) => {
   const g = await guard(locals, undefined, 'member'); if (g.err) return g.err;
-  const url = new URL(request.url);
-  const id = url.searchParams.get('id');
-  const lite = url.searchParams.get('lite') === '1'; // lite=1 flag
-  const boardsOnly = url.searchParams.get('boards_only') === '1'; // boards_only=1 flag
+  const searchParams = new URL(request.url).searchParams;
+  const id = searchParams.get('id');
+  const rawLite = searchParams.get('lite');
+  const rawBoardsOnly = searchParams.get('boards_only');
+
+  // Flags must be exactly "1" if present
+  if (rawLite !== null && rawLite !== '1') {
+    return json({ success: false, error: 'Invalid lite flag value.' }, 400);
+  }
+  if (rawBoardsOnly !== null && rawBoardsOnly !== '1') {
+    return json({ success: false, error: 'Invalid boards_only flag value.' }, 400);
+  }
+
+  const lite = rawLite === '1';
+  const boardsOnly = rawBoardsOnly === '1';
 
   if (!id) {
     const { data, error } = await g.ok!.db.from('competitors').select('*')
@@ -85,6 +98,11 @@ export const GET: APIRoute = async ({ request, locals }) => {
     });
   }
 
+  // Validate ID format before querying
+  if (id && !UUID_REGEX.test(id)) {
+    return json({ success: false, error: 'Invalid competitor ID format.' }, 400);
+  }
+
   const db = g.ok!.db;
   if (boardsOnly) {
     const comp = await db.from('competitors').select('id').eq('id', id).eq('workspace_id', g.ok!.ws).maybeSingle();
@@ -104,18 +122,19 @@ export const GET: APIRoute = async ({ request, locals }) => {
   let oldest_board_date: string | null = null;
 
   if (lite) {
-    const snaps = await db.from('competitor_snapshots').select('*').eq('competitor_id', id).order('recorded_at', { ascending: false }).limit(100);
+    const [snaps, oldestBoard] = await Promise.all([
+      db.from('competitor_snapshots').select('*').eq('competitor_id', id).order('recorded_at', { ascending: false }).limit(100),
+      db.from('competitor_boards')
+        .select('board_created_at')
+        .eq('competitor_id', id)
+        .not('board_created_at', 'is', null)
+        .order('board_created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+    ]);
     snapsList = (snaps.data || []).slice().reverse();
     boardsList = [];
     topPinsList = [];
-
-    const oldestBoard = await db.from('competitor_boards')
-      .select('board_created_at')
-      .eq('competitor_id', id)
-      .not('board_created_at', 'is', null)
-      .order('board_created_at', { ascending: true })
-      .limit(1)
-      .maybeSingle();
 
     if (oldestBoard?.data?.board_created_at) {
       oldest_board_date = oldestBoard.data.board_created_at;
@@ -132,6 +151,7 @@ export const GET: APIRoute = async ({ request, locals }) => {
     boardsList = boards.data || [];
     topPinsList = topPins.data || [];
   }
+
   let deltas: any = null;
   if (snapsList.length >= 2) {
     const curr = snapsList[snapsList.length - 1];
@@ -179,6 +199,9 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
   let body: any = {}; try { body = JSON.parse(await request.text() || '{}'); } catch { return json({ error: 'Invalid JSON' }, 400); }
   const g = await guard(locals, body.workspace_id); if (g.err) return g.err;
   if (!body.id) return json({ error: 'id required' }, 400);
+  if (!UUID_REGEX.test(body.id)) {
+    return json({ success: false, error: 'Invalid competitor ID format.' }, 400);
+  }
   const patch: any = {};
   if (body.full_name !== undefined) patch.full_name = body.full_name;
   if (body.username !== undefined) patch.username = String(body.username).replace(/^@/, '');
@@ -195,6 +218,10 @@ export const DELETE: APIRoute = async ({ request, locals }) => {
   let body: any = {}; try { body = JSON.parse(await request.text() || '{}'); } catch { /* ok */ }
   const g = await guard(locals, body.workspace_id); if (g.err) return g.err;
   if (!body.id) return json({ error: 'id required' }, 400);
+  if (!UUID_REGEX.test(body.id)) {
+    return json({ success: false, error: 'Invalid competitor ID format.' }, 400);
+  }
   const { error } = await g.ok!.db.from('competitors').delete().eq('id', body.id).eq('workspace_id', g.ok!.ws);
   return error ? json({ error: error.message }, 500) : json({ success: true });
 };
+
