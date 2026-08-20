@@ -100,12 +100,28 @@ export const GET: APIRoute = async ({ request, locals }) => {
   let snapsList: any[] = [];
   let boardsList: any[] = [];
   let topPinsList: any[] = [];
+  let strategy_age_days: number | null = null;
+  let oldest_board_date: string | null = null;
 
   if (lite) {
     const snaps = await db.from('competitor_snapshots').select('*').eq('competitor_id', id).order('recorded_at', { ascending: false }).limit(100);
     snapsList = (snaps.data || []).slice().reverse();
     boardsList = [];
     topPinsList = [];
+
+    const oldestBoard = await db.from('competitor_boards')
+      .select('board_created_at')
+      .eq('competitor_id', id)
+      .not('board_created_at', 'is', null)
+      .order('board_created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (oldestBoard?.data?.board_created_at) {
+      oldest_board_date = oldestBoard.data.board_created_at;
+      const diffMs = Date.now() - new Date(oldestBoard.data.board_created_at).getTime();
+      strategy_age_days = Math.max(0, Math.floor(diffMs / 86400000));
+    }
   } else {
     const [snaps, boards, topPins] = await Promise.all([
       db.from('competitor_snapshots').select('*').eq('competitor_id', id).order('recorded_at', { ascending: false }).limit(100),
@@ -135,7 +151,11 @@ export const GET: APIRoute = async ({ request, locals }) => {
       pinsPercent: calc(curr.pin_count || 0, prev.pin_count || 0).percent,
     };
   }
-  return json({ success: true, competitor: comp.data, snapshots: snapsList, boards: boardsList, topPins: topPinsList, deltas });
+  const competitor = lite
+    ? { ...comp.data, strategy_age_days, oldest_board_date }
+    : comp.data;
+
+  return json({ success: true, competitor, snapshots: snapsList, boards: boardsList, topPins: topPinsList, deltas });
 };
 
 // POST: add new competitor to Competitors DB
