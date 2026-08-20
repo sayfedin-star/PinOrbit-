@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { GET as getLeaderboard } from '../../pages/api/analytics/connections/[id]/pin-leaderboard';
 
+// Note: workspace-access guard is mocked externally; this mock only simulates the analyticsDb layer.
 vi.mock('../db/analytics', () => ({
   analyticsDb: {
     getPinLeaderboard: vi.fn().mockImplementation((_ws, _conn, _sort, _days, pageSize, _q, opts) => {
@@ -10,6 +11,7 @@ vi.mock('../db/analytics', () => ({
         pin_id: `pin-${page}-${i}`,
         title: `Pin ${page}-${i}`,
         link: 'https://example.com',
+        destination_url: 'https://example.com/recipe',
         thumbnail_url: 'https://example.com/thumb.jpg',
         appearances: 5,
         best_rank: 1,
@@ -43,14 +45,14 @@ describe('Live Endpoint Verification & Proof Generation (V36)', () => {
   const workspaceId = '9f08ca03-e79c-46fa-9518-6858216daf65';
 
   const mockLocals = {
-    user: { id: 'u1' },
+    user: { id: '00000000-0000-0000-0000-000000000002' },
     supabase: {
       from: () => ({
         select: () => ({
           eq: () => ({
             eq: () => ({
               single: async () => ({
-                data: { id: 'm1', workspace_id: workspaceId, user_id: 'u1', role: 'owner' },
+                data: { id: 'm1', workspace_id: workspaceId, user_id: '00000000-0000-0000-0000-000000000002', role: 'owner' },
                 error: null,
               }),
             }),

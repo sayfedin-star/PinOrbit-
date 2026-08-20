@@ -6,6 +6,9 @@ import { competitorsDb } from '../db/competitors';
 import { analyticsDb } from '../db/analytics';
 
 describe('Phase 3 — Server-Only Multi-Project Access & Authorization Guards', () => {
+  const validWsId = '11111111-1111-4111-8111-111111111111';
+  const validUserId = '22222222-2222-4222-8222-222222222222';
+
   beforeEach(() => {
     vi.restoreAllMocks();
   });
@@ -27,7 +30,7 @@ describe('Phase 3 — Server-Only Multi-Project Access & Authorization Guards', 
     } as any;
 
     await expect(
-      competitorsService.getCompetitors(mockSchedulingClient, 'unauthorized-user', 'ws-123')
+      competitorsService.getCompetitors(mockSchedulingClient, validUserId, validWsId)
     ).rejects.toThrow('Forbidden: Access Denied.');
   });
 
@@ -38,7 +41,7 @@ describe('Phase 3 — Server-Only Multi-Project Access & Authorization Guards', 
           eq: vi.fn().mockReturnValue({
             eq: vi.fn().mockReturnValue({
               single: vi.fn().mockResolvedValue({
-                data: { workspace_id: 'ws-valid', user_id: 'user-valid', role: 'member' },
+                data: { workspace_id: validWsId, user_id: validUserId, role: 'member' },
                 error: null,
               }),
             }),
@@ -51,7 +54,7 @@ describe('Phase 3 — Server-Only Multi-Project Access & Authorization Guards', 
       competitors: [
         {
           id: 'c-1',
-          workspace_id: 'ws-valid',
+          workspace_id: validWsId,
           username: 'competitor_test',
           full_name: 'Test Competitor',
           niche: 'recipes',
@@ -75,13 +78,13 @@ describe('Phase 3 — Server-Only Multi-Project Access & Authorization Guards', 
 
     const result = await competitorsService.getCompetitors(
       mockSchedulingClient,
-      'user-valid',
-      'ws-valid'
+      validUserId,
+      validWsId
     );
 
-    expect(listCompetitorsSpy).toHaveBeenCalledWith('ws-valid', undefined);
+    expect(listCompetitorsSpy).toHaveBeenCalledWith(validWsId, undefined);
     expect(result.competitors.length).toBe(1);
-    expect(result.competitors[0].workspace_id).toBe('ws-valid');
+    expect(result.competitors[0].workspace_id).toBe(validWsId);
   });
 
   it('analyticsService.getImportHistory rejects unauthorized workspace access', async () => {
@@ -101,7 +104,7 @@ describe('Phase 3 — Server-Only Multi-Project Access & Authorization Guards', 
     } as any;
 
     await expect(
-      analyticsService.getImportHistory(mockSchedulingClient, 'attacker-user', 'ws-foreign')
+      analyticsService.getImportHistory(mockSchedulingClient, validUserId, validWsId)
     ).rejects.toThrow('Forbidden: Access Denied.');
   });
 
@@ -112,7 +115,7 @@ describe('Phase 3 — Server-Only Multi-Project Access & Authorization Guards', 
           eq: vi.fn().mockReturnValue({
             eq: vi.fn().mockReturnValue({
               single: vi.fn().mockResolvedValue({
-                data: { workspace_id: 'ws-owner', user_id: 'user-owner', role: 'owner' },
+                data: { workspace_id: validWsId, user_id: validUserId, role: 'owner' },
                 error: null,
               }),
             }),
@@ -124,7 +127,7 @@ describe('Phase 3 — Server-Only Multi-Project Access & Authorization Guards', 
     const listImportsSpy = vi.spyOn(analyticsDb, 'listIngestionRuns').mockResolvedValue([
       {
         id: 'run-1',
-        workspace_id: 'ws-owner',
+        workspace_id: validWsId,
         connection_id: 'acc-1',
         channel: 'account_analytics',
         job_type: 'daily_sync',
@@ -136,12 +139,12 @@ describe('Phase 3 — Server-Only Multi-Project Access & Authorization Guards', 
 
     const result = await analyticsService.getImportHistory(
       mockSchedulingClient,
-      'user-owner',
-      'ws-owner',
+      validUserId,
+      validWsId,
       'acc-1'
     );
 
-    expect(listImportsSpy).toHaveBeenCalledWith('ws-owner', 'acc-1');
+    expect(listImportsSpy).toHaveBeenCalledWith(validWsId, 'acc-1');
     expect(result.length).toBe(1);
     expect(result[0].id).toBe('run-1');
   });
@@ -163,7 +166,7 @@ describe('Phase 3 — Server-Only Multi-Project Access & Authorization Guards', 
     } as any;
 
     await expect(
-      queueService.cancelPin(mockSchedulingClient, 'bad-user', 'ws-123', 'pin-999')
+      queueService.cancelPin(mockSchedulingClient, validUserId, validWsId, 'pin-999')
     ).rejects.toThrow('Forbidden: Access Denied.');
   });
 });

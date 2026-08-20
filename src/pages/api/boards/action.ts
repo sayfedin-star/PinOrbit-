@@ -53,16 +53,23 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
     // Handle delete_local: DB row deletion ONLY, no Pinterest/Make webhook dispatch
     if (action === 'delete_local') {
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(board_id);
+      const sanitizedId = String(board_id).trim();
+      if (!/^[a-zA-Z0-9_-]{1,64}$/.test(sanitizedId)) {
+        return new Response(JSON.stringify({ error: 'Invalid board_id format.' }), {
+          status: 400, headers: { "Content-Type": "application/json" }
+        });
+      }
+
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sanitizedId);
       let query = adminClient
         .from('boards')
         .delete()
         .eq('account_id', account_id);
 
       if (isUuid) {
-        query = query.or(`id.eq.${board_id},board_id.eq.${board_id},pinterest_board_id.eq.${board_id}`);
+        query = query.or(`id.eq.${sanitizedId},board_id.eq.${sanitizedId},pinterest_board_id.eq.${sanitizedId}`);
       } else {
-        query = query.or(`board_id.eq.${board_id},pinterest_board_id.eq.${board_id}`);
+        query = query.or(`board_id.eq.${sanitizedId},pinterest_board_id.eq.${sanitizedId}`);
       }
 
       const { error: delErr } = await query;

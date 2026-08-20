@@ -49,7 +49,33 @@ This document serves as the single source of truth for post-launch baseline metr
 - **Database Migrations:** Residual cleanup migration `20260826000000_boards_idempotency_and_purge_cleanup.sql` applied cleanly on P1 (`eygdoetdwqllvsxpvoex`).
   - Added `created_via_idempotency_key TEXT` and partial unique index `ux_boards_account_idempotency_key` on `boards`.
   - Dropped legacy 2-argument overload `public.purge_old_pin_delivery_logs(INT, INT)`.
-- **Competitor Reseed:** Verified 2 workspaces on P1 (`9f08ca03-e79c-46fa-9518-6858216daf65` and `8fef7c7e-d3d0-4786-a4ca-2ce6455929be`). Reseeded P2 `competitor_pipeline_settings` so all active workspaces have pipeline configuration.
+- **Cron Inspection Proof:**
+  ```sql
+  SELECT jobid, command FROM cron.job WHERE command LIKE '%purge_old_pin_delivery_logs%';
+  ```
+  - On Live P1 Scheduling (`eygdoetdwqllvsxpvoex`): `relation "cron.job" does not exist` (pg_cron not enabled; FastCron HTTP dispatch triggers used).
+  - On Legacy Master (`zeryyrmhdueezzwyodhq`):
+    ```json
+    [{"jobid": 7, "command": "SELECT public.purge_old_pin_delivery_logs(60, 180);"}]
+    ```
+    *Note: In PostgreSQL, invoking `purge_old_pin_delivery_logs(60, 180)` seamlessly resolves to the 3-arg overload `(p_keep_success_days INT DEFAULT 60, p_keep_failure_days INT DEFAULT 180, p_workspace_id UUID DEFAULT NULL)` via default parameter matching, making the 2-arg drop completely safe.*
+- **Competitor Reseed Proof:**
+  - P1 Workspace count query:
+    ```sql
+    SELECT id, name, slug FROM workspaces ORDER BY created_at ASC;
+    ```
+    Returned 2 workspaces: `9f08ca03-e79c-46fa-9518-6858216daf65` ("Hymum") and `8fef7c7e-d3d0-4786-a4ca-2ce6455929be` ("hymumdotcom").
+  - Executed reseed on P2 (`guycnhvwfzdzbpgsnavg`):
+    ```sql
+    INSERT INTO public.competitor_pipeline_settings (workspace_id)
+    SELECT * FROM unnest(ARRAY['9f08ca03-e79c-46fa-9518-6858216daf65', '8fef7c7e-d3d0-4786-a4ca-2ce6455929be']::uuid[])
+    ON CONFLICT (workspace_id) DO NOTHING;
+    ```
+  - Reseed verification gate on P2 (`guycnhvwfzdzbpgsnavg`):
+    ```sql
+    SELECT count(*) FROM competitor_pipeline_settings;
+    ```
+    Result: `2` (100% coverage across all P1 workspaces).
 - **API Realignment:** Updated `/api/admin/competitor-ops` (GET & PUT) and test mocks to key strictly on `workspace_id` instead of obsolete `id: true`.
 - **Storage Metrics:**
   - `pin_delivery_logs`: 4 rows (80 kB)

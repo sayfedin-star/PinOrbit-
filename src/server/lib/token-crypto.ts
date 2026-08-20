@@ -36,6 +36,9 @@ export async function encryptToken(plain: string, kek: string) {
   if (isProductionEnv() && isKnownDefaultKek(kek)) {
     throw new Error("Refusing to encrypt with default TOKEN_KEK in production. Set via 'wrangler secret put TOKEN_KEK'.");
   }
+  if (!kek || typeof kek !== 'string' || kek.trim().length < 16) {
+    throw new Error('Encryption KEK must be at least 16 characters of entropy.');
+  }
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await key(kek), enc.encode(plain));
   return `v1:${b64(iv)}:${b64(ct)}`;
@@ -43,6 +46,10 @@ export async function encryptToken(plain: string, kek: string) {
 
 export async function decryptToken(stored: string, kek: string): Promise<string | null> {
   if (isProductionEnv() && isKnownDefaultKek(kek)) return null;
+  if (!kek || typeof kek !== 'string' || kek.trim().length < 16) {
+    console.error('TOKEN_KEK is too short for decryption (must be >= 16 chars)');
+    return null;
+  }
   const [ver, iv, ct] = stored.split(':');
   if (ver !== 'v1') return null;
   try {

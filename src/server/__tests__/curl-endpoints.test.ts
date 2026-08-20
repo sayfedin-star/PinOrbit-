@@ -195,6 +195,54 @@ vi.mock('../../server/services/kv-webhook-secrets', () => ({
   },
 }));
 
+vi.mock('../../server/db/clients', () => {
+  const createQueryBuilder = () => {
+    const q: any = {
+      select: vi.fn(() => q),
+      delete: vi.fn(() => q),
+      update: vi.fn(() => q),
+      eq: vi.fn(() => q),
+      lt: vi.fn(() => q),
+      in: vi.fn(() => q),
+      is: vi.fn(() => q),
+      limit: vi.fn(() => q),
+      then: (resolve: any, reject: any) =>
+        Promise.resolve({ data: [{ id: 'pin-1', window_end: '2026-01-01T00:00:00Z', workspace_id: '9f08ca03-e79c-46fa-9518-6858216daf65', connection_id: '8aa5b660-e54a-4e44-b8bd-28e9d3ab8596', sort_by: 'SAVE' }], count: 15, error: null }).then(resolve, reject),
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: {
+          id: '8aa5b660-e54a-4e44-b8bd-28e9d3ab8596',
+          workspace_id: '9f08ca03-e79c-46fa-9518-6858216daf65',
+          display_name: 'hymumdotcom',
+          analytics_enabled: true,
+          make_webhook_url: 'https://webhook.site/test',
+          retention_posted_days: 30,
+          processing_timeout_minutes: 45,
+        },
+        error: null,
+      }),
+    };
+    return q;
+  };
+
+  return {
+    isProductionEnv: vi.fn().mockReturnValue(false),
+    isKnownDefaultIngestSecret: vi.fn().mockReturnValue(false),
+    isKnownDefaultKek: vi.fn().mockReturnValue(false),
+    dbClients: {
+      getAnalytics: vi.fn().mockReturnValue({
+        from: vi.fn(() => createQueryBuilder()),
+      }),
+      getSchedulingAdmin: vi.fn().mockReturnValue({
+        from: vi.fn(() => createQueryBuilder()),
+      }),
+      getConfig: vi.fn().mockReturnValue({}),
+    },
+    getServerEnv: vi.fn().mockReturnValue({
+      INGEST_SECRET_KEY: 'test_sec',
+    }),
+  };
+});
+
 describe('R12/R15 Full 17-Endpoint Route Verification Suite', () => {
   const wsId = '9f08ca03-e79c-46fa-9518-6858216daf65';
   const connId = '8aa5b660-e54a-4e44-b8bd-28e9d3ab8596';

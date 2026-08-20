@@ -585,6 +585,7 @@ export const analyticsDb = {
         .eq('connection_id', connectionId)
         .eq('sort_by', sortBy)
         .gte('window_end', cutoff)
+        .limit(500)
         .order('window_end', { ascending: false });
 
       if (cleanSearch) {
@@ -961,12 +962,14 @@ export const analyticsDb = {
     const startDateStr = startDate.toISOString().split('T')[0];
 
     const analyticsClient = dbClients.getAnalytics();
+    // Bounded fetch to prevent unbounded memory growth; TODO: Replace with RPC get_connection_rollup_stats
     const { data: dailyRows, error } = await analyticsClient
       .from('account_analytics_daily')
       .select('connection_id, impressions, engagements, pin_clicks, outbound_clicks, saves')
       .eq('workspace_id', workspaceId)
       .eq('data_status', 'READY')
-      .gte('metric_date', startDateStr);
+      .gte('metric_date', startDateStr)
+      .limit(10000);
 
     if (error) {
       console.warn('[AnalyticsDb] Failed to query daily rows for connection stats:', error);
@@ -1016,9 +1019,17 @@ export const analyticsDb = {
     workspaceId: string,
     connectionId: string,
     fromDate?: string,
-    toDate?: string
+    toDate?: string,
+    options?: {
+      query?: string;
+      sortField?: string;
+      sortDir?: 'asc' | 'desc';
+      page?: number;
+      pageSize?: number;
+    }
   ): Promise<{
     rows: AccountAnalyticsDaily[];
+    total: number;
     totals: {
       impressions: number;
       engagements: number;
@@ -1036,20 +1047,20 @@ export const analyticsDb = {
     }
 
     const analyticsClient = dbClients.getAnalytics();
-    let query = analyticsClient
+
+    // 1. Calculate totals across the date range (for READY status)
+    let totalsQuery = analyticsClient
       .from('account_analytics_daily')
-      .select('*')
+      .select('impressions, engagements, outbound_clicks, pin_clicks, saves')
       .eq('workspace_id', workspaceId)
       .eq('connection_id', connectionId)
-      .order('metric_date', { ascending: false });
+      .eq('data_status', 'READY');
 
-    if (fromDate) query = query.gte('metric_date', fromDate);
-    if (toDate) query = query.lte('metric_date', toDate);
+    if (fromDate) totalsQuery = totalsQuery.gte('metric_date', fromDate);
+    if (toDate) totalsQuery = totalsQuery.lte('metric_date', toDate);
 
-    const { data, error } = await query;
-    if (error) throw error;
-
-    const rows = (data as AccountAnalyticsDaily[]) || [];
+    const { data: totalsData } = await totalsQuery;
+    const totalsRows = totalsData || [];
 
     let impressions = 0;
     let engagements = 0;
@@ -1057,14 +1068,12 @@ export const analyticsDb = {
     let pin_clicks = 0;
     let saves = 0;
 
-    for (const row of rows) {
-      if (row.data_status === 'READY') {
-        impressions += Number(row.impressions || 0);
-        engagements += Number(row.engagements || 0);
-        outbound_clicks += Number(row.outbound_clicks || 0);
-        pin_clicks += Number(row.pin_clicks || 0);
-        saves += Number(row.saves || 0);
-      }
+    for (const row of totalsRows) {
+      impressions += Number(row.impressions || 0);
+      engagements += Number(row.engagements || 0);
+      outbound_clicks += Number(row.outbound_clicks || 0);
+      pin_clicks += Number(row.pin_clicks || 0);
+      saves += Number(row.saves || 0);
     }
 
     const engagement_rate = impressions > 0 ? engagements / impressions : 0.0;
@@ -1072,8 +1081,40 @@ export const analyticsDb = {
     const pin_click_rate = impressions > 0 ? pin_clicks / impressions : 0.0;
     const save_rate = impressions > 0 ? saves / impressions : 0.0;
 
+    // 2. Query filtered, sorted, paginated rows
+    let query = analyticsClient
+      .from('account_analytics_daily')
+      .select('*', { count: 'exact' })
+      .eq('workspace_id', workspaceId)
+      .eq('connection_id', connectionId);
+
+    if (fromDate) query = query.gte('metric_date', fromDate);
+    if (toDate) query = query.lte('metric_date', toDate);
+
+    if (options?.query) {
+      const sanitized = options.query.trim().replace(/[\\%_]/g, '\\$&');
+      query = query.ilike('metric_date', `%${sanitized}%`);
+    }
+
+    const sortCol = options?.sortField || 'metric_date';
+    const isAsc = options?.sortDir === 'asc';
+    query = query.order(sortCol, { ascending: isAsc });
+
+    if (options?.page && options?.pageSize) {
+      const from = (options.page - 1) * options.pageSize;
+      const to = from + options.pageSize - 1;
+      query = query.range(from, to);
+    }
+
+    const { data, error, count } = await query;
+    if (error) throw error;
+
+    const rows = (data as AccountAnalyticsDaily[]) || [];
+    const total = count ?? rows.length;
+
     return {
       rows,
+      total,
       totals: {
         impressions,
         engagements,
@@ -1183,7 +1224,7 @@ export const analyticsDb = {
     page = 1,
     pageSize = 25,
     q?: string
-  ): Promise<{ rows: TopPinSnapshot[]; total: number; window: { start: string; end: string } | null } & TopPinSnapshot[]> {
+  ): Promise<{ rows: TopPinSnapshot[]; total: number; window: { start: string; end: string } | null }> {
     if (!workspaceId || !connectionId) {
       throw new Error('Tenant Boundary Violation: workspaceId and connectionId are required.');
     }
@@ -1208,11 +1249,11 @@ export const analyticsDb = {
 
     if (windowError) throw windowError;
     if (!latestWindow || latestWindow.length === 0) {
-      const emptyResult: any = [];
-      emptyResult.rows = [];
-      emptyResult.total = 0;
-      emptyResult.window = null;
-      return emptyResult;
+      return {
+        rows: [],
+        total: 0,
+        window: null,
+      };
     }
 
     const { window_start: w0, window_end: w1 } = latestWindow[0];
@@ -1248,12 +1289,11 @@ export const analyticsDb = {
     const rows = (data as TopPinSnapshot[]) || [];
     const total = count ?? rows.length;
 
-    const result: any = rows;
-    result.rows = rows;
-    result.total = total;
-    result.window = { start: w0, end: w1 };
-
-    return result;
+    return {
+      rows: rows || [],
+      total,
+      window: { start: w0, end: w1 },
+    };
   },
 
   /**

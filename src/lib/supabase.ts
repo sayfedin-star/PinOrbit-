@@ -4,27 +4,27 @@ import type { AstroCookies } from 'astro';
 import type { Account, Board, Pin, Log, AuditLog, AccountWebhook, ImportSession, DashboardKPIs, AccountPinStats, AccountWebhookSummary, PinDeliveryLog } from './types';
 
 function getSchedulingUrl(): string {
-  // 1. Check explicit client-safe public variable
-  if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.PUBLIC_SCHEDULING_SUPABASE_URL) {
-    return import.meta.env.PUBLIC_SCHEDULING_SUPABASE_URL;
-  }
-  // 2. Check SSR / Process environment variables
+  // 1. Check SSR / Process environment variables
   if (typeof process !== 'undefined' && process.env) {
     if (process.env.PUBLIC_SCHEDULING_SUPABASE_URL) return process.env.PUBLIC_SCHEDULING_SUPABASE_URL;
     if (process.env.SCHEDULING_SUPABASE_URL) return process.env.SCHEDULING_SUPABASE_URL;
+  }
+  // 2. Check explicit client-safe public variable
+  if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.PUBLIC_SCHEDULING_SUPABASE_URL) {
+    return import.meta.env.PUBLIC_SCHEDULING_SUPABASE_URL;
   }
   return 'https://eygdoetdwqllvsxpvoex.supabase.co';
 }
 
 function getSchedulingPublishableKey(): string {
-  // 1. Check explicit client-safe public variable
-  if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.PUBLIC_SCHEDULING_SUPABASE_PUBLISHABLE_KEY) {
-    return import.meta.env.PUBLIC_SCHEDULING_SUPABASE_PUBLISHABLE_KEY;
-  }
-  // 2. Check SSR / Process environment variables
+  // 1. Check SSR / Process environment variables
   if (typeof process !== 'undefined' && process.env) {
     if (process.env.PUBLIC_SCHEDULING_SUPABASE_PUBLISHABLE_KEY) return process.env.PUBLIC_SCHEDULING_SUPABASE_PUBLISHABLE_KEY;
     if (process.env.SCHEDULING_SUPABASE_PUBLISHABLE_KEY) return process.env.SCHEDULING_SUPABASE_PUBLISHABLE_KEY;
+  }
+  // 2. Check explicit client-safe public variable
+  if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.PUBLIC_SCHEDULING_SUPABASE_PUBLISHABLE_KEY) {
+    return import.meta.env.PUBLIC_SCHEDULING_SUPABASE_PUBLISHABLE_KEY;
   }
   return 'sb_publishable_efxKrwXCOaj9CM5oxD-WjA_jqvB5iGD';
 }

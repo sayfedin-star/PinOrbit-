@@ -279,6 +279,47 @@ import Layout from '../../layouts/Layout.astro';
     </div>
   </div>
 
+  <!-- Snapshot Import History & Snapshot Log Section -->
+  <div class="rounded-xl border border-border bg-card shadow-sm overflow-hidden mb-8">
+    <div class="flex items-center justify-between border-b border-border px-6 py-4 bg-muted/30">
+      <div>
+        <h2 class="text-sm font-bold text-foreground">Import History & Snapshot Log</h2>
+        <p class="text-xs text-muted-foreground">All historical snapshot records logged for this profile with snapshot deletion capability.</p>
+      </div>
+      <span class="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary" id="snapshots-count-badge">
+        0 Snapshots
+      </span>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="w-full text-left text-xs text-muted-foreground">
+        <thead class="border-b border-border bg-muted/40 text-foreground font-semibold">
+          <tr>
+            <th scope="col" class="py-3.5 px-6">Recorded Date & Time</th>
+            <th scope="col" class="py-3.5 px-4">Monthly Reach</th>
+            <th scope="col" class="py-3.5 px-4">Profile Views</th>
+            <th scope="col" class="py-3.5 px-4">Followers</th>
+            <th scope="col" class="py-3.5 px-4">Total Pins</th>
+            <th scope="col" class="py-3.5 px-6 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="snapshots-table-body" class="divide-y divide-border">
+          <tr>
+            <td colspan="6" class="py-12 text-center">
+              <div class="max-w-md mx-auto space-y-3">
+                <div class="h-4 bg-muted skeleton-shimmer w-3/4"></div>
+                <div class="h-4 bg-muted skeleton-shimmer w-1/2"></div>
+                <div class="h-4 bg-muted skeleton-shimmer w-5/6"></div>
+                <div class="h-4 bg-muted skeleton-shimmer w-2/3"></div>
+              </div>
+              <p class="mt-4 text-xs text-muted-foreground">Loading snapshot import log...</p>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
   <!-- Board Strategy History Table & Controls -->
   <div class="rounded-xl border border-border bg-card shadow-sm overflow-hidden mb-8">
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border px-6 py-4 bg-muted/30">
@@ -328,8 +369,17 @@ import Layout from '../../layouts/Layout.astro';
         </thead>
         <tbody id="boards-table-body" class="divide-y divide-border">
           <tr>
-            <td colspan="6" class="py-12 text-center text-xs text-muted-foreground animate-pulse">
-              Loading board strategy timeline...
+            <td colspan="6" class="py-12 text-center">
+              <button
+                id="load-boards-btn"
+                aria-label="Load competitor boards data"
+                aria-describedby="boards-loading-status"
+                class="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 transition-all cursor-pointer"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                <span>Load Boards</span>
+              </button>
+              <div id="boards-loading-status" class="sr-only">Click to load board strategy timeline</div>
             </td>
           </tr>
         </tbody>
@@ -358,42 +408,6 @@ import Layout from '../../layouts/Layout.astro';
       </div>
     </div>
   </div>
-
-  <!-- Snapshot Import History & Snapshot Log Section -->
-  <div class="rounded-xl border border-border bg-card shadow-sm overflow-hidden mb-8">
-    <div class="flex items-center justify-between border-b border-border px-6 py-4 bg-muted/30">
-      <div>
-        <h2 class="text-sm font-bold text-foreground">Import History & Snapshot Log</h2>
-        <p class="text-xs text-muted-foreground">All historical snapshot records logged for this profile with snapshot deletion capability.</p>
-      </div>
-      <span class="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary" id="snapshots-count-badge">
-        0 Snapshots
-      </span>
-    </div>
-
-    <div class="overflow-x-auto">
-      <table class="w-full text-left text-xs text-muted-foreground">
-        <thead class="border-b border-border bg-muted/40 text-foreground font-semibold">
-          <tr>
-            <th scope="col" class="py-3.5 px-6">Recorded Date & Time</th>
-            <th scope="col" class="py-3.5 px-4">Monthly Reach</th>
-            <th scope="col" class="py-3.5 px-4">Profile Views</th>
-            <th scope="col" class="py-3.5 px-4">Followers</th>
-            <th scope="col" class="py-3.5 px-4">Total Pins</th>
-            <th scope="col" class="py-3.5 px-6 text-right">Actions</th>
-          </tr>
-        </thead>
-        <tbody id="snapshots-table-body" class="divide-y divide-border">
-          <tr>
-            <td colspan="6" class="py-12 text-center text-xs text-muted-foreground animate-pulse">
-              Loading snapshot import log...
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-
   <!-- DevTools JSON Payload Modal Integration -->
   <div id="deepdive-payload-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" aria-modal="true" role="dialog">
     <div id="deepdive-payload-backdrop" class="fixed inset-0"></div>
@@ -468,8 +482,15 @@ import Layout from '../../layouts/Layout.astro';
     if (!r.ok) throw new Error((d as any).error || `HTTP ${r.status}`);
     return d as any;
   }
-  async function getCompetitorDetails(id: string) {
-    return apiJSON(`/api/admin/competitors?id=${encodeURIComponent(id)}`);
+  async function getCompetitorDetails(id: string, lite = false, boardsOnly = false) {
+    const flags = boardsOnly ? '&boards_only=1' : (lite ? '&lite=1' : '');
+    return apiJSON(`/api/admin/competitors?id=${encodeURIComponent(id)}${flags}`);
+  }
+  async function getCompetitorLite(id: string) {
+    return apiJSON(`/api/admin/competitors?id=${encodeURIComponent(id)}&lite=1`);
+  }
+  async function getCompetitorBoardsOnly(id: string) {
+    return apiJSON(`/api/admin/competitors?id=${encodeURIComponent(id)}&boards_only=1`);
   }
   async function deleteCompetitor(id: string) {
     await apiJSON('/api/admin/competitors', { method: 'DELETE', body: JSON.stringify({ id }) });
@@ -505,6 +526,7 @@ import Layout from '../../layouts/Layout.astro';
 
   let competitorData: Competitor | null = null;
   let boardsList: CompetitorBoard[] = [];
+  let boardsLoaded = false;
   let snapshotsList: CompetitorSnapshot[] = [];
   let deltasData: CompetitorDeltaStats | null = null;
 
@@ -604,6 +626,17 @@ import Layout from '../../layouts/Layout.astro';
       return date.toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
     }
     return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  }
+
+  function formatDeltaSpan(diff: number | null): string {
+    if (diff === null || diff === 0) return '';
+    const isPositive = diff > 0;
+    const label = `${isPositive ? 'increased by' : 'decreased by'} ${Math.abs(diff)}`;
+    return `<span 
+      class="ml-2 text-[10px] font-semibold ${isPositive ? 'text-emerald-500' : 'text-rose-500'}"
+      role="status"
+      aria-label="${label}"
+    >${isPositive ? `(+${formatNumber(Math.abs(diff))})` : `(−${formatNumber(Math.abs(diff))})`}</span>`;
   }
 
   function renderDeltaBadge(element: HTMLElement, subElement: HTMLElement, change: number, percent: number) {
@@ -889,6 +922,85 @@ import Layout from '../../layouts/Layout.astro';
 
   // --- Boards Pagination, Search & Sorting Engine ---
 
+  function renderInitialBoardsPlaceholder() {
+    if (!boardsTableBody) return;
+    if (boardsCountBadge) boardsCountBadge.textContent = '0 Boards';
+    boardsTableBody.innerHTML = `
+      <tr>
+        <td colspan="6" class="py-12 text-center">
+          <button
+            id="load-boards-btn"
+            aria-label="Load competitor boards data"
+            aria-describedby="boards-loading-status"
+            class="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 transition-all cursor-pointer"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <span>Load Boards</span>
+          </button>
+          <div id="boards-loading-status" class="sr-only">Click to load board strategy timeline</div>
+        </td>
+      </tr>
+    `;
+    attachLoadBoardsHandler();
+  }
+
+  function attachLoadBoardsHandler() {
+    const loadBoardsBtn = document.getElementById('load-boards-btn');
+    if (!loadBoardsBtn) return;
+
+    loadBoardsBtn.addEventListener('click', handleLoadBoards);
+    loadBoardsBtn.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        handleLoadBoards();
+      }
+    }); // keydown Enter Space load-boards-btn
+  }
+
+  async function handleLoadBoards() {
+    if (!boardsTableBody) return;
+    boardsTableBody.innerHTML = `
+      <tr>
+        <td colspan="6" class="py-12 text-center">
+          <div class="max-w-md mx-auto space-y-3">
+            <div class="h-4 bg-muted skeleton-shimmer w-3/4"></div>
+            <div class="h-4 bg-muted skeleton-shimmer w-1/2"></div>
+            <div class="h-4 bg-muted skeleton-shimmer w-5/6"></div>
+            <div class="h-4 bg-muted skeleton-shimmer w-2/3"></div>
+          </div>
+          <p class="mt-4 text-xs text-muted-foreground">Preparing board strategy timeline...</p>
+        </td>
+      </tr>
+    `;
+    try {
+      const res = await getCompetitorBoardsOnly(competitorId);
+      boardsList = res.boards || [];
+      boardsLoaded = true;
+      if (boardsCountBadge) boardsCountBadge.textContent = `${boardsList.length} ${boardsList.length === 1 ? 'Board' : 'Boards'}`;
+      currentBoardPage = 1;
+      renderBoardsTable();
+    } catch (err: any) {
+      boardsTableBody.innerHTML = `
+        <tr>
+          <td colspan="6" class="py-8 text-center text-xs text-rose-500">
+            <span>Failed to load boards: ${err.message || 'Network error'}</span>
+            <button id="retry-boards-btn" class="ml-3 font-bold underline hover:text-rose-600 cursor-pointer">Retry</button>
+          </td>
+        </tr>
+      `;
+      const retryBtn = document.getElementById('retry-boards-btn');
+      if (retryBtn) {
+        retryBtn.addEventListener('click', handleLoadBoards);
+        retryBtn.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleLoadBoards();
+          }
+        });
+      }
+    }
+  }
+
   function renderBoardsTable() {
     if (!boardsTableBody) return;
 
@@ -990,6 +1102,13 @@ import Layout from '../../layouts/Layout.astro';
 
   // --- Snapshot History Log Table Renderer ---
 
+  const formatTotalDeltaSpan = (diff: number) => {
+    if (diff === 0) return '<span class="font-semibold text-[10px] text-muted-foreground" role="status" aria-label="net change zero">—</span>';
+    const isPos = diff > 0;
+    const label = `net change ${isPos ? 'increased by' : 'decreased by'} ${Math.abs(diff)}`;
+    return `<span class="font-semibold text-[10px] ${isPos ? 'text-emerald-500' : 'text-rose-500'}" role="status" aria-label="${label}">(${isPos ? '+' : '−'}${formatNumber(Math.abs(diff))})</span>`;
+  };
+
   function renderSnapshotsLogTable() {
     if (!snapshotsTableBody) return;
     if (snapshotsCountBadge) snapshotsCountBadge.textContent = `${snapshotsList.length} ${snapshotsList.length === 1 ? 'Snapshot' : 'Snapshots'}`;
@@ -1011,7 +1130,12 @@ import Layout from '../../layouts/Layout.astro';
     // Build display list descending (newest first)
     const displayList = [...chronoSorted].reverse();
 
-    snapshotsTableBody.innerHTML = displayList
+    let sumReachDiff = 0;
+    let sumViewsDiff = 0;
+    let sumFollowersDiff = 0;
+    let sumPinsDiff = 0;
+
+    const rowsHtml = displayList
       .map((s) => {
         const chronoIdx = chronoSorted.findIndex(item => item.id === s.id);
         const prevSnap = chronoIdx > 0 ? chronoSorted[chronoIdx - 1] : null;
@@ -1021,11 +1145,10 @@ import Layout from '../../layouts/Layout.astro';
         const followersDiff = prevSnap ? (s.follower_count || 0) - (prevSnap.follower_count || 0) : 0;
         const pinsDiff = prevSnap ? (s.pin_count || 0) - (prevSnap.pin_count || 0) : 0;
 
-        const formatDeltaSpan = (diff: number) => {
-          if (!prevSnap || diff === 0) return '';
-          const isPos = diff > 0;
-          return `<span class="ml-1.5 font-semibold text-[10px] ${isPos ? 'text-emerald-500' : 'text-rose-500'}">(${isPos ? '+' : ''}${formatNumber(diff)})</span>`;
-        };
+        sumReachDiff += reachDiff;
+        sumViewsDiff += viewsDiff;
+        sumFollowersDiff += followersDiff;
+        sumPinsDiff += pinsDiff;
 
         return `
           <tr class="hover:bg-muted/30 transition-colors">
@@ -1059,6 +1182,29 @@ import Layout from '../../layouts/Layout.astro';
       })
       .join('');
 
+    const totalsRowHtml = `
+      <tr role="row" aria-label="Totals row showing net metric changes" class="bg-muted/40 font-semibold border-b-2 border-border">
+        <th scope="row" class="py-3 px-6 font-bold text-xs text-foreground text-left" aria-label="Net Change summary">
+          ∑ Net Change
+        </th>
+        <td class="py-3 px-4 font-bold text-xs text-foreground" aria-label="Net reach change: ${sumReachDiff}">
+          ${formatTotalDeltaSpan(sumReachDiff)}
+        </td>
+        <td class="py-3 px-4 font-bold text-xs text-foreground" aria-label="Net views change: ${sumViewsDiff}">
+          ${formatTotalDeltaSpan(sumViewsDiff)}
+        </td>
+        <td class="py-3 px-4 font-bold text-xs text-foreground" aria-label="Net followers change: ${sumFollowersDiff}">
+          ${formatTotalDeltaSpan(sumFollowersDiff)}
+        </td>
+        <td class="py-3 px-4 font-bold text-xs text-primary" aria-label="Net pins change: ${sumPinsDiff}">
+          ${formatTotalDeltaSpan(sumPinsDiff)}
+        </td>
+        <td class="py-3 px-6 text-right" aria-label="No actions for totals row"></td>
+      </tr>
+    `;
+
+    snapshotsTableBody.innerHTML = totalsRowHtml + rowsHtml;
+
     // Attach event listeners to delete snapshot buttons
     document.querySelectorAll('.delete-snapshot-btn').forEach((btn) => {
       btn.addEventListener('click', async (e) => {
@@ -1067,7 +1213,7 @@ import Layout from '../../layouts/Layout.astro';
 
         if (confirm('Are you sure you want to delete this snapshot entry from history?')) {
           try {
-            await deleteCompetitorSnapshot(snapId, competitorId);
+            await deleteCompetitorSnapshot(snapId);
             showStatus('Snapshot record deleted successfully.');
             await loadDetails();
           } catch (err: any) {
@@ -1158,9 +1304,11 @@ import Layout from '../../layouts/Layout.astro';
   // --- Main Data Loader ---
 
   async function loadDetails() {
-    const details = await getCompetitorDetails(competitorId);
+    const details = await getCompetitorLite(competitorId);
     competitorData = details.competitor;
-    boardsList = details.boards;
+    if (boardsLoaded && details.boards && details.boards.length > 0) {
+      boardsList = details.boards;
+    }
     snapshotsList = details.snapshots || [];
     deltasData = details.deltas;
 
@@ -1252,7 +1400,11 @@ import Layout from '../../layouts/Layout.astro';
     }
 
     // Render Boards Table & Snapshots Log Table
-    renderBoardsTable();
+    if (boardsLoaded) {
+      renderBoardsTable();
+    } else {
+      renderInitialBoardsPlaceholder();
+    }
     renderSnapshotsLogTable();
   }
 

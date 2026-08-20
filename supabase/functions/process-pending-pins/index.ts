@@ -216,27 +216,6 @@ Deno.serve(async (req: Request) => {
     isValidSecret = true;
   } else if (serviceRoleKey && token === serviceRoleKey) {
     isValidSecret = true;
-  } else {
-    // JWT signature payload check for service_role or admin tokens
-    try {
-      const payloadBase64 = token.split(".")[1];
-      if (payloadBase64) {
-        // Base64Url decode
-        const base64 = payloadBase64.replace(/-/g, "+").replace(/_/g, "/");
-        const jsonPayload = decodeURIComponent(
-          atob(base64)
-            .split("")
-            .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-            .join("")
-        );
-        const decoded = JSON.parse(jsonPayload);
-        if (decoded.role === "service_role" || decoded.role === "authenticated" || decoded.iss === "supabase") {
-          isValidSecret = true;
-        }
-      }
-    } catch (_e) {
-      isValidSecret = false;
-    }
   }
 
   if (!isValidSecret) {
@@ -272,19 +251,6 @@ Deno.serve(async (req: Request) => {
   let recoveredLocks = 0;
 
   try {
-    // 3. Concurrency Safety: Recover stale processing locks (> 10 minutes)
-    const tenMinutesAgo = new Date(now.getTime() - 10 * 60 * 1000).toISOString();
-    const { data: recoveredPins, error: recoverErr } = await supabase
-      .from("pins")
-      .update({ status: "pending", processing_started_at: null })
-      .eq("status", "processing")
-      .or(`processing_started_at.is.null,processing_started_at.lt.${tenMinutesAgo}`)
-      .select("id");
-
-    if (!recoverErr && recoveredPins) {
-      recoveredLocks = recoveredPins.length;
-    }
-
     // 4. Fetch all active accounts
     const { data: accounts, error: accountsError } = await supabase
       .from("accounts")
@@ -305,9 +271,10 @@ Deno.serve(async (req: Request) => {
           pins_failed: 0,
           skipped_due_to_limit: 0,
           skipped_due_to_window: 0,
+          skipped_due_to_interval: 0,
           skipped_due_to_webhook: 0,
           skipped_due_to_missing_board: 0,
-          stale_locks_recovered: recoveredLocks,
+          stale_locks_recovered: 0,
         }),
         { status: 200, headers: { "Content-Type": "application/json" } }
       );
@@ -316,6 +283,30 @@ Deno.serve(async (req: Request) => {
     // Process each active account (safely limited to 1 pin per eligible account per run)
     for (const account of accounts as Account[]) {
       processedAccounts++;
+
+      // 3. Concurrency Safety: Recover stale processing locks
+      // Fetch per-workspace timeout settings
+      const { data: wsSettings } = await supabase
+        .from("workspace_retention_settings")
+        .select("processing_timeout_minutes")
+        .eq("workspace_id", account.workspace_id)
+        .maybeSingle();
+
+      const timeoutMinutes = wsSettings?.processing_timeout_minutes || 10;
+      const staleCutoff = new Date(now.getTime() - timeoutMinutes * 60 * 1000).toISOString();
+
+      const { data: recoveredPins, error: recoverErr } = await supabase
+        .from("pins")
+        .update({ status: "pending", processing_started_at: null })
+        .eq("status", "processing")
+        .eq("account_id", account.id)  // Scope to current account
+        .or(`processing_started_at.is.null,processing_started_at.lt.${staleCutoff}`)
+        .select("id");
+
+      if (!recoverErr && recoveredPins) {
+        recoveredLocks += recoveredPins.length;
+      }
+
       // 5. Account Eligibility Rules
 
       // Rule 5a: pinning_started_at check
@@ -774,11 +765,6 @@ Deno.serve(async (req: Request) => {
               last_failed_at: new Date().toISOString(),
               last_failure_reason: errorMessage,
             })
-            .eq("id", targetWebhook.id);
-        }
-
-        failedCount++;
-      }
             .eq("id", targetWebhook.id);
         }
 
