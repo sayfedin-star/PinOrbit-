@@ -26,7 +26,7 @@ export const GET: APIRoute = async ({ request, locals }) => {
 
     const { data: settings, error } = await adminClient
       .from('workspace_retention_settings')
-      .select('workspace_id, retention_posted_days, processing_timeout_minutes, updated_at')
+      .select('*')
       .eq('workspace_id', workspaceId)
       .maybeSingle();
 
@@ -41,6 +41,8 @@ export const GET: APIRoute = async ({ request, locals }) => {
           retention_posted_days: 30,
           processing_timeout_minutes: 45,
           is_default: true,
+          last_cleanup_at: null,
+          last_cleanup_result: null,
         }),
         {
           status: 200,
@@ -56,6 +58,8 @@ export const GET: APIRoute = async ({ request, locals }) => {
         processing_timeout_minutes: settings.processing_timeout_minutes ?? 45,
         is_default: false,
         updated_at: settings.updated_at,
+        last_cleanup_at: settings.last_cleanup_at ?? null,
+        last_cleanup_result: settings.last_cleanup_result ?? null,
       }),
       {
         status: 200,
@@ -108,7 +112,7 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
     // Fetch existing or fallback
     const { data: existing } = await adminClient
       .from('workspace_retention_settings')
-      .select('retention_posted_days, processing_timeout_minutes')
+      .select('*')
       .eq('workspace_id', workspaceId)
       .maybeSingle();
 
@@ -123,6 +127,7 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
       .from('workspace_retention_settings')
       .upsert(
         {
+          ...(existing ?? {}),
           workspace_id: workspaceId,
           retention_posted_days: clampedRetentionDays,
           processing_timeout_minutes: clampedProcessingTimeoutMinutes,

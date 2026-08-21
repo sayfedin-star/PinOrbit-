@@ -63,25 +63,66 @@ if (supabase && currentWorkspace) {
 }
 
 // Fetch retention settings for current workspace
-let retentionSettings = { retention_posted_days: 30, processing_timeout_minutes: 45, is_default: true };
+let retentionSettings: any = {
+  retention_posted_days: 30,
+  processing_timeout_minutes: 45,
+  is_default: true,
+  last_cleanup_at: null,
+  last_cleanup_result: null,
+};
 if (supabase && currentWorkspace) {
   try {
     const { data: retData } = await supabase
       .from('workspace_retention_settings')
-      .select('retention_posted_days, processing_timeout_minutes')
+      .select('*')
       .eq('workspace_id', currentWorkspace.id)
       .maybeSingle();
 
     if (retData) {
       retentionSettings = {
+        ...retData,
         retention_posted_days: retData.retention_posted_days ?? 30,
         processing_timeout_minutes: retData.processing_timeout_minutes ?? 45,
         is_default: false,
+        last_cleanup_at: retData.last_cleanup_at ?? null,
+        last_cleanup_result: retData.last_cleanup_result ?? null,
       };
     }
   } catch (err) {
     console.warn('Error fetching retention settings:', err);
   }
+}
+
+function formatLastRunP1(result: any) {
+  const p1 = result?.sections?.p1;
+  if (!result || !p1) return 'No cleanup runs recorded yet.';
+  const d = new Date(result.at).toLocaleString();
+  const trigger = result.trigger || 'api';
+  const pins = p1.pins ?? 0;
+  const terminal = p1.terminal ?? 0;
+  const logs = p1.logs ?? 0;
+  const sessions = p1.sessions ?? 0;
+  return `Last run: ${d} · ${trigger} · deleted ${pins} posted pins, ${terminal} terminal pins, ${logs} logs, ${sessions} sessions`;
+}
+
+function formatLastRunP2(result: any) {
+  const p2 = result?.sections?.p2;
+  if (!result || !p2) return 'No cleanup runs recorded yet.';
+  const d = new Date(result.at).toLocaleString();
+  const trigger = result.trigger || 'api';
+  const snapshots = p2.snapshots ?? 0;
+  const jobs = p2.jobs ?? 0;
+  return `Last run: ${d} · ${trigger} · deleted ${snapshots} snapshots, ${jobs} jobs`;
+}
+
+function formatLastRunP3(result: any) {
+  const p3 = result?.sections?.p3;
+  if (!result || !p3) return 'No cleanup runs recorded yet.';
+  const d = new Date(result.at).toLocaleString();
+  const trigger = result.trigger || 'api';
+  const runs = p3.runs ?? 0;
+  const snapshots = p3.snapshots ?? 0;
+  return `Last run: ${d} · ${trigger} · deleted ${runs} ingestion runs, ${snapshots} snapshots`;
 }
 ---
 
@@ -184,46 +225,116 @@ if (supabase && currentWorkspace) {
       </div>
 
       <form id="retention-settings-form" class="space-y-6" data-workspace-id={currentWorkspace?.id}>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div class="space-y-2">
-            <label for="retention-posted-days" class="block text-xs font-bold uppercase tracking-wider text-foreground">
-              Posted pins retention (days)
-            </label>
-            <input
-              type="number"
-              id="retention-posted-days"
-              name="retention_posted_days"
-              min="1"
-              max="365"
-              value={retentionSettings.retention_posted_days}
-              data-initial-value={retentionSettings.retention_posted_days}
-              class="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-xs font-semibold text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-              required
-            />
-            <p class="text-[11px] text-muted-foreground">
-              Posted pins older than this are purged by cleanup-retention.
-            </p>
+        <!-- Section P1: Core Scheduling & Pins -->
+        <div class="rounded-xl border border-border/70 bg-muted/10 p-4 space-y-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <h4 class="text-xs font-bold uppercase tracking-wider text-foreground">P1: Core Scheduling & Pin Retention</h4>
+              <p class="text-[11px] text-muted-foreground">Purge published pins and auto-recover stuck processing pins.</p>
+            </div>
+            {(currentRole === 'admin' || currentRole === 'owner') && (
+              <button
+                type="button"
+                id="run-now-p1"
+                data-section="p1"
+                class="rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-[11px] font-bold text-primary hover:bg-primary/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+              >
+                ▶ Run Now
+              </button>
+            )}
           </div>
 
-          <div class="space-y-2">
-            <label for="processing-timeout-minutes" class="block text-xs font-bold uppercase tracking-wider text-foreground">
-              Processing orphan timeout (minutes)
-            </label>
-            <input
-              type="number"
-              id="processing-timeout-minutes"
-              name="processing_timeout_minutes"
-              min="5"
-              max="240"
-              value={retentionSettings.processing_timeout_minutes}
-              data-initial-value={retentionSettings.processing_timeout_minutes}
-              class="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-xs font-semibold text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-              required
-            />
-            <p class="text-[11px] text-muted-foreground">
-              Processing pins older than this are re-queued automatically.
-            </p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="space-y-2">
+              <label for="retention-posted-days" class="block text-xs font-bold uppercase tracking-wider text-foreground">
+                Posted pins retention (days)
+              </label>
+              <input
+                type="number"
+                id="retention-posted-days"
+                name="retention_posted_days"
+                min="1"
+                max="365"
+                value={retentionSettings.retention_posted_days}
+                data-initial-value={retentionSettings.retention_posted_days}
+                class="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-xs font-semibold text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                required
+              />
+              <p class="text-[11px] text-muted-foreground">
+                Posted pins older than this are purged by cleanup-retention.
+              </p>
+            </div>
+
+            <div class="space-y-2">
+              <label for="processing-timeout-minutes" class="block text-xs font-bold uppercase tracking-wider text-foreground">
+                Processing orphan timeout (minutes)
+              </label>
+              <input
+                type="number"
+                id="processing-timeout-minutes"
+                name="processing_timeout_minutes"
+                min="5"
+                max="240"
+                value={retentionSettings.processing_timeout_minutes}
+                data-initial-value={retentionSettings.processing_timeout_minutes}
+                class="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-xs font-semibold text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                required
+              />
+              <p class="text-[11px] text-muted-foreground">
+                Processing pins older than this are re-queued automatically.
+              </p>
+            </div>
           </div>
+
+          <p id="last-run-p1" class="text-[10px] text-muted-foreground">
+            {formatLastRunP1(retentionSettings.last_cleanup_result)}
+          </p>
+        </div>
+
+        <!-- Section P2: Competitor Intelligence -->
+        <div class="rounded-xl border border-border/70 bg-muted/10 p-4 space-y-3">
+          <div class="flex items-center justify-between">
+            <div>
+              <h4 class="text-xs font-bold uppercase tracking-wider text-foreground">P2: Competitor Intelligence Lifecycle</h4>
+              <p class="text-[11px] text-muted-foreground">Automated competitor snapshot and scraping job retention.</p>
+            </div>
+            {(currentRole === 'admin' || currentRole === 'owner') && (
+              <button
+                type="button"
+                id="run-now-p2"
+                data-section="p2"
+                class="rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-[11px] font-bold text-primary hover:bg-primary/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+              >
+                ▶ Run Now
+              </button>
+            )}
+          </div>
+          <p id="last-run-p2" class="text-[10px] text-muted-foreground">
+            {formatLastRunP2(retentionSettings.last_cleanup_result)}
+          </p>
+        </div>
+
+        <!-- Section P3: Analytics & Ingestion Runs -->
+        <div class="rounded-xl border border-border/70 bg-muted/10 p-4 space-y-3">
+          <div class="flex items-center justify-between">
+            <div>
+              <h4 class="text-xs font-bold uppercase tracking-wider text-foreground">P3: Analytics & Ingestion Lifecycle</h4>
+              <p class="text-[11px] text-muted-foreground">Top pins snapshots and analytics ingestion run logs retention.</p>
+            </div>
+            {(currentRole === 'admin' || currentRole === 'owner') && (
+              <button
+                type="button"
+                id="run-now-p3"
+                data-section="p3"
+                class="rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-[11px] font-bold text-primary hover:bg-primary/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+              >
+                ▶ Run Now
+              </button>
+            )}
+          </div>
+          <p id="last-run-p3" class="text-[10px] text-muted-foreground">
+            {formatLastRunP3(retentionSettings.last_cleanup_result)}
+          </p>
         </div>
 
         <div id="retention-status-msg" class="hidden rounded-xl p-3 text-xs font-semibold"></div>
@@ -478,5 +589,84 @@ if (supabase && currentWorkspace) {
       saveBtn.textContent = origText;
       checkRetentionDirty();
     }
+  });
+
+  // Manual Cleanup "Run Now" Handlers (P1, P2, P3)
+  const runNowButtons = document.querySelectorAll<HTMLButtonElement>('button[id^="run-now-"]');
+  runNowButtons.forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const section = btn.getAttribute('data-section');
+      if (!section) return;
+
+      const workspaceId = retentionForm?.getAttribute('data-workspace-id');
+      if (!workspaceId) return;
+
+      let confirmMsg = '';
+      if (section === 'p1') {
+        const postedDays = daysInput?.value || '30';
+        confirmMsg = `Run P1 cleanup NOW (one-time, bypasses the toggle)?\nPosted > ${postedDays}d, Terminal, Logs, Sessions will be DELETED.\nContinue?`;
+      } else if (section === 'p2') {
+        confirmMsg = `Run P2 cleanup NOW (one-time, bypasses the toggle)?\nOld competitor snapshots and job logs will be DELETED.\nContinue?`;
+      } else if (section === 'p3') {
+        confirmMsg = `Run P3 cleanup NOW (one-time, bypasses the toggle)?\nAnalytics ingestion runs (>90d) and top pins snapshots (>180d) will be DELETED.\nContinue?`;
+      }
+
+      if (!confirm(confirmMsg)) return;
+
+      const originalText = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = 'Running…';
+
+      try {
+        const res = await fetch('/api/settings/run-cleanup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ workspace_id: workspaceId, section }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Cleanup run failed');
+
+        // Update the last-run paragraph for the section
+        const lastRunElem = document.getElementById(`last-run-${section}`);
+        if (lastRunElem) {
+          const nowStr = new Date().toLocaleString();
+          if (section === 'p1') {
+            const pins = data.deleted_pins_count ?? 0;
+            const terminal = data.deleted_terminal_pins_count ?? 0;
+            const logs = data.deleted_delivery_logs ?? 0;
+            const sessions = data.deleted_import_sessions ?? 0;
+            lastRunElem.textContent = `Last run: ${nowStr} · manual · deleted ${pins} posted pins, ${terminal} terminal pins, ${logs} logs, ${sessions} sessions`;
+          } else if (section === 'p2') {
+            const p2 = data.p2;
+            const snaps = p2?.snapshots ?? 0;
+            const jobs = p2?.jobs ?? 0;
+            lastRunElem.textContent = `Last run: ${nowStr} · manual · deleted ${snaps} snapshots, ${jobs} jobs`;
+          } else if (section === 'p3') {
+            const runs = data.deleted_ingestion_runs ?? 0;
+            const snaps = data.deleted_snapshots_count ?? 0;
+            lastRunElem.textContent = `Last run: ${nowStr} · manual · deleted ${runs} ingestion runs, ${snaps} snapshots`;
+          }
+        }
+
+        if (statusMsg) {
+          statusMsg.className = 'rounded-xl p-3 text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20';
+          statusMsg.textContent = `Section ${section.toUpperCase()} cleanup executed successfully.`;
+          statusMsg.classList.remove('hidden');
+          setTimeout(() => {
+            statusMsg.classList.add('hidden');
+          }, 4000);
+        }
+      } catch (err: any) {
+        if (statusMsg) {
+          statusMsg.className = 'rounded-xl p-3 text-xs font-semibold bg-rose-500/10 text-rose-500 border border-rose-500/20';
+          statusMsg.textContent = err.message || `Failed to run ${section.toUpperCase()} cleanup`;
+          statusMsg.classList.remove('hidden');
+        }
+      } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
+      }
+    });
   });
 </script>
