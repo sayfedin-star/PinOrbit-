@@ -1,7 +1,14 @@
 import { getServerEnv } from '../db/clients';
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export const GLOBAL_KEY = 'ingest_secret:global';
-export const wsKey = (wsId: string) => `ingest_secret:ws:${wsId}`;
+export const wsKey = (wsId: string) => {
+  if (!wsId || !UUID_REGEX.test(wsId)) {
+    throw new Error('Invalid workspace UUID for secret key.');
+  }
+  return `ingest_secret:ws:${wsId.toLowerCase()}`;
+};
 
 export interface IngestSecretResolution {
   value: string;
@@ -28,7 +35,7 @@ export async function getEffectiveSecret(
 ): Promise<IngestSecretResolution> {
   const kv = runtimeEnv?.INGEST_SECRETS_KV;
   if (kv) {
-    if (wsId) {
+    if (wsId && UUID_REGEX.test(wsId)) {
       const ws = await kv.get(wsKey(wsId));
       if (ws) return { value: ws, source: 'workspace' };
       const wsPrev = await kv.get(`${wsKey(wsId)}:prev`);
@@ -100,7 +107,7 @@ export async function removeWorkspaceOverride(
   runtimeEnv: Record<string, any>
 ): Promise<void> {
   const kv = runtimeEnv?.INGEST_SECRETS_KV;
-  if (kv && wsId) {
+  if (kv && wsId && UUID_REGEX.test(wsId)) {
     await kv.delete(wsKey(wsId));
   }
 }
@@ -113,7 +120,7 @@ export async function getSecretStatus(
   runtimeEnv: Record<string, any>
 ): Promise<IngestSecretStatus> {
   const kv = runtimeEnv?.INGEST_SECRETS_KV;
-  if (kv && wsId) {
+  if (kv && wsId && UUID_REGEX.test(wsId)) {
     const ws = await kv.get(wsKey(wsId));
     if (ws) {
       return { secret: ws, source: 'workspace', hasOverride: true };

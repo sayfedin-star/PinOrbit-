@@ -43,20 +43,21 @@ async function runWithConcurrencyLimit<T, R>(
   const executing: Promise<void>[] = [];
 
   for (const item of items) {
-    const p = Promise.resolve().then(() => fn(item)).then((res) => {
-      results.push(res);
-    });
+    const p = Promise.resolve()
+      .then(() => fn(item))
+      .then((res) => {
+        results.push(res);
+      })
+      .finally(() => {
+        // Remove this promise from executing array when done
+        const idx = executing.indexOf(p);
+        if (idx !== -1) executing.splice(idx, 1);
+      });
+
     executing.push(p);
 
     if (executing.length >= limit) {
       await Promise.race(executing);
-      for (let i = executing.length - 1; i >= 0; i--) {
-        // Remove settled promises
-        const settled = await Promise.race([executing[i].then(() => true), Promise.resolve(false)]);
-        if (settled) {
-          executing.splice(i, 1);
-        }
-      }
     }
   }
 

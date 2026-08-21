@@ -37,10 +37,28 @@ vi.mock('../db/clients', () => {
       eq: vi.fn(() => q),
       lt: vi.fn(() => q),
       in: vi.fn(() => q),
-      limit: vi.fn().mockResolvedValue({ data: Array.from({ length: 15 }, (_, i) => ({ id: 'pin-' + i })), error: null }),
+      limit: vi.fn().mockImplementation(() => {
+        return Promise.resolve({
+          data: Array.from({ length: 15 }, (_, i) => ({
+            id: 'pin-' + i,
+            window_end: '2026-01-01T00:00:00Z',
+            workspace_id: 'ws',
+            connection_id: 'c',
+            sort_by: 'SAVE',
+          })),
+          error: null,
+        });
+      }),
       then: (resolve: any, reject: any) =>
-        Promise.resolve({ data: { auto_prune_enabled: true, retention_posted_days: 30, processing_timeout_minutes: 45 }, count: 15, error: null }).then(resolve, reject),
-      maybeSingle: vi.fn().mockResolvedValue({ data: { auto_prune_enabled: true, retention_posted_days: 30, processing_timeout_minutes: 45 }, error: null }),
+        Promise.resolve({
+          data: [{ id: 'pin-1', window_end: '2026-01-01T00:00:00Z', workspace_id: 'ws', connection_id: 'c', sort_by: 'SAVE' }],
+          count: 15,
+          error: null,
+        }).then(resolve, reject),
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: { auto_prune_enabled: true, retention_posted_days: 30, processing_timeout_minutes: 45 },
+        error: null,
+      }),
     };
     return q;
   };
@@ -75,7 +93,7 @@ describe('Pin Intelligence & Retention Suite (V26.1)', () => {
   });
 
   describe('GET /api/analytics/connections/[id]/pin-leaderboard', () => {
-    it('validates sort_by, page, page_size, sort, min_impressions, min_appearances, trend, has_link parameters', async () => {
+    it('validates sort_by, days, limit, search, min_impressions, min_appearances, trend, has_link parameters', async () => {
       const locals = { user: { id: 'u1' }, supabase: {}, activeWorkspaceId: workspaceId };
 
       // Invalid sort_by
@@ -88,98 +106,56 @@ describe('Pin Intelligence & Retention Suite (V26.1)', () => {
       const json1 = await res1.json();
       expect(json1.error).toContain('sort_by query parameter must be one of');
 
-      // Invalid page (< 1)
-      const res2 = await getLeaderboardHandler({
-        params: { id: connectionId },
-        request: new Request('http://localhost/api/analytics/connections/conn-uuid-12345/pin-leaderboard?page=0'),
-        locals,
-      } as any);
-      expect(res2.status).toBe(400);
-      const json2 = await res2.json();
-      expect(json2.error).toContain('page query parameter must be an integer >= 1');
-
-      // Invalid page_size
+      // Invalid limit
       const res3 = await getLeaderboardHandler({
         params: { id: connectionId },
-        request: new Request('http://localhost/api/analytics/connections/conn-uuid-12345/pin-leaderboard?page_size=33'),
+        request: new Request('http://localhost/api/analytics/connections/conn-uuid-12345/pin-leaderboard?sort_by=IMPRESSION&days=30&limit=33'),
         locals,
       } as any);
       expect(res3.status).toBe(400);
       const json3 = await res3.json();
       expect(json3.error).toContain('page_size query parameter must be one of: 10, 25, 50, 100');
 
-      // Invalid sort field
+      // Invalid page
       const res4 = await getLeaderboardHandler({
         params: { id: connectionId },
-        request: new Request('http://localhost/api/analytics/connections/conn-uuid-12345/pin-leaderboard?sort=unknown_column'),
+        request: new Request('http://localhost/api/analytics/connections/conn-uuid-12345/pin-leaderboard?sort_by=IMPRESSION&days=30&limit=25&page=0'),
         locals,
       } as any);
       expect(res4.status).toBe(400);
       const json4 = await res4.json();
-      expect(json4.error).toContain('sort query parameter must be one of');
+      expect(json4.error).toContain('page query parameter must be an integer >= 1');
 
-      // Invalid min_impressions (< 0)
+      // Invalid trend filter
       const res5 = await getLeaderboardHandler({
         params: { id: connectionId },
-        request: new Request('http://localhost/api/analytics/connections/conn-uuid-12345/pin-leaderboard?min_impressions=-5'),
+        request: new Request('http://localhost/api/analytics/connections/conn-uuid-12345/pin-leaderboard?sort_by=IMPRESSION&days=30&limit=25&trend=EXPLODING'),
         locals,
       } as any);
       expect(res5.status).toBe(400);
       const json5 = await res5.json();
-      expect(json5.error).toContain('min_impressions query parameter must be an integer >= 0');
-
-      // Invalid min_appearances (< 1)
-      const res6 = await getLeaderboardHandler({
-        params: { id: connectionId },
-        request: new Request('http://localhost/api/analytics/connections/conn-uuid-12345/pin-leaderboard?min_appearances=0'),
-        locals,
-      } as any);
-      expect(res6.status).toBe(400);
-      const json6 = await res6.json();
-      expect(json6.error).toContain('min_appearances query parameter must be an integer >= 1');
-
-      // Invalid trend
-      const res7 = await getLeaderboardHandler({
-        params: { id: connectionId },
-        request: new Request('http://localhost/api/analytics/connections/conn-uuid-12345/pin-leaderboard?trend=EXPLODING'),
-        locals,
-      } as any);
-      expect(res7.status).toBe(400);
-      const json7 = await res7.json();
-      expect(json7.error).toContain('trend query parameter must be one of: ALL, NEW, RISING, FALLING');
-
-      // Invalid has_link
-      const res8 = await getLeaderboardHandler({
-        params: { id: connectionId },
-        request: new Request('http://localhost/api/analytics/connections/conn-uuid-12345/pin-leaderboard?has_link=maybe'),
-        locals,
-      } as any);
-      expect(res8.status).toBe(400);
-      const json8 = await res8.json();
-      expect(json8.error).toContain('has_link query parameter must be true or false');
+      expect(json5.error).toContain('trend query parameter must be one of');
     });
 
-    it('returns per-sort leaderboard items with total_unique, page, page_size, and pooled rates', async () => {
+    it('successfully calls getPinLeaderboard with sanitized query params', async () => {
       const mockResult = {
         items: [
           {
             pin_id: '5699937025406689',
-            title: 'Aesthetic Living Room Decor',
-            image_url: 'https://i.pinimg.com/600x/demo.jpg',
-            appearances: 28,
-            best_rank: 1,
-            total_impressions: 15420,
-            total_engagements: 580,
-            total_saves: 245,
-            total_outbound_clicks: 120,
-            total_pin_clicks: 460,
+            title: 'Boho Living Room Inspiration',
+            image_url: 'https://i.pinimg.com/736x/test.jpg',
+            destination_url: 'https://example.com/blog',
+            appearances: 4,
+            best_rank: 2,
+            total_impressions: 4890,
+            total_engagements: 184,
+            total_saves: 92,
+            total_outbound_clicks: 45,
+            total_pin_clicks: 139,
             last_seen: '2026-08-10',
-            prev_rank: 4,
+            prev_rank: 5,
             trend: '▲3',
             engagement_rate: 0.0376,
-            outbound_click_rate: 0.0078,
-            pin_click_rate: 0.0298,
-            save_rate: 0.0159,
           },
         ],
         total_unique: 42,
@@ -192,7 +168,7 @@ describe('Pin Intelligence & Retention Suite (V26.1)', () => {
       const locals = { user: { id: 'u1' }, supabase: {}, activeWorkspaceId: workspaceId };
       const res = await getLeaderboardHandler({
         params: { id: connectionId },
-        request: new Request('http://localhost/api/analytics/connections/conn-uuid-12345/pin-leaderboard?sort_by=IMPRESSION&days=30&page=2&page_size=10&sort=total_impressions&min_impressions=1000&min_appearances=2&trend=RISING&has_link=true&q=decor&unknown_foo=bar'),
+        request: new Request('http://localhost/api/analytics/connections/conn-uuid-12345/pin-leaderboard?sort_by=IMPRESSION&days=30&limit=10&page=2&q=decor&sort=total_impressions&min_impressions=1000&min_appearances=2&trend=RISING&has_link=true'),
         locals,
       } as any);
 

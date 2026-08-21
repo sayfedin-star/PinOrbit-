@@ -53,12 +53,11 @@ export const GET: APIRoute = async ({ request, locals }) => {
     // 1. Pipeline Settings
     const { data: pipelineSettings } = await competitorsClient
       .from('competitor_pipeline_settings')
-      .select('id, workspace_id, is_enabled, dry_run, max_retries, updated_at')
-      .eq('id', true)
+      .select('workspace_id, is_enabled, dry_run, max_retries, updated_at')
+      .eq('workspace_id', workspaceId)
       .maybeSingle();
 
     const fallbackSettings = {
-      id: true,
       workspace_id: workspaceId,
       is_enabled: true,
       dry_run: false,
@@ -125,16 +124,15 @@ export const PUT: APIRoute = async ({ request, locals }) => {
       .from('competitor_pipeline_settings')
       .upsert(
         {
-          id: true,
           workspace_id: workspaceId,
           is_enabled: isEnabled,
           dry_run: dryRun,
           max_retries: maxRetries,
           updated_at: new Date().toISOString(),
         },
-        { onConflict: 'id' }
+        { onConflict: 'workspace_id' }
       )
-      .select('id, workspace_id, is_enabled, dry_run, max_retries, updated_at')
+      .select('workspace_id, is_enabled, dry_run, max_retries, updated_at')
       .single();
 
     if (error) throw error;

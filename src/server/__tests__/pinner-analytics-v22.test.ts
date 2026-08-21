@@ -239,7 +239,8 @@ describe('Pinner Analytics R11 Contract & V22 Methods Test Suite', () => {
       from: vi.fn(() => ({
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
-        gte: vi.fn().mockResolvedValue({
+        gte: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockResolvedValue({
           data: [
             { connection_id: 'c2', impressions: 23172, engagements: 901, pin_clicks: 726, outbound_clicks: 43, saves: 126 },
             { connection_id: 'c2', impressions: 25558, engagements: 1035, pin_clicks: 862, outbound_clicks: 36, saves: 121 },
@@ -381,13 +382,13 @@ describe('Pinner Analytics R11 Contract & V22 Methods Test Suite', () => {
       '2026-08-08',
       50
     );
-    expect(rangePins.length).toBe(2);
-    expect(rangePins[0].pin_id).toBe('pin_101');
-    expect(rangePins[1].pin_id).toBe('pin_102');
+    expect(rangePins.rows.length).toBe(2);
+    expect(rangePins.rows[0].pin_id).toBe('pin_101');
+    expect(rangePins.rows[1].pin_id).toBe('pin_102');
     // Ensure contiguous 1..N ranks and unique pin IDs
-    const pinIds = rangePins.map((p) => p.pin_id);
-    expect(new Set(pinIds).size).toBe(rangePins.length);
-    expect(rangePins.map((p) => p.rank_position)).toEqual([1, 2]);
+    const pinIds = rangePins.rows.map((p) => p.pin_id);
+    expect(new Set(pinIds).size).toBe(rangePins.rows.length);
+    expect(rangePins.rows.map((p) => p.rank_position)).toEqual([1, 2]);
 
     // Test pinnerAnalyticsService.getTopPinsServerPaginated
     const mockScheduling = {
@@ -395,7 +396,7 @@ describe('Pinner Analytics R11 Contract & V22 Methods Test Suite', () => {
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
         single: vi.fn().mockResolvedValue({
-          data: { id: 'm1', workspace_id: workspaceId, user_id: 'u1', role: 'owner' },
+          data: { id: 'm1', workspace_id: workspaceId, user_id: '00000000-0000-0000-0000-000000000002', role: 'owner' },
           error: null,
         }),
       })),
@@ -403,7 +404,7 @@ describe('Pinner Analytics R11 Contract & V22 Methods Test Suite', () => {
 
     const paginatedRes = await pinnerAnalyticsService.getTopPinsServerPaginated(
       mockScheduling as any,
-      'u1',
+      '00000000-0000-0000-0000-000000000002',
       workspaceId,
       connectionId,
       'IMPRESSION',
