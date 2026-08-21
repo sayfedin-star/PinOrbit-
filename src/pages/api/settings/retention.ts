@@ -3,13 +3,13 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 import { assertWorkspaceAccess } from '../../../server/auth/workspace-guard';
 import { dbClients } from '../../../server/db/clients';
-import { clampRetentionPostedDays, clampProcessingTimeoutMinutes } from '../../../server/services/scheduling-logic';
 
-const clampInt = (v: any, min: number, max: number, fallback: number | null): number | null => {
-  if (v === null || v === undefined || v === '') return fallback;
-  const n = typeof v === 'number' ? Math.floor(v) : parseInt(String(v), 10);
-  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
-};
+function clampInt(val: any, min: number, max: number, fallback: number | null): number | null {
+  if (val === undefined || val === null || val === '') return fallback;
+  const num = Number(val);
+  if (isNaN(num)) return fallback;
+  return Math.max(min, Math.min(max, Math.round(num)));
+}
 
 export const GET: APIRoute = async ({ request, locals }) => {
   const user = locals.user;
@@ -58,6 +58,8 @@ export const GET: APIRoute = async ({ request, locals }) => {
           top_pins_raw_days: 180,
           top_pins_downsample_enabled: false,
           analytics_daily_keep_days: null,
+          last_cleanup_at: null,
+          last_cleanup_result: null,
           is_default: true,
         }),
         {
@@ -84,6 +86,8 @@ export const GET: APIRoute = async ({ request, locals }) => {
         top_pins_raw_days: settings.top_pins_raw_days ?? 180,
         top_pins_downsample_enabled: settings.top_pins_downsample_enabled ?? false,
         analytics_daily_keep_days: settings.analytics_daily_keep_days ?? null,
+        last_cleanup_at: settings.last_cleanup_at ?? null,
+        last_cleanup_result: settings.last_cleanup_result ?? null,
         is_default: false,
         updated_at: settings.updated_at,
       }),
@@ -168,6 +172,7 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
     }
 
     const payload = {
+      ...(existing ?? {}),
       workspace_id: workspaceId,
       auto_prune_enabled: Boolean(rawAutoPrune ?? false),
       retention_posted_days: clampInt(rawPostedDays, 1, 365, existing?.retention_posted_days ?? 30) ?? 30,
@@ -212,6 +217,8 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
         top_pins_raw_days: saved.top_pins_raw_days,
         top_pins_downsample_enabled: saved.top_pins_downsample_enabled,
         analytics_daily_keep_days: saved.analytics_daily_keep_days,
+        last_cleanup_at: saved.last_cleanup_at ?? null,
+        last_cleanup_result: saved.last_cleanup_result ?? null,
         is_default: false,
         updated_at: saved.updated_at,
       }),
