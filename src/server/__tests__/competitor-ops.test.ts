@@ -156,7 +156,7 @@ describe('Competitor Ops Console API Endpoints', () => {
             select: vi.fn().mockReturnValue({
               eq: vi.fn().mockReturnValue({
                 maybeSingle: vi.fn().mockResolvedValue({
-                  data: { id: true, is_enabled: true, dry_run: false, max_retries: 3 },
+                  data: { workspace_id: 'ws-123', is_enabled: true, dry_run: false, max_retries: 3 },
                   error: null,
                 }),
               }),
@@ -275,6 +275,23 @@ describe('Competitor Ops Console API Endpoints', () => {
             }),
           };
         }
+        if (table === 'competitor_snapshots') {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                order: vi.fn().mockReturnValue({
+                  limit: vi.fn().mockResolvedValue({
+                    data: [
+                      { profile_reach: 4000, profile_views: 2000, follower_count: 500, pin_count: 100, recorded_at: '2026-08-20T00:00:00Z' },
+                      { profile_reach: 3000, profile_views: 1500, follower_count: 400, pin_count: 80, recorded_at: '2026-08-19T00:00:00Z' },
+                    ],
+                    error: null,
+                  }),
+                }),
+              }),
+            }),
+          };
+        }
         return {};
       });
 
@@ -344,6 +361,20 @@ describe('Competitor Ops Console API Endpoints', () => {
             }),
           };
         }
+        if (table === 'competitor_snapshots') {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                order: vi.fn().mockReturnValue({
+                  limit: vi.fn().mockResolvedValue({
+                    data: [],
+                    error: null,
+                  }),
+                }),
+              }),
+            }),
+          };
+        }
         return {};
       });
 
@@ -356,6 +387,123 @@ describe('Competitor Ops Console API Endpoints', () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.success).toBe(true);
+    });
+
+    it('GET with id and lite=1 returns empty boards and topPins', async () => {
+      mockCompetitorsClient.from.mockImplementation((table: string) => {
+        if (table === 'competitors') {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                eq: vi.fn().mockReturnValue({
+                  maybeSingle: vi.fn().mockResolvedValue({
+                    data: { id: 'a0000000-0000-0000-0000-000000000001', username: 'recipestower', workspace_id: 'ws-123' },
+                    error: null,
+                  }),
+                }),
+              }),
+            }),
+          };
+        }
+        if (table === 'competitor_snapshots') {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                order: vi.fn().mockReturnValue({
+                  limit: vi.fn().mockResolvedValue({
+                    data: [
+                      { profile_reach: 4000, profile_views: 2000, follower_count: 500, pin_count: 100, recorded_at: '2026-08-20T00:00:00Z' },
+                      { profile_reach: 3000, profile_views: 1500, follower_count: 400, pin_count: 80, recorded_at: '2026-08-19T00:00:00Z' },
+                    ],
+                    error: null,
+                  }),
+                }),
+              }),
+            }),
+          };
+        }
+        if (table === 'competitor_boards') {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                not: vi.fn().mockReturnValue({
+                  order: vi.fn().mockReturnValue({
+                    limit: vi.fn().mockReturnValue({
+                      maybeSingle: vi.fn().mockResolvedValue({
+                        data: { board_created_at: '2026-01-01T00:00:00Z' },
+                        error: null,
+                      }),
+                    }),
+                  }),
+                }),
+              }),
+            }),
+          };
+        }
+        return {};
+      });
+
+      const req = new Request('http://localhost/api/admin/competitors?id=a0000000-0000-0000-0000-000000000001&lite=1&workspace_id=ws-123');
+      const res = await getCompetitors({
+        request: req,
+        locals: { user: { id: 'admin-user' }, supabase: {} as any, activeWorkspaceId: 'ws-123' },
+      } as any);
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.success).toBe(true);
+      expect(body.boards).toEqual([]);
+      expect(body.topPins).toEqual([]);
+      expect(body.deltas.reachChange).toBe(1000);
+      expect(body.competitor.oldest_board_date).toBe('2026-01-01T00:00:00Z');
+      expect(body.competitor.strategy_age_days).toBeGreaterThan(0);
+    });
+
+    it('GET with id and boards_only=1 returns only boards array', async () => {
+      mockCompetitorsClient.from.mockImplementation((table: string) => {
+        if (table === 'competitors') {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                eq: vi.fn().mockReturnValue({
+                  maybeSingle: vi.fn().mockResolvedValue({
+                    data: { id: 'a0000000-0000-0000-0000-000000000001' },
+                    error: null,
+                  }),
+                }),
+              }),
+            }),
+          };
+        }
+        if (table === 'competitor_boards') {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                order: vi.fn().mockResolvedValue({
+                  data: [
+                    { id: 'b1', name: 'Board 1', pin_count: 500 },
+                    { id: 'b2', name: 'Board 2', pin_count: 200 },
+                  ],
+                  error: null,
+                }),
+              }),
+            }),
+          };
+        }
+        return {};
+      });
+
+      const req = new Request('http://localhost/api/admin/competitors?id=a0000000-0000-0000-0000-000000000001&boards_only=1&workspace_id=ws-123');
+      const res = await getCompetitors({
+        request: req,
+        locals: { user: { id: 'admin-user' }, supabase: {} as any, activeWorkspaceId: 'ws-123' },
+      } as any);
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.success).toBe(true);
+      expect(body.boards).toHaveLength(2);
+      expect(body.competitor).toBeUndefined();
     });
   });
 

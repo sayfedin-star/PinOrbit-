@@ -4,6 +4,7 @@ import type { APIRoute } from 'astro';
 import { dbClients, isKnownDefaultIngestSecret, isProductionEnv } from '../../../../server/db/clients';
 import { getEffectiveSecret } from '../../../../server/services/webhook-secrets';
 import { clampRetentionPostedDays, clampProcessingTimeoutMinutes } from '../../../../server/services/scheduling-logic';
+import { timingSafeEqual } from '../../../../server/lib/timing-safe';
 
 interface BatchedDeleteOptions {
   column: string;
@@ -20,34 +21,38 @@ async function batchedDelete(
   options: BatchedDeleteOptions
 ): Promise<number> {
   let totalDeleted = 0;
-  const batchSize = options.batchSize || 100;
+  const batchSize = options.batchSize || 500;
 
   while (true) {
     let query = client
       .from(table)
       .select('id')
       .eq(options.column, options.value)
-      .lt(options.dateColumn, options.cutoff)
-      .limit(batchSize);
+      .lt(options.dateColumn, options.cutoff);
 
     if (options.extraFilter) {
       query = query.eq(options.extraFilter.column, options.extraFilter.value);
     }
 
-    const { data: rows, error: selectErr } = await query;
+    const { data: rows, error: selectErr } = await query.limit(batchSize);
     if (selectErr) throw selectErr;
     if (!rows || rows.length === 0) break;
 
     const ids = rows.map((r: any) => r.id);
-    const { error: deleteErr } = await client
+    const { count, error: deleteErr } = await client
       .from(table)
-      .delete()
+      .delete({ count: 'exact' })
       .in('id', ids);
 
     if (deleteErr) throw deleteErr;
-    totalDeleted += ids.length;
 
-    if (rows.length < batchSize) break;
+    const batchDeleted = count ?? ids.length;
+    totalDeleted += batchDeleted;
+
+    if (batchDeleted < batchSize) break;
+
+    // Small delay to reduce DB load
+    await new Promise((resolve) => setTimeout(resolve, 100));
   }
 
   return totalDeleted;
@@ -103,7 +108,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return new Response(JSON.stringify({ success: false, error: 'Service unavailable: ingest secret not configured on server.' }), { status: 503, headers: { 'Content-Type': 'application/json' } });
   }
 
-  if (!secret || !expected.value || secret !== expected.value) {
+  if (!secret || !expected.value || !(await timingSafeEqual(secret, expected.value))) {
     return new Response(
       JSON.stringify({ success: false, error: 'Unauthorized: invalid or missing x-ingest-secret.' }),
       {
@@ -140,18 +145,16 @@ export const POST: APIRoute = async ({ request, locals }) => {
     // P1 Gate
     if (wsSettings?.auto_prune_enabled) {
       try {
-        // 1. Purge posted pins older than workspace retention days
-        const { count: delCount, error: pinDeleteErr } = await schedulingAdmin
-          .from('pins')
-          .delete({ count: 'exact' })
-          .eq('workspace_id', workspaceId)
-          .eq('status', 'posted')
-          .lt('posted_at', postedCutoff);
+        // 1. Purge posted pins older than workspace retention days using batchedDelete
+        deletedPinsCount = await batchedDelete(schedulingAdmin, 'pins', {
+          column: 'workspace_id',
+          value: workspaceId,
+          dateColumn: 'posted_at',
+          cutoff: postedCutoff,
+          extraFilter: { column: 'status', value: 'posted' },
+        });
 
-        if (pinDeleteErr) throw pinDeleteErr;
-        deletedPinsCount = delCount ?? 0;
-
-        // 2. Terminal pins: failed & cancelled
+        // 2. Terminal pins: failed & cancelled using batchedDelete
         const terminalDays = typeof wsSettings?.retention_terminal_days === 'number' ? wsSettings.retention_terminal_days : 90;
         const terminalCutoff = new Date(Date.now() - terminalDays * 86400000).toISOString();
         const delFailed = await batchedDelete(schedulingAdmin, 'pins', {
@@ -178,9 +181,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
           p_workspace_id: workspaceId,
         });
         if (logsErr) throw logsErr;
-        deletedLogs = logsData ?? 'purged';
+        deletedLogs = typeof logsData === 'number' ? logsData : 0;
 
-        // 4. Import sessions
+        // 4. Import sessions using batchedDelete
         const importDays = typeof wsSettings?.import_sessions_days === 'number' ? wsSettings.import_sessions_days : 30;
         const sessionsCutoff = new Date(Date.now() - importDays * 86400000).toISOString();
         deletedSessions = await batchedDelete(schedulingAdmin, 'import_sessions', {
@@ -245,14 +248,36 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
         const topPinsRawDays = typeof wsSettings?.top_pins_raw_days === 'number' ? wsSettings.top_pins_raw_days : 180;
         const snapshotCutoff = new Date(Date.now() - topPinsRawDays * 86400000).toISOString().split('T')[0];
-        const { count: snapCount, error: snapErr } = await analyticsClient
-          .from('top_pins_snapshots')
-          .delete({ count: 'exact' })
-          .eq('workspace_id', workspaceId)
-          .lt('window_end', snapshotCutoff);
 
-        if (snapErr) throw snapErr;
-        deletedSnapshotsCount = snapCount ?? 0;
+        const rollupCutoff = new Date(Date.now() - topPinsRawDays * 86400000);
+        const { data: oldSnapshots } = await analyticsClient
+          .from('top_pins_snapshots')
+          .select('*')
+          .eq('workspace_id', workspaceId)
+          .lt('window_end', rollupCutoff.toISOString())
+          .limit(10000);
+
+        if (oldSnapshots && oldSnapshots.length > 0) {
+          // Aggregate top-10 pins per month per sort_by
+          const monthlyRollups = new Map<string, any>();
+
+          for (const snap of oldSnapshots) {
+            if (!snap.window_end) continue;
+            const monthKey = `${snap.workspace_id}_${snap.connection_id}_${snap.sort_by}_${snap.window_end.slice(0, 7)}`;
+            const existing = monthlyRollups.get(monthKey) || { pins: [] };
+            existing.pins.push(snap);
+            monthlyRollups.set(monthKey, existing);
+          }
+
+          console.warn(`[Cleanup] ${oldSnapshots.length} snapshots >${topPinsRawDays}d - would create ${monthlyRollups.size} monthly rollups`);
+        }
+
+        deletedSnapshotsCount = await batchedDelete(analyticsClient, 'top_pins_snapshots', {
+          column: 'workspace_id',
+          value: workspaceId,
+          dateColumn: 'window_end',
+          cutoff: snapshotCutoff,
+        });
 
         if (wsSettings?.top_pins_downsample_enabled) {
           console.warn('[Retention] Top pins downsampling requested for workspace:', workspaceId);

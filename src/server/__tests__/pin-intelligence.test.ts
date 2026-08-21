@@ -35,8 +35,10 @@ vi.mock('../db/clients', () => {
       update: vi.fn(() => q),
       eq: vi.fn(() => q),
       lt: vi.fn(() => q),
+      in: vi.fn(() => q),
+      limit: vi.fn(() => q),
       then: (resolve: any, reject: any) =>
-        Promise.resolve({ data: { retention_posted_days: 30, processing_timeout_minutes: 45 }, count: 15, error: null }).then(resolve, reject),
+        Promise.resolve({ data: [{ id: 'pin-1', window_end: '2026-01-01T00:00:00Z', workspace_id: 'ws', connection_id: 'c', sort_by: 'SAVE' }], count: 15, error: null }).then(resolve, reject),
       maybeSingle: vi.fn().mockResolvedValue({ data: { retention_posted_days: 30, processing_timeout_minutes: 45 }, error: null }),
     };
     return q;

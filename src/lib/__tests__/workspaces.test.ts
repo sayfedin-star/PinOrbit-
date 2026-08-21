@@ -1,8 +1,30 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { getDefaultWorkspaceId, getActiveWorkspaceId, DEFAULT_WORKSPACE_ID } from '../workspaces';
 import { setActiveWorkspaceId, deleteWorkspace, assertWorkspaceEmpty } from '../workspaces-client';
 import { getAccounts, getBoards, getPins } from '../supabase';
 import { getCompetitors } from '../competitors';
+
+vi.mock('../supabase', () => ({
+  supabase: null,
+  isSupabaseConfigured: false,
+  supabaseUrl: '',
+  supabaseAnonKey: '',
+  getAccounts: vi.fn((wsId?: string) =>
+    Promise.resolve(wsId === '00000000-0000-0000-0000-000000000001' ? [{ id: '00000000-0000-0000-0000-000000000101', workspace_id: wsId }] : [])
+  ),
+  getBoards: vi.fn((wsId?: string) =>
+    Promise.resolve(wsId === '00000000-0000-0000-0000-000000000001' ? [{ id: '00000000-0000-0000-0000-000000000102', workspace_id: wsId }] : [])
+  ),
+  getPins: vi.fn((_status?: string, _boardId?: string, wsId?: string) =>
+    Promise.resolve(wsId === '00000000-0000-0000-0000-000000000001' ? [{ id: '00000000-0000-0000-0000-000000000103', workspace_id: wsId }] : [])
+  ),
+}));
+
+vi.mock('../competitors', () => ({
+  getCompetitors: vi.fn((wsId?: string) =>
+    Promise.resolve(wsId === '00000000-0000-0000-0000-000000000001' ? [{ id: '00000000-0000-0000-0000-000000000104', workspace_id: wsId }] : [])
+  ),
+}));
 
 describe('Workspace Server & Client Helpers Test Suite', () => {
   beforeEach(() => {
@@ -20,7 +42,7 @@ describe('Workspace Server & Client Helpers Test Suite', () => {
   });
 
   it('sets and retrieves active workspace cookie in browser environment', () => {
-    const customWsId = 'ws-test-123';
+    const customWsId = '00000000-0000-0000-0000-000000000123';
     setActiveWorkspaceId(customWsId);
     expect(getActiveWorkspaceId()).toBe(customWsId);
 
@@ -31,12 +53,12 @@ describe('Workspace Server & Client Helpers Test Suite', () => {
 
   it('parses active workspace from Astro cookies object and raw header strings', () => {
     const mockAstroCookies = {
-      get: (name: string) => (name === 'pinorbit_active_workspace_id' ? { value: 'ws-astro-456' } : null),
+      get: (name: string) => (name === 'pinorbit_active_workspace_id' ? { value: '00000000-0000-0000-0000-000000000456' } : null),
     };
-    expect(getActiveWorkspaceId(mockAstroCookies)).toBe('ws-astro-456');
+    expect(getActiveWorkspaceId(mockAstroCookies)).toBe('00000000-0000-0000-0000-000000000456');
 
-    const rawHeader = 'session=abc; pinorbit_active_workspace_id=ws-header-789; theme=dark';
-    expect(getActiveWorkspaceId(rawHeader)).toBe('ws-header-789');
+    const rawHeader = 'session=abc; pinorbit_active_workspace_id=00000000-0000-0000-0000-000000000789; theme=dark';
+    expect(getActiveWorkspaceId(rawHeader)).toBe('00000000-0000-0000-0000-000000000789');
   });
 
   it('blocks deletion of Default Workspace', async () => {

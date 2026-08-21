@@ -11,6 +11,14 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  const authHeader = req.headers.get('Authorization');
+  const cronSecret = Deno.env.get('CRON_SECRET');
+  if (!authHeader || !cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
+
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
@@ -155,6 +163,12 @@ serve(async (req) => {
         profileUpdated,
         boardsUpdatedCount,
       });
+
+      // Add pacing delay before next competitor (1-2.5 seconds with jitter)
+      if (competitors && comp !== competitors[competitors.length - 1]) {
+        const delayMs = 1000 + Math.floor(Math.random() * 1500);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
     }
 
     return new Response(

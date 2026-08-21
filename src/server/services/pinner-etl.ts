@@ -119,6 +119,7 @@ export function filterRecordByAllowlist<T extends Record<string, any>>(
   return result;
 }
 
+const MAX_TRACKER_SIZE = 1000;
 // In-memory tracker for consecutive ingestion failures by workspace
 const failureStreakTracker = new Map<string, { count: number; lastFailedAt: string }>();
 
@@ -412,6 +413,10 @@ export const pinnerETL = {
         const streak = failureStreakTracker.get(workspaceId) || { count: 0, lastFailedAt: nowIso };
         streak.count += 1;
         streak.lastFailedAt = nowIso;
+        if (failureStreakTracker.size >= MAX_TRACKER_SIZE && !failureStreakTracker.has(workspaceId)) {
+          const oldestKey = failureStreakTracker.keys().next().value;
+          if (oldestKey) failureStreakTracker.delete(oldestKey);
+        }
         failureStreakTracker.set(workspaceId, streak);
 
         const currentStreak = streak.count;
@@ -582,10 +587,21 @@ export const pinnerETL = {
       // Exact R13.3 window fallback order:
       // windowEnd = request_context.end_date OR (today - end_offset) OR today
       // windowStart = request_context.start_date OR (today - start_offset) OR windowEnd
-      const windowEnd =
+      let windowEnd =
         requestContext?.end_date?.trim() || calcOffsetDate(endOffset) || today;
-      const windowStart =
+      let windowStart =
         requestContext?.start_date?.trim() || calcOffsetDate(startOffset) || windowEnd;
+
+      // Enforce windowStart <= windowEnd
+      if (windowStart > windowEnd) {
+        console.warn('[PinnerETL] Inverted time window detected, swapping start/end', {
+          originalStart: windowStart,
+          originalEnd: windowEnd,
+        });
+        const temp = windowStart;
+        windowStart = windowEnd;
+        windowEnd = temp;
+      }
 
       const normalizedPinsBySort: Record<string, any[]> = {};
       const topPinsEnvelope = payload.top_pins_analytics || (payload.pins ? payload : null);
@@ -759,6 +775,22 @@ export const pinnerETL = {
       const topPinsUpsertCount = await upsertBatch('top_pins', topPinRows, (r) =>
         analyticsDb.upsertTopPinsSnapshots(workspaceId, connectionId, r)
       );
+
+      if (topPinsUpsertCount > 0) {
+        // Offload raw JSONB after 7 days to reclaim space
+        const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+        const analyticsClient = dbClients.getAnalytics(runtimeEnv);
+        await analyticsClient
+          .from('top_pins_snapshots')
+          .update({
+            raw_pin: null,
+            raw_headers: null,
+            raw_metrics: null,
+          })
+          .eq('workspace_id', workspaceId)
+          .lt('window_end', sevenDaysAgo)
+          .then(() => {});
+      }
 
       const rollupsUpsertCount = await upsertBatch('workspace_rollups', workspaceRollupRows, (r) =>
         analyticsDb.upsertDailyWorkspaceMetrics(workspaceId, r)

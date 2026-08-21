@@ -5,7 +5,8 @@ import { assertWorkspaceAccess } from '../../../server/auth/workspace-guard';
 import { dbClients } from '../../../server/db/clients';
 import { clampRetentionPostedDays, clampProcessingTimeoutMinutes } from '../../../server/services/scheduling-logic';
 
-const clampInt = (v: any, min: number, max: number, fallback: number): number => {
+const clampInt = (v: any, min: number, max: number, fallback: number | null): number | null => {
+  if (v === null || v === undefined || v === '') return fallback;
   const n = typeof v === 'number' ? Math.floor(v) : parseInt(String(v), 10);
   return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
 };
@@ -169,17 +170,17 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
     const payload = {
       workspace_id: workspaceId,
       auto_prune_enabled: Boolean(rawAutoPrune ?? false),
-      retention_posted_days: clampInt(rawPostedDays, 1, 365, existing?.retention_posted_days ?? 30),
-      retention_terminal_days: clampInt(rawTerminalDays, 1, 365, existing?.retention_terminal_days ?? 90),
-      retention_logs_days: clampInt(rawLogsDays, 1, 180, existing?.retention_logs_days ?? 14),
-      import_sessions_days: clampInt(rawImportDays, 1, 365, existing?.import_sessions_days ?? 30),
-      processing_timeout_minutes: clampInt(rawTimeout, 5, 240, existing?.processing_timeout_minutes ?? 45),
+      retention_posted_days: clampInt(rawPostedDays, 1, 365, existing?.retention_posted_days ?? 30) ?? 30,
+      retention_terminal_days: clampInt(rawTerminalDays, 1, 365, existing?.retention_terminal_days ?? 90) ?? 90,
+      retention_logs_days: clampInt(rawLogsDays, 1, 180, existing?.retention_logs_days ?? 14) ?? 14,
+      import_sessions_days: clampInt(rawImportDays, 1, 365, existing?.import_sessions_days ?? 30) ?? 30,
+      processing_timeout_minutes: clampInt(rawTimeout, 5, 240, existing?.processing_timeout_minutes ?? 45) ?? 45,
       p2_prune_enabled: Boolean(rawP2Prune ?? false),
-      competitor_snapshots_days: clampInt(rawCompSnapshots, 1, 365, existing?.competitor_snapshots_days ?? 90),
-      competitor_jobs_days: clampInt(rawCompJobs, 1, 180, existing?.competitor_jobs_days ?? 30),
+      competitor_snapshots_days: clampInt(rawCompSnapshots, 1, 365, existing?.competitor_snapshots_days ?? 90) ?? 90,
+      competitor_jobs_days: clampInt(rawCompJobs, 1, 180, existing?.competitor_jobs_days ?? 30) ?? 30,
       p3_prune_enabled: Boolean(rawP3Prune ?? false),
-      ingestion_runs_days: clampInt(rawIngestionRuns, 1, 365, existing?.ingestion_runs_days ?? 30),
-      top_pins_raw_days: clampInt(rawTopPinsRaw, 1, 730, existing?.top_pins_raw_days ?? 180),
+      ingestion_runs_days: clampInt(rawIngestionRuns, 1, 365, existing?.ingestion_runs_days ?? 30) ?? 30,
+      top_pins_raw_days: clampInt(rawTopPinsRaw, 1, 730, existing?.top_pins_raw_days ?? 180) ?? 180,
       top_pins_downsample_enabled: Boolean(rawTopPinsDownsample ?? false),
       analytics_daily_keep_days: clampedDailyKeep,
       updated_at: new Date().toISOString(),

@@ -568,7 +568,14 @@ export const fastcronService = {
                 : JSON.stringify(job.postData || job.post_data || '');
 
             const isDispatchUrl = jobUrl === DISPATCH_ENDPOINT_URL || jobUrl === webhookUrl?.trim();
-            const matchesConnection = jobPostData.includes(connectionId) || (job.name && job.name.includes(connection.display_name));
+            let matchesConnection = false;
+            try {
+              const parsedData = JSON.parse(jobPostData);
+              matchesConnection = parsedData?.connection_id === connectionId;
+            } catch {
+              // Fallback: strict string match for connection_id field
+              matchesConnection = jobPostData.includes(`"connection_id":"${connectionId}"`) || jobPostData.includes(`"connection_id": "${connectionId}"`);
+            }
             const isStoredJob = (storedAnalyticsId != null && jId === storedAnalyticsId) ||
                                 (storedTopPinsId != null && jId === storedTopPinsId);
 

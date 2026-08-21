@@ -8,6 +8,7 @@ import {
   buildPinPostIdempotencyKey,
   buildBoardCreateIdempotencyKey,
 } from '../../../../server/services/scheduling-logic';
+import { timingSafeEqual } from '../../../../server/lib/timing-safe';
 
 const json = (o: any, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { 'Content-Type': 'application/json' } });
 
@@ -23,7 +24,7 @@ async function handleDispatch(body: any, locals: any) {
 
   // 1) Load schedule + authenticate via per-schedule dispatch token
   const { data: schedule } = await admin.from('posting_schedules').select('*').eq('id', scheduleId).maybeSingle();
-  if (!schedule || schedule.dispatch_token !== token) return json({ success: false, error: 'Unauthorized: invalid schedule or dispatch token.' }, 401);
+  if (!schedule || !schedule.dispatch_token || !(await timingSafeEqual(schedule.dispatch_token, token))) return json({ success: false, error: 'Unauthorized: invalid schedule or dispatch token.' }, 401);
   if (schedule.status !== 'active') return json({ success: true, dispatched: false, reason: 'paused' });
   if (schedule.started_at && new Date(schedule.started_at).getTime() > Date.now()) return json({ success: true, dispatched: false, reason: 'not_started' });
 
@@ -76,19 +77,52 @@ async function handleDispatch(body: any, locals: any) {
 
   // 6) Board resolution + push tickets to Make
   let dispatched = 0; let skipped = 0;
+
+  const pinIds = claimed.map((c: any) => c.id);
+  const { data: pinsList } = await admin
+    .from('pins')
+    .select('*')
+    .in('id', pinIds);
+
+  const rawBoardNames = (pinsList || []).map((p: any) => p.board_name).filter(Boolean);
+  const boardNames = [...new Set(rawBoardNames.map((n: string) => String(n).trim()))];
+
+  let boardsList: any[] = [];
+  if (boardNames.length > 0) {
+    const { data: bList } = await admin
+      .from('boards')
+      .select('board_name, pinterest_board_id')
+      .eq('account_id', accountId)
+      .in('board_name', boardNames)
+      .not('pinterest_board_id', 'is', null);
+    boardsList = bList || [];
+  }
+
+  const pinMap = new Map((pinsList || []).map((p: any) => [p.id, p]));
+  const boardMap = new Map(boardsList.map((b: any) => [String(b.board_name).toLowerCase(), b.pinterest_board_id]));
+
+  let successfulExecutions = 0;
+
   for (const c of claimed) {
-    const { data: pin } = await admin.from('pins').select('*').eq('id', c.id).single();
+    const pin = pinMap.get(c.id);
     if (!pin) { skipped++; continue; }
     if (!pin.image_url) {
       await admin.from('pins').update({ status: 'failed', last_failure_reason: 'Missing image_url', processing_started_at: null, updated_at: new Date().toISOString() }).eq('id', c.id);
       skipped++; continue;
     }
-    let boardId: string | null = null;
-    if (pin.board_name) {
-      const { data: board } = await admin.from('boards').select('pinterest_board_id')
-        .eq('account_id', accountId).ilike('board_name', String(pin.board_name))
-        .not('pinterest_board_id', 'is', null).maybeSingle();
-      boardId = board?.pinterest_board_id || null;
+    let boardId = pin.board_name ? (boardMap.get(String(pin.board_name).toLowerCase()) || null) : null;
+    if (!boardId && pin.board_name) {
+      // Escape ILIKE wildcards and query with limit(1) to prevent PGRST116
+      const escapedBoardName = String(pin.board_name || '').replace(/[%_\\]/g, '\\$&');
+      const { data: fallbackBoard } = await admin
+        .from('boards')
+        .select('pinterest_board_id')
+        .eq('account_id', accountId)
+        .ilike('board_name', escapedBoardName)
+        .not('pinterest_board_id', 'is', null)
+        .limit(1)
+        .maybeSingle();
+      boardId = fallbackBoard?.pinterest_board_id || null;
     }
     if (!boardId) {
       if (account.auto_create_missing_boards && pin.board_name) {
@@ -112,13 +146,18 @@ async function handleDispatch(body: any, locals: any) {
     }).catch(() => null);
 
     if (pushRes && pushRes.ok) {
-      hook.executions_used = (hook.executions_used ?? 0) + 1;
-      await admin.from('account_webhooks').update({
-        executions_used: hook.executions_used,
-        last_used_at: new Date().toISOString(),
-      }).eq('id', hook.id).then(() => {});
+      successfulExecutions++;
     }
     dispatched++;
+  }
+
+  // Update webhook counter once after loop
+  if (successfulExecutions > 0) {
+    hook.executions_used = (hook.executions_used ?? 0) + successfulExecutions;
+    await admin.from('account_webhooks').update({
+      executions_used: hook.executions_used,
+      last_used_at: new Date().toISOString(),
+    }).eq('id', hook.id).then(() => {});
   }
 
   if (dispatched > 0) {
@@ -133,6 +172,18 @@ export const GET: APIRoute = async ({ url, locals }) =>
 
 export const POST: APIRoute = async ({ request, locals }) => {
   let body: any = {};
-  try { body = JSON.parse((await request.text()) || '{}'); } catch { return json({ success: false, error: 'Malformed JSON payload.' }, 400); }
+  try {
+    body = JSON.parse((await request.text()) || '{}');
+  } catch {
+    return json({ success: false, error: 'Malformed JSON payload.' }, 400);
+  }
+
+  // Fall back to URL search params if body is empty
+  if (!body.schedule_id || !body.dispatch_token) {
+    const url = new URL(request.url);
+    body.schedule_id = body.schedule_id || url.searchParams.get('schedule_id');
+    body.dispatch_token = body.dispatch_token || url.searchParams.get('dispatch_token');
+  }
+
   return handleDispatch(body, locals);
 };

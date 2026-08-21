@@ -192,6 +192,15 @@ const currentWorkspace = workspaces.find((w) => w.id === activeWorkspaceId) || w
   import { setActiveWorkspaceId, createWorkspace, renameWorkspace, deleteWorkspace } from '../lib/workspaces-client';
   import type { Workspace } from '../lib/types';
 
+  function escapeHtml(unsafe: string): string {
+    return unsafe
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
   const select = document.getElementById('workspace-select') as HTMLSelectElement | null;
   
   // Create Modal elements
@@ -226,7 +235,7 @@ const currentWorkspace = workspaces.find((w) => w.id === activeWorkspaceId) || w
         select.innerHTML = cachedWorkspaces
           .map(
             (ws) =>
-              `<option value="${ws.id}" ${ws.id === activeId ? 'selected' : ''}>${ws.name}</option>`
+              `<option value="${ws.id}" ${ws.id === activeId ? 'selected' : ''}>${escapeHtml(ws.name)}</option>`
           )
           .join('');
         select.value = activeId;
@@ -359,11 +368,11 @@ const currentWorkspace = workspaces.find((w) => w.id === activeWorkspaceId) || w
             <!-- Main Row -->
             <div class="flex items-center justify-between gap-3">
               <div class="flex items-center gap-2.5 min-w-0">
-                <span class="font-bold text-sm text-foreground truncate">${ws.name}</span>
+                <span class="font-bold text-sm text-foreground truncate">${escapeHtml(ws.name)}</span>
                 ${
                   isDefault
                     ? `<span class="inline-flex items-center rounded-full bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 text-[10px] font-bold">DEFAULT</span>`
-                    : ws.slug ? `<span class="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-[10px] font-mono text-muted-foreground">slug: ${ws.slug}</span>` : ''
+                    : ws.slug ? `<span class="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-[10px] font-mono text-muted-foreground">slug: ${escapeHtml(ws.slug)}</span>` : ''
                 }
                 ${
                   isActive
@@ -397,7 +406,7 @@ const currentWorkspace = workspaces.find((w) => w.id === activeWorkspaceId) || w
                 <input
                   id="rename-input-${ws.id}"
                   type="text"
-                  value="${ws.name}"
+                  value="${escapeHtml(ws.name)}"
                   class="flex-1 rounded-lg border border-border bg-card py-1.5 px-3 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                 />
                 <button
