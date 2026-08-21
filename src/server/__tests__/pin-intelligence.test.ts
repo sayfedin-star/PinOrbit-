@@ -33,11 +33,14 @@ vi.mock('../db/clients', () => {
       select: vi.fn(() => q),
       delete: vi.fn(() => q),
       update: vi.fn(() => q),
+      upsert: vi.fn(() => q),
       eq: vi.fn(() => q),
       lt: vi.fn(() => q),
+      in: vi.fn(() => q),
+      limit: vi.fn().mockResolvedValue({ data: Array.from({ length: 15 }, (_, i) => ({ id: 'pin-' + i })), error: null }),
       then: (resolve: any, reject: any) =>
-        Promise.resolve({ data: { retention_posted_days: 30, processing_timeout_minutes: 45 }, count: 15, error: null }).then(resolve, reject),
-      maybeSingle: vi.fn().mockResolvedValue({ data: { retention_posted_days: 30, processing_timeout_minutes: 45 }, error: null }),
+        Promise.resolve({ data: { auto_prune_enabled: true, retention_posted_days: 30, processing_timeout_minutes: 45 }, count: 15, error: null }).then(resolve, reject),
+      maybeSingle: vi.fn().mockResolvedValue({ data: { auto_prune_enabled: true, retention_posted_days: 30, processing_timeout_minutes: 45 }, error: null }),
     };
     return q;
   };
@@ -49,9 +52,11 @@ vi.mock('../db/clients', () => {
     dbClients: {
       getAnalytics: vi.fn().mockReturnValue({
         from: vi.fn(() => createQueryBuilder()),
+        rpc: vi.fn().mockResolvedValue({ data: 0, error: null }),
       }),
       getSchedulingAdmin: vi.fn().mockReturnValue({
         from: vi.fn(() => createQueryBuilder()),
+        rpc: vi.fn().mockResolvedValue({ data: 0, error: null }),
       }),
       getConfig: vi.fn().mockReturnValue({}),
     },

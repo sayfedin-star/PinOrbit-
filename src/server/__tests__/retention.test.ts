@@ -23,6 +23,7 @@ vi.mock('../services/webhook-secrets', () => ({
 let mockUpsertFn: any;
 let mockDeleteFn: any;
 let mockUpdateFn: any;
+let mockRpcFn: any;
 let mockMaybeSingleData: any = {
   workspace_id: '00000000-0000-0000-0000-000000000001',
   auto_prune_enabled: true,
@@ -33,6 +34,12 @@ let mockMaybeSingleData: any = {
   retention_logs_days: 14,
   import_sessions_days: 30,
   processing_timeout_minutes: 45,
+  competitor_snapshots_days: 90,
+  competitor_jobs_days: 30,
+  ingestion_runs_days: 30,
+  top_pins_raw_days: 180,
+  top_pins_downsample_enabled: false,
+  analytics_daily_keep_days: null,
   last_cleanup_at: '2026-08-20T12:00:00Z',
   last_cleanup_result: {
     at: '2026-08-20T12:00:00Z',
@@ -71,6 +78,12 @@ vi.mock('../db/clients', () => {
           eq: vi.fn(() => q),
           lt: vi.fn(() => q),
           in: vi.fn(() => q),
+          limit: vi.fn().mockImplementation((n: number) => {
+            return Promise.resolve({
+              data: [{ id: 'row-1' }, { id: 'row-2' }, { id: 'row-3' }, { id: 'row-4' }, { id: 'row-5' }],
+              error: null,
+            });
+          }),
           single: vi.fn().mockResolvedValue({ data: mockMaybeSingleData, error: null }),
           maybeSingle: vi.fn().mockImplementation(() => Promise.resolve({ data: mockMaybeSingleData, error: null })),
           then: (resolve: any, reject: any) =>
@@ -78,22 +91,36 @@ vi.mock('../db/clients', () => {
         };
         return {
           from: vi.fn(() => q),
+          rpc: vi.fn((name: string, params: any) => {
+            mockRpcFn(name, params);
+            if (name === 'purge_old_pin_delivery_logs') return Promise.resolve({ data: 3, error: null });
+            return Promise.resolve({ data: null, error: null });
+          }),
         };
       }),
       getAnalytics: vi.fn().mockImplementation(() => {
         const q: any = {
+          select: vi.fn(() => q),
           delete: vi.fn(() => q),
           eq: vi.fn(() => q),
           lt: vi.fn(() => q),
+          in: vi.fn(() => q),
+          limit: vi.fn().mockResolvedValue({ data: [{ id: 'snap-1' }, { id: 'snap-2' }], error: null }),
           then: (resolve: any, reject: any) =>
             Promise.resolve({ count: 2, error: null }).then(resolve, reject),
         };
         return {
           from: vi.fn(() => q),
+          rpc: vi.fn((name: string, params: any) => {
+            mockRpcFn(name, params);
+            if (name === 'purge_old_analytics_ingestion_runs') return Promise.resolve({ data: { deleted_runs: 4 }, error: null });
+            return Promise.resolve({ data: null, error: null });
+          }),
         };
       }),
       getCompetitors: vi.fn().mockImplementation(() => {
         const q: any = {
+          select: vi.fn(() => q),
           delete: vi.fn(() => q),
           eq: vi.fn(() => q),
           lt: vi.fn(() => q),
@@ -102,6 +129,11 @@ vi.mock('../db/clients', () => {
         };
         return {
           from: vi.fn(() => q),
+          rpc: vi.fn((name: string, params: any) => {
+            mockRpcFn(name, params);
+            if (name === 'purge_competitor_retention') return Promise.resolve({ data: { snapshots: 10, jobs: 2 }, error: null });
+            return Promise.resolve({ data: null, error: null });
+          }),
         };
       }),
     },
@@ -116,6 +148,7 @@ describe('Retention & Recovery Telemetry & Manual Run Suite', () => {
     mockUpsertFn = vi.fn();
     mockDeleteFn = vi.fn();
     mockUpdateFn = vi.fn();
+    mockRpcFn = vi.fn();
     mockMaybeSingleData = {
       workspace_id: workspaceId,
       auto_prune_enabled: true,
@@ -126,6 +159,12 @@ describe('Retention & Recovery Telemetry & Manual Run Suite', () => {
       retention_logs_days: 14,
       import_sessions_days: 30,
       processing_timeout_minutes: 45,
+      competitor_snapshots_days: 90,
+      competitor_jobs_days: 30,
+      ingestion_runs_days: 30,
+      top_pins_raw_days: 180,
+      top_pins_downsample_enabled: false,
+      analytics_daily_keep_days: null,
       last_cleanup_at: '2026-08-20T12:00:00Z',
       last_cleanup_result: {
         at: '2026-08-20T12:00:00Z',
@@ -307,5 +346,34 @@ describe('Retention & Recovery Telemetry & Manual Run Suite', () => {
     const json = await res.json();
     expect(json.last_cleanup_at).toBe('2026-08-20T12:00:00Z');
     expect(json.last_cleanup_result).toEqual(mockMaybeSingleData.last_cleanup_result);
+  });
+
+  // Test 8: Tier 3 Regression Test - No settings row in DB => zero deletes and auto_prune_enabled: false
+  it('no settings row => zero deletes and telemetry upsert with auto_prune_enabled:false', async () => {
+    mockMaybeSingleData = null;
+
+    const payload = await runRetentionCleanup(workspaceId, {}, { trigger: 'api' });
+
+    expect(payload.deleted_pins_count).toBe(0);
+    expect(payload.deleted_terminal_pins_count).toBe(0);
+    expect(payload.deleted_delivery_logs).toBe(0);
+    expect(payload.deleted_import_sessions).toBe(0);
+    expect(payload.auto_prune_enabled).toBe(false);
+    expect(payload.p2_prune_enabled).toBe(false);
+    expect(payload.p3_prune_enabled).toBe(false);
+    expect(payload.warnings).toEqual([]);
+
+    expect(mockUpsertFn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspace_id: workspaceId,
+        auto_prune_enabled: false,
+        p2_prune_enabled: false,
+        p3_prune_enabled: false,
+        top_pins_downsample_enabled: false,
+        analytics_daily_keep_days: null,
+        ingestion_runs_days: 30,
+        top_pins_raw_days: 180,
+      })
+    );
   });
 });

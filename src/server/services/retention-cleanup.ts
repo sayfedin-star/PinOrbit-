@@ -7,13 +7,64 @@ export interface CleanupOverrides {
   p3?: boolean;
 }
 
+interface BatchedDeleteOptions {
+  column: string;
+  value: string;
+  dateColumn: string;
+  cutoff: string;
+  extraFilter?: { column: string; value: string };
+  batchSize?: number;
+}
+
+export async function batchedDelete(
+  client: any,
+  table: string,
+  options: BatchedDeleteOptions
+): Promise<number> {
+  let totalDeleted = 0;
+  const batchSize = options.batchSize || 500;
+
+  while (true) {
+    let query = client
+      .from(table)
+      .select('id')
+      .eq(options.column, options.value)
+      .lt(options.dateColumn, options.cutoff);
+
+    if (options.extraFilter) {
+      query = query.eq(options.extraFilter.column, options.extraFilter.value);
+    }
+
+    const { data: rows, error: selectErr } = await query.limit(batchSize);
+    if (selectErr) throw selectErr;
+    if (!rows || rows.length === 0) break;
+
+    const ids = rows.map((r: any) => r.id);
+    const { count, error: deleteErr } = await client
+      .from(table)
+      .delete({ count: 'exact' })
+      .in('id', ids);
+
+    if (deleteErr) throw deleteErr;
+
+    const batchDeleted = count ?? ids.length;
+    totalDeleted += batchDeleted;
+
+    if (batchDeleted < batchSize) break;
+
+    // Small delay to reduce DB load
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+
+  return totalDeleted;
+}
+
 export async function runRetentionCleanup(
   workspaceId: string,
   runtimeEnv: Record<string, any>,
   opts?: { overrides?: CleanupOverrides; trigger?: 'api' | 'manual' }
 ): Promise<Record<string, any>> {
   const schedulingAdmin = dbClients.getSchedulingAdmin(runtimeEnv);
-  const analyticsClient = dbClients.getAnalytics(runtimeEnv);
 
   // Read workspace retention settings (with fallbacks)
   const { data: wsSettings } = await schedulingAdmin
@@ -28,10 +79,10 @@ export async function runRetentionCleanup(
 
   const warnings: string[] = [];
 
-  // Effective gates based on explicit overrides or DB toggles (auto_prune_enabled defaults to true in schema)
-  const effectiveP1 = opts?.overrides?.p1 ?? (wsSettings?.auto_prune_enabled ?? true);
-  const effectiveP2 = opts?.overrides?.p2 ?? Boolean(wsSettings?.p2_prune_enabled);
-  const effectiveP3 = opts?.overrides?.p3 ?? Boolean(wsSettings?.p3_prune_enabled);
+  // Effective gates based on explicit overrides or DB toggles (default false in schema)
+  const effectiveP1 = opts?.overrides?.p1 ?? Boolean(wsSettings?.auto_prune_enabled ?? false);
+  const effectiveP2 = opts?.overrides?.p2 ?? Boolean(wsSettings?.p2_prune_enabled ?? false);
+  const effectiveP3 = opts?.overrides?.p3 ?? Boolean(wsSettings?.p3_prune_enabled ?? false);
 
   // 1. Unconditional Orphan Pin Sweep (outside gates)
   const sweepCutoff = new Date(Date.now() - processingTimeoutMinutes * 60000).toISOString();
@@ -64,60 +115,56 @@ export async function runRetentionCleanup(
 
   if (effectiveP1) {
     try {
-      const { count: pinCount, error: pinDeleteErr } = await schedulingAdmin
-        .from('pins')
-        .delete()
-        .eq('workspace_id', workspaceId)
-        .eq('status', 'posted')
-        .lt('posted_at', postedCutoff);
+      // 1. Purge posted pins older than workspace retention days using batchedDelete
+      deletedPinsCount = await batchedDelete(schedulingAdmin, 'pins', {
+        column: 'workspace_id',
+        value: workspaceId,
+        dateColumn: 'posted_at',
+        cutoff: postedCutoff,
+        extraFilter: { column: 'status', value: 'posted' },
+      });
 
-      if (pinDeleteErr) throw pinDeleteErr;
-      deletedPinsCount = pinCount ?? 0;
-    } catch (err: any) {
-      warnings.push(`P1 pins cleanup failed: ${err.message}`);
-    }
+      // 2. Terminal pins: failed & cancelled using batchedDelete
+      const terminalDays = typeof wsSettings?.retention_terminal_days === 'number' ? wsSettings.retention_terminal_days : 90;
+      const terminalCutoff = new Date(Date.now() - terminalDays * 86400000).toISOString();
+      const delFailed = await batchedDelete(schedulingAdmin, 'pins', {
+        column: 'workspace_id',
+        value: workspaceId,
+        dateColumn: 'updated_at',
+        cutoff: terminalCutoff,
+        extraFilter: { column: 'status', value: 'failed' },
+      });
+      const delCancelled = await batchedDelete(schedulingAdmin, 'pins', {
+        column: 'workspace_id',
+        value: workspaceId,
+        dateColumn: 'updated_at',
+        cutoff: terminalCutoff,
+        extraFilter: { column: 'status', value: 'cancelled' },
+      });
+      deletedTerminalPinsCount = delFailed + delCancelled;
 
-    if (wsSettings?.retention_terminal_days) {
-      try {
-        const termCutoff = new Date(Date.now() - wsSettings.retention_terminal_days * 86400000).toISOString();
-        const { count, error } = await schedulingAdmin
-          .from('pins')
-          .delete()
-          .eq('workspace_id', workspaceId)
-          .in('status', ['failed', 'cancelled'])
-          .lt('updated_at', termCutoff);
-        if (!error && count !== null) deletedTerminalPinsCount = count;
-      } catch (err: any) {
-        warnings.push(`P1 terminal pins cleanup failed: ${err.message}`);
-      }
-    }
+      // 3. Pin delivery logs RPC
+      const logsDays = typeof wsSettings?.retention_logs_days === 'number' ? wsSettings.retention_logs_days : 14;
+      const { data: logsData, error: logsErr } = await schedulingAdmin.rpc('purge_old_pin_delivery_logs', {
+        p_keep_success_days: logsDays,
+        p_keep_failure_days: Math.max(logsDays, 30),
+        p_workspace_id: workspaceId,
+      });
+      if (logsErr) throw logsErr;
+      deletedDeliveryLogs = typeof logsData === 'number' ? logsData : 0;
 
-    if (wsSettings?.retention_logs_days) {
-      try {
-        const logCutoff = new Date(Date.now() - wsSettings.retention_logs_days * 86400000).toISOString();
-        const { count, error } = await schedulingAdmin
-          .from('pin_delivery_logs')
-          .delete()
-          .eq('workspace_id', workspaceId)
-          .lt('created_at', logCutoff);
-        if (!error && count !== null) deletedDeliveryLogs = count;
-      } catch (err: any) {
-        warnings.push(`P1 delivery logs cleanup failed: ${err.message}`);
-      }
-    }
-
-    if (wsSettings?.import_sessions_days) {
-      try {
-        const sessionCutoff = new Date(Date.now() - wsSettings.import_sessions_days * 86400000).toISOString();
-        const { count, error } = await schedulingAdmin
-          .from('import_sessions')
-          .delete()
-          .eq('workspace_id', workspaceId)
-          .lt('created_at', sessionCutoff);
-        if (!error && count !== null) deletedImportSessions = count;
-      } catch (err: any) {
-        warnings.push(`P1 import sessions cleanup failed: ${err.message}`);
-      }
+      // 4. Import sessions using batchedDelete
+      const importDays = typeof wsSettings?.import_sessions_days === 'number' ? wsSettings.import_sessions_days : 30;
+      const sessionsCutoff = new Date(Date.now() - importDays * 86400000).toISOString();
+      deletedImportSessions = await batchedDelete(schedulingAdmin, 'import_sessions', {
+        column: 'workspace_id',
+        value: workspaceId,
+        dateColumn: 'created_at',
+        cutoff: sessionsCutoff,
+      });
+    } catch (p1Err: any) {
+      console.error('[Retention] P1 prune failed:', p1Err);
+      warnings.push(`P1 prune failed: ${p1Err.message || String(p1Err)}`);
     }
   }
 
@@ -125,36 +172,19 @@ export async function runRetentionCleanup(
   let p2Result: any = null;
   if (effectiveP2) {
     try {
-      const competitorsClient = dbClients.getCompetitors?.(runtimeEnv);
-      if (competitorsClient) {
-        const snapDays = wsSettings?.competitor_snapshots_days ?? 90;
-        const jobDays = wsSettings?.competitor_jobs_days ?? 30;
-        const snapCutoff = new Date(Date.now() - snapDays * 86400000).toISOString();
-        const jobCutoff = new Date(Date.now() - jobDays * 86400000).toISOString();
-
-        let snapshotsCount = 0;
-        let jobsCount = 0;
-
-        const { count: sCount, error: sErr } = await competitorsClient
-          .from('competitor_snapshots')
-          .delete()
-          .eq('workspace_id', workspaceId)
-          .lt('created_at', snapCutoff);
-        if (sErr) throw sErr;
-        snapshotsCount = sCount ?? 0;
-
-        const { count: jCount, error: jErr } = await competitorsClient
-          .from('competitor_ingestion_jobs')
-          .delete()
-          .eq('workspace_id', workspaceId)
-          .lt('created_at', jobCutoff);
-        if (jErr) throw jErr;
-        jobsCount = jCount ?? 0;
-
-        p2Result = { snapshots: snapshotsCount, jobs: jobsCount };
-      }
-    } catch (err: any) {
-      warnings.push(`P2 cleanup failed: ${err.message}`);
+      const competitorsClient = dbClients.getCompetitors(runtimeEnv);
+      const compSnapshotsDays = typeof wsSettings?.competitor_snapshots_days === 'number' ? wsSettings.competitor_snapshots_days : 90;
+      const compJobsDays = typeof wsSettings?.competitor_jobs_days === 'number' ? wsSettings.competitor_jobs_days : 30;
+      const { data: p2Data, error: p2Err } = await competitorsClient.rpc('purge_competitor_retention', {
+        p_keep_snapshot_days: compSnapshotsDays,
+        p_keep_job_days: compJobsDays,
+        p_workspace_id: workspaceId,
+      });
+      if (p2Err) throw p2Err;
+      p2Result = p2Data;
+    } catch (p2Err: any) {
+      console.error('[Retention] P2 prune failed:', p2Err);
+      warnings.push(`P2 prune failed: ${p2Err.message || String(p2Err)}`);
     }
   }
 
@@ -163,26 +193,51 @@ export async function runRetentionCleanup(
   let deletedIngestionRuns = 0;
   if (effectiveP3) {
     try {
-      const snapshotCutoff = new Date(Date.now() - 180 * 86400000).toISOString().split('T')[0];
-      const { count: snapCount, error: snapErr } = await analyticsClient
-        .from('top_pins_snapshots')
-        .delete()
-        .eq('workspace_id', workspaceId)
-        .lt('window_end', snapshotCutoff);
-      if (snapErr) throw snapErr;
-      deletedSnapshotsCount = snapCount ?? 0;
+      const analyticsClient = dbClients.getAnalytics(runtimeEnv);
+      const ingestionRunsDays = typeof wsSettings?.ingestion_runs_days === 'number' ? wsSettings.ingestion_runs_days : 30;
+      const { data: runsData, error: runsErr } = await analyticsClient.rpc('purge_old_analytics_ingestion_runs', {
+        p_keep_days: ingestionRunsDays,
+        p_workspace_id: workspaceId,
+      });
+      if (runsErr) throw runsErr;
+      deletedIngestionRuns = runsData?.deleted_runs ?? (typeof runsData === 'number' ? runsData : 0);
 
-      const runDays = wsSettings?.ingestion_runs_days ?? 90;
-      const runCutoff = new Date(Date.now() - runDays * 86400000).toISOString();
-      const { count: runCount, error: runErr } = await analyticsClient
-        .from('analytics_ingestion_runs')
-        .delete()
+      const topPinsRawDays = typeof wsSettings?.top_pins_raw_days === 'number' ? wsSettings.top_pins_raw_days : 180;
+      const snapshotCutoff = new Date(Date.now() - topPinsRawDays * 86400000).toISOString().split('T')[0];
+
+      const rollupCutoff = new Date(Date.now() - topPinsRawDays * 86400000);
+      const { data: oldSnapshots } = await analyticsClient
+        .from('top_pins_snapshots')
+        .select('*')
         .eq('workspace_id', workspaceId)
-        .lt('created_at', runCutoff);
-      if (runErr) throw runErr;
-      deletedIngestionRuns = runCount ?? 0;
-    } catch (err: any) {
-      warnings.push(`P3 cleanup failed: ${err.message}`);
+        .lt('window_end', rollupCutoff.toISOString())
+        .limit(10000);
+
+      if (oldSnapshots && oldSnapshots.length > 0) {
+        const monthlyRollups = new Map<string, any>();
+        for (const snap of oldSnapshots) {
+          if (!snap.window_end) continue;
+          const monthKey = `${snap.workspace_id}_${snap.connection_id}_${snap.sort_by}_${snap.window_end.slice(0, 7)}`;
+          const existing = monthlyRollups.get(monthKey) || { pins: [] };
+          existing.pins.push(snap);
+          monthlyRollups.set(monthKey, existing);
+        }
+        console.warn(`[Cleanup] ${oldSnapshots.length} snapshots >${topPinsRawDays}d - would create ${monthlyRollups.size} monthly rollups`);
+      }
+
+      deletedSnapshotsCount = await batchedDelete(analyticsClient, 'top_pins_snapshots', {
+        column: 'workspace_id',
+        value: workspaceId,
+        dateColumn: 'window_end',
+        cutoff: snapshotCutoff,
+      });
+
+      if (wsSettings?.top_pins_downsample_enabled) {
+        console.warn('[Retention] Top pins downsampling requested for workspace:', workspaceId);
+      }
+    } catch (p3Err: any) {
+      console.error('[Retention] P3 prune failed:', p3Err);
+      warnings.push(`P3 prune failed: ${p3Err.message || String(p3Err)}`);
     }
   }
 
@@ -190,6 +245,9 @@ export async function runRetentionCleanup(
   const payload: Record<string, any> = {
     success: true,
     workspace_id: workspaceId,
+    auto_prune_enabled: Boolean(wsSettings?.auto_prune_enabled ?? false),
+    p2_prune_enabled: Boolean(wsSettings?.p2_prune_enabled ?? false),
+    p3_prune_enabled: Boolean(wsSettings?.p3_prune_enabled ?? false),
     retention_posted_days: retentionPostedDays,
     processing_timeout_minutes: processingTimeoutMinutes,
     deleted_pins_count: deletedPinsCount,
@@ -204,12 +262,12 @@ export async function runRetentionCleanup(
     warnings,
   };
 
-  // Fail-lazy telemetry upsert with complete NOT NULL fallback defaults
+  // Fail-lazy telemetry upsert with complete schema defaults
   try {
     const telemetryPayload = {
       ...(wsSettings ?? {}),
       workspace_id: workspaceId,
-      auto_prune_enabled: wsSettings?.auto_prune_enabled ?? true,
+      auto_prune_enabled: wsSettings?.auto_prune_enabled ?? false,
       retention_posted_days: retentionPostedDays,
       retention_terminal_days: wsSettings?.retention_terminal_days ?? 90,
       retention_logs_days: wsSettings?.retention_logs_days ?? 14,
@@ -219,10 +277,10 @@ export async function runRetentionCleanup(
       competitor_snapshots_days: wsSettings?.competitor_snapshots_days ?? 90,
       competitor_jobs_days: wsSettings?.competitor_jobs_days ?? 30,
       p3_prune_enabled: wsSettings?.p3_prune_enabled ?? false,
-      ingestion_runs_days: wsSettings?.ingestion_runs_days ?? 90,
-      top_pins_raw_days: wsSettings?.top_pins_raw_days ?? 90,
-      top_pins_downsample_enabled: wsSettings?.top_pins_downsample_enabled ?? true,
-      analytics_daily_keep_days: wsSettings?.analytics_daily_keep_days ?? 90,
+      ingestion_runs_days: wsSettings?.ingestion_runs_days ?? 30,
+      top_pins_raw_days: wsSettings?.top_pins_raw_days ?? 180,
+      top_pins_downsample_enabled: wsSettings?.top_pins_downsample_enabled ?? false,
+      analytics_daily_keep_days: wsSettings?.analytics_daily_keep_days ?? null,
       last_cleanup_at: new Date().toISOString(),
       last_cleanup_result: {
         at: new Date().toISOString(),
