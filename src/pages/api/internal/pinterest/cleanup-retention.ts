@@ -4,6 +4,7 @@ import type { APIRoute } from 'astro';
 import { isKnownDefaultIngestSecret, isProductionEnv } from '../../../../server/db/clients';
 import { getEffectiveSecret } from '../../../../server/services/webhook-secrets';
 import { runRetentionCleanup } from '../../../../server/services/retention-cleanup';
+import { timingSafeEqual } from '../../../../server/lib/timing-safe';
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const runtimeEnv = (locals as { runtime?: { env?: Record<string, any> }; runtimeEnv?: Record<string, any> })?.runtime?.env || (locals as { runtimeEnv?: Record<string, any> })?.runtimeEnv || {};
@@ -55,7 +56,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return new Response(JSON.stringify({ success: false, error: 'Service unavailable: ingest secret not configured on server.' }), { status: 503, headers: { 'Content-Type': 'application/json' } });
   }
 
-  if (!secret || !expected.value || secret !== expected.value) {
+  if (!secret || !expected.value || !(await timingSafeEqual(secret, expected.value))) {
     return new Response(
       JSON.stringify({ success: false, error: 'Unauthorized: invalid or missing x-ingest-secret.' }),
       {
