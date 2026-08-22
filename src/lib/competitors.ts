@@ -436,18 +436,27 @@ export async function getCompetitors(workspaceId?: string): Promise<Competitor[]
         : [...mockCompetitors];
     }
 
-    // Attach board count & strategy age if boards exist
-    const { data: boards } = await supabase.from('competitor_boards').select('competitor_id, board_created_at');
+    // Attach board count & strategy age scoped to workspace competitors
+    const competitorIds = competitors.map((c) => c.id);
+    let boards: Array<{ competitor_id: string; board_created_at: string | null }> = [];
+    if (competitorIds.length > 0) {
+      const { data: bData } = await supabase
+        .from('competitor_boards')
+        .select('competitor_id, board_created_at')
+        .in('competitor_id', competitorIds);
+      boards = (bData as any) || [];
+    }
 
     const result: Competitor[] = competitors.map((c) => {
-      const compBoards = (boards || []).filter((b) => b.competitor_id === c.id);
+      const compBoards = boards.filter((b) => b.competitor_id === c.id);
+      const boardsCount = compBoards.length;
       const { days: strategyAgeDays, oldestBoardDate } = calculateStrategyAge(compBoards as any);
 
       return {
         ...c,
         profile_reach: Number(c.profile_reach) || 0,
         profile_views: Number(c.profile_views) || 0,
-        boards_count: compBoards.length,
+        boards_count: boardsCount,
         strategy_age_days: strategyAgeDays,
         oldest_board_date: oldestBoardDate,
       };
@@ -499,7 +508,8 @@ export async function getCompetitorDetails(competitorId: string): Promise<{
         .from('competitor_snapshots')
         .select('*')
         .eq('competitor_id', competitorId)
-        .order('recorded_at', { ascending: false }),
+        .order('recorded_at', { ascending: false })
+        .limit(60),
       supabase
         .from('competitor_boards')
         .select('*')

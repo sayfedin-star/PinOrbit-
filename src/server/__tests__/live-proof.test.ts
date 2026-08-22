@@ -1,19 +1,58 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { GET as getLeaderboard } from '../../pages/api/analytics/connections/[id]/pin-leaderboard';
+
+// Note: workspace-access guard is mocked externally; this mock only simulates the analyticsDb layer.
+vi.mock('../db/analytics', () => ({
+  analyticsDb: {
+    getPinLeaderboard: vi.fn().mockImplementation((_ws, _conn, _sort, _days, pageSize, _q, opts) => {
+      const page = opts?.page || 1;
+      const count = pageSize || 10;
+      const data = Array.from({ length: count }, (_, i) => ({
+        pin_id: `pin-${page}-${i}`,
+        title: `Pin ${page}-${i}`,
+        link: 'https://example.com',
+        destination_url: 'https://example.com/recipe',
+        thumbnail_url: 'https://example.com/thumb.jpg',
+        appearances: 5,
+        best_rank: 1,
+        latest_rank: 2,
+        first_seen: '2026-08-01T00:00:00Z',
+        last_seen: '2026-08-10T00:00:00Z',
+        trend: 'RISING',
+        total_impressions: 10000,
+        total_saves: 500,
+        total_pin_clicks: 300,
+        total_outbound_clicks: 150,
+        total_engagements: 950,
+        engagement_rate: 0.095,
+        outbound_click_rate: 0.015,
+        pin_click_rate: 0.03,
+        save_rate: 0.05,
+      }));
+      return Promise.resolve({
+        items: data,
+        total_unique: 50,
+        page,
+        page_size: count,
+        total_pages: 5,
+      });
+    }),
+  },
+}));
 
 describe('Live Endpoint Verification & Proof Generation (V36)', () => {
   const connectionId = '8aa5b660-e54a-4e44-b8bd-28e9d3ab8596';
   const workspaceId = '9f08ca03-e79c-46fa-9518-6858216daf65';
 
   const mockLocals = {
-    user: { id: 'u1' },
+    user: { id: '00000000-0000-0000-0000-000000000002' },
     supabase: {
       from: () => ({
         select: () => ({
           eq: () => ({
             eq: () => ({
               single: async () => ({
-                data: { id: 'm1', workspace_id: workspaceId, user_id: 'u1', role: 'owner' },
+                data: { id: 'm1', workspace_id: workspaceId, user_id: '00000000-0000-0000-0000-000000000002', role: 'owner' },
                 error: null,
               }),
             }),

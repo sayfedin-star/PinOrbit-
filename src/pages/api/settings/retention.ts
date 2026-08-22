@@ -3,7 +3,13 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 import { assertWorkspaceAccess } from '../../../server/auth/workspace-guard';
 import { dbClients } from '../../../server/db/clients';
-import { clampRetentionPostedDays, clampProcessingTimeoutMinutes } from '../../../server/services/scheduling-logic';
+
+function clampInt(val: any, min: number, max: number, fallback: number | null): number | null {
+  if (val === undefined || val === null || val === '') return fallback;
+  const num = Number(val);
+  if (isNaN(num)) return fallback;
+  return Math.max(min, Math.min(max, Math.round(num)));
+}
 
 export const GET: APIRoute = async ({ request, locals }) => {
   const user = locals.user;
@@ -26,7 +32,7 @@ export const GET: APIRoute = async ({ request, locals }) => {
 
     const { data: settings, error } = await adminClient
       .from('workspace_retention_settings')
-      .select('workspace_id, retention_posted_days, processing_timeout_minutes, updated_at')
+      .select('*')
       .eq('workspace_id', workspaceId)
       .maybeSingle();
 
@@ -38,8 +44,22 @@ export const GET: APIRoute = async ({ request, locals }) => {
       return new Response(
         JSON.stringify({
           workspace_id: workspaceId,
+          auto_prune_enabled: false,
           retention_posted_days: 30,
+          retention_terminal_days: 90,
+          retention_logs_days: 14,
+          import_sessions_days: 30,
           processing_timeout_minutes: 45,
+          p2_prune_enabled: false,
+          competitor_snapshots_days: 90,
+          competitor_jobs_days: 30,
+          p3_prune_enabled: false,
+          ingestion_runs_days: 30,
+          top_pins_raw_days: 180,
+          top_pins_downsample_enabled: false,
+          analytics_daily_keep_days: null,
+          last_cleanup_at: null,
+          last_cleanup_result: null,
           is_default: true,
         }),
         {
@@ -52,8 +72,22 @@ export const GET: APIRoute = async ({ request, locals }) => {
     return new Response(
       JSON.stringify({
         workspace_id: settings.workspace_id,
+        auto_prune_enabled: settings.auto_prune_enabled ?? false,
         retention_posted_days: settings.retention_posted_days ?? 30,
+        retention_terminal_days: settings.retention_terminal_days ?? 90,
+        retention_logs_days: settings.retention_logs_days ?? 14,
+        import_sessions_days: settings.import_sessions_days ?? 30,
         processing_timeout_minutes: settings.processing_timeout_minutes ?? 45,
+        p2_prune_enabled: settings.p2_prune_enabled ?? false,
+        competitor_snapshots_days: settings.competitor_snapshots_days ?? 90,
+        competitor_jobs_days: settings.competitor_jobs_days ?? 30,
+        p3_prune_enabled: settings.p3_prune_enabled ?? false,
+        ingestion_runs_days: settings.ingestion_runs_days ?? 30,
+        top_pins_raw_days: settings.top_pins_raw_days ?? 180,
+        top_pins_downsample_enabled: settings.top_pins_downsample_enabled ?? false,
+        analytics_daily_keep_days: settings.analytics_daily_keep_days ?? null,
+        last_cleanup_at: settings.last_cleanup_at ?? null,
+        last_cleanup_result: settings.last_cleanup_result ?? null,
         is_default: false,
         updated_at: settings.updated_at,
       }),
@@ -108,29 +142,59 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
     // Fetch existing or fallback
     const { data: existing } = await adminClient
       .from('workspace_retention_settings')
-      .select('retention_posted_days, processing_timeout_minutes')
+      .select('*')
       .eq('workspace_id', workspaceId)
       .maybeSingle();
 
-    const rawDays = body.retention_posted_days !== undefined ? body.retention_posted_days : existing?.retention_posted_days;
+    const rawAutoPrune = body.auto_prune_enabled !== undefined ? body.auto_prune_enabled : existing?.auto_prune_enabled;
+    const rawPostedDays = body.retention_posted_days !== undefined ? body.retention_posted_days : existing?.retention_posted_days;
+    const rawTerminalDays = body.retention_terminal_days !== undefined ? body.retention_terminal_days : existing?.retention_terminal_days;
+    const rawLogsDays = body.retention_logs_days !== undefined ? body.retention_logs_days : existing?.retention_logs_days;
+    const rawImportDays = body.import_sessions_days !== undefined ? body.import_sessions_days : existing?.import_sessions_days;
     const rawTimeout = body.processing_timeout_minutes !== undefined ? body.processing_timeout_minutes : existing?.processing_timeout_minutes;
 
-    // Clamp ranges: days 1–365, minutes 5–240
-    const clampedRetentionDays = clampRetentionPostedDays(rawDays);
-    const clampedProcessingTimeoutMinutes = clampProcessingTimeoutMinutes(rawTimeout);
+    const rawP2Prune = body.p2_prune_enabled !== undefined ? body.p2_prune_enabled : existing?.p2_prune_enabled;
+    const rawCompSnapshots = body.competitor_snapshots_days !== undefined ? body.competitor_snapshots_days : existing?.competitor_snapshots_days;
+    const rawCompJobs = body.competitor_jobs_days !== undefined ? body.competitor_jobs_days : existing?.competitor_jobs_days;
+
+    const rawP3Prune = body.p3_prune_enabled !== undefined ? body.p3_prune_enabled : existing?.p3_prune_enabled;
+    const rawIngestionRuns = body.ingestion_runs_days !== undefined ? body.ingestion_runs_days : existing?.ingestion_runs_days;
+    const rawTopPinsRaw = body.top_pins_raw_days !== undefined ? body.top_pins_raw_days : existing?.top_pins_raw_days;
+    const rawTopPinsDownsample = body.top_pins_downsample_enabled !== undefined ? body.top_pins_downsample_enabled : existing?.top_pins_downsample_enabled;
+
+    let clampedDailyKeep: number | null = null;
+    if (body.analytics_daily_keep_days === null || body.analytics_daily_keep_days === '') {
+      clampedDailyKeep = null;
+    } else if (body.analytics_daily_keep_days !== undefined) {
+      clampedDailyKeep = clampInt(body.analytics_daily_keep_days, 1, 730, existing?.analytics_daily_keep_days ?? null);
+    } else {
+      clampedDailyKeep = existing?.analytics_daily_keep_days ?? null;
+    }
+
+    const payload = {
+      ...(existing ?? {}),
+      workspace_id: workspaceId,
+      auto_prune_enabled: Boolean(rawAutoPrune ?? false),
+      retention_posted_days: clampInt(rawPostedDays, 1, 365, existing?.retention_posted_days ?? 30) ?? 30,
+      retention_terminal_days: clampInt(rawTerminalDays, 1, 365, existing?.retention_terminal_days ?? 90) ?? 90,
+      retention_logs_days: clampInt(rawLogsDays, 1, 180, existing?.retention_logs_days ?? 14) ?? 14,
+      import_sessions_days: clampInt(rawImportDays, 1, 365, existing?.import_sessions_days ?? 30) ?? 30,
+      processing_timeout_minutes: clampInt(rawTimeout, 5, 240, existing?.processing_timeout_minutes ?? 45) ?? 45,
+      p2_prune_enabled: Boolean(rawP2Prune ?? false),
+      competitor_snapshots_days: clampInt(rawCompSnapshots, 1, 365, existing?.competitor_snapshots_days ?? 90) ?? 90,
+      competitor_jobs_days: clampInt(rawCompJobs, 1, 180, existing?.competitor_jobs_days ?? 30) ?? 30,
+      p3_prune_enabled: Boolean(rawP3Prune ?? false),
+      ingestion_runs_days: clampInt(rawIngestionRuns, 1, 365, existing?.ingestion_runs_days ?? 30) ?? 30,
+      top_pins_raw_days: clampInt(rawTopPinsRaw, 1, 730, existing?.top_pins_raw_days ?? 180) ?? 180,
+      top_pins_downsample_enabled: Boolean(rawTopPinsDownsample ?? false),
+      analytics_daily_keep_days: clampedDailyKeep,
+      updated_at: new Date().toISOString(),
+    };
 
     const { data: saved, error: upsertErr } = await adminClient
       .from('workspace_retention_settings')
-      .upsert(
-        {
-          workspace_id: workspaceId,
-          retention_posted_days: clampedRetentionDays,
-          processing_timeout_minutes: clampedProcessingTimeoutMinutes,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'workspace_id' }
-      )
-      .select('workspace_id, retention_posted_days, processing_timeout_minutes, updated_at')
+      .upsert(payload, { onConflict: 'workspace_id' })
+      .select('*')
       .single();
 
     if (upsertErr) throw upsertErr;
@@ -139,8 +203,22 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
       JSON.stringify({
         success: true,
         workspace_id: saved.workspace_id,
+        auto_prune_enabled: saved.auto_prune_enabled,
         retention_posted_days: saved.retention_posted_days,
+        retention_terminal_days: saved.retention_terminal_days,
+        retention_logs_days: saved.retention_logs_days,
+        import_sessions_days: saved.import_sessions_days,
         processing_timeout_minutes: saved.processing_timeout_minutes,
+        p2_prune_enabled: saved.p2_prune_enabled,
+        competitor_snapshots_days: saved.competitor_snapshots_days,
+        competitor_jobs_days: saved.competitor_jobs_days,
+        p3_prune_enabled: saved.p3_prune_enabled,
+        ingestion_runs_days: saved.ingestion_runs_days,
+        top_pins_raw_days: saved.top_pins_raw_days,
+        top_pins_downsample_enabled: saved.top_pins_downsample_enabled,
+        analytics_daily_keep_days: saved.analytics_daily_keep_days,
+        last_cleanup_at: saved.last_cleanup_at ?? null,
+        last_cleanup_result: saved.last_cleanup_result ?? null,
         is_default: false,
         updated_at: saved.updated_at,
       }),

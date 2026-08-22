@@ -180,13 +180,23 @@ export function createSchedulingSSRClient(
   });
 }
 
+function getRequiredSecretKey(secretKey?: string, serviceName: string = 'Service', runtimeEnv?: Record<string, any>): string {
+  if (!secretKey || secretKey.trim().length === 0) {
+    if (isProductionEnv(runtimeEnv)) {
+      throw new Error(`[DatabaseConfigError] ${serviceName} secret key is missing.`);
+    }
+    return 'missing-secret-key-dev-placeholder';
+  }
+  return secretKey.trim();
+}
+
 /**
  * Creates a server-only administrative client for Project 1 (Scheduling).
  * Used exclusively for background queues, cron dispatch, and audit logging.
  */
 export function createSchedulingAdminClient(runtimeEnv?: Record<string, any>): SupabaseClient {
   const env = getServerEnv(runtimeEnv);
-  const key = env.SCHEDULING_SUPABASE_SECRET_KEY || env.SCHEDULING_SUPABASE_PUBLISHABLE_KEY;
+  const key = getRequiredSecretKey(env.SCHEDULING_SUPABASE_SECRET_KEY, 'Scheduling', runtimeEnv);
   return createClient(env.SCHEDULING_SUPABASE_URL, key, {
     auth: {
       persistSession: false,
@@ -206,7 +216,7 @@ export function createSchedulingAdminClient(runtimeEnv?: Record<string, any>): S
  */
 export function createCompetitorsClient(runtimeEnv?: Record<string, any>): SupabaseClient {
   const env = getServerEnv(runtimeEnv);
-  const key = env.COMPETITORS_SUPABASE_SECRET_KEY || env.COMPETITORS_SUPABASE_PUBLISHABLE_KEY;
+  const key = getRequiredSecretKey(env.COMPETITORS_SUPABASE_SECRET_KEY, 'Competitors', runtimeEnv);
   return createClient(env.COMPETITORS_SUPABASE_URL, key, {
     auth: {
       persistSession: false,
@@ -226,7 +236,7 @@ export function createCompetitorsClient(runtimeEnv?: Record<string, any>): Supab
  */
 export function createAnalyticsClient(runtimeEnv?: Record<string, any>): SupabaseClient {
   const env = getServerEnv(runtimeEnv);
-  const key = env.ANALYTICS_SUPABASE_SECRET_KEY || env.ANALYTICS_SUPABASE_PUBLISHABLE_KEY;
+  const key = getRequiredSecretKey(env.ANALYTICS_SUPABASE_SECRET_KEY, 'Analytics', runtimeEnv);
   return createClient(env.ANALYTICS_SUPABASE_URL, key, {
     auth: {
       persistSession: false,

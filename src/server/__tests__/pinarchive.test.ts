@@ -65,22 +65,22 @@ describe('PinArchive Module Test Suite', () => {
   });
 
   describe('1. timingSafeEqual Helper', () => {
-    it('returns true for matching strings', () => {
-      expect(timingSafeEqual('secret123', 'secret123')).toBe(true);
-      expect(timingSafeEqual('', '')).toBe(true);
+    it('returns true for matching strings', async () => {
+      expect(await timingSafeEqual('secret123', 'secret123')).toBe(true);
+      expect(await timingSafeEqual('', '')).toBe(true);
     });
 
-    it('returns false for mismatched strings or differing lengths', () => {
-      expect(timingSafeEqual('secret123', 'secret124')).toBe(false);
-      expect(timingSafeEqual('secret123', 'secret1234')).toBe(false);
-      expect(timingSafeEqual('secret1234', 'secret123')).toBe(false);
+    it('returns false for mismatched strings or differing lengths', async () => {
+      expect(await timingSafeEqual('secret123', 'secret124')).toBe(false);
+      expect(await timingSafeEqual('secret123', 'secret1234')).toBe(false);
+      expect(await timingSafeEqual('secret1234', 'secret123')).toBe(false);
     });
 
-    it('handles null, undefined, or non-string inputs safely without throwing', () => {
-      expect(timingSafeEqual(null, 'secret')).toBe(false);
-      expect(timingSafeEqual('secret', null)).toBe(false);
-      expect(timingSafeEqual(undefined, undefined)).toBe(false);
-      expect(timingSafeEqual(undefined, 'secret')).toBe(false);
+    it('handles null, undefined, or non-string inputs safely without throwing', async () => {
+      expect(await timingSafeEqual(null, 'secret')).toBe(false);
+      expect(await timingSafeEqual('secret', null)).toBe(false);
+      expect(await timingSafeEqual(undefined, undefined)).toBe(false);
+      expect(await timingSafeEqual(undefined, 'secret')).toBe(false);
     });
   });
 

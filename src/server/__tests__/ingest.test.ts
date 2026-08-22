@@ -413,22 +413,9 @@ describe('Pinterest Ingestion Validation Sequence & Security Suite (V19 Strict M
       locals: { runtime: { env: mockRuntimeEnv } },
     } as any);
 
-    expect(res.status).toBe(200);
-    expect(warnSpy).toHaveBeenCalledWith(
-      '[IngestAPI] Client workspace_id mismatch — using connection.workspace_id',
-      {
-        client_ws: wrongWsId,
-        connection_ws: mockWsId,
-      }
-    );
-    expect(pinnerETL.processIngestionPayload).toHaveBeenCalledWith(
-      expect.objectContaining({
-        connection_id: mockConnId,
-        workspace_id: mockWsId,
-      }),
-      expect.anything(),
-      expect.anything()
-    );
+    expect(res.status).toBe(403);
+    const resBody = await res.json();
+    expect(resBody.error).toContain('does not match connection workspace');
 
     warnSpy.mockRestore();
   });

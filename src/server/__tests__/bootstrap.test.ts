@@ -142,7 +142,8 @@ describe('Server Admin Bootstrap Engine', () => {
       email: 'admin@pinorbit.internal',
       password: 'SuperSecretPassword123!',
       email_confirm: true,
-      user_metadata: expect.objectContaining({ role: 'admin', bootstrapped: true }),
+      app_metadata: expect.objectContaining({ role: 'admin', bootstrapped: true }),
+      user_metadata: expect.objectContaining({ bootstrapped: true }),
     });
     expect(insertAdminUserMock).toHaveBeenCalledWith(
       { user_id: createdUserId },

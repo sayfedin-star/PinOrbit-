@@ -27,21 +27,26 @@ vi.mock('../db/clients', () => ({
       SNITCH_WEBHOOK_URL: 'https://webhook.site/test-snitch',
     }),
     getAnalytics: vi.fn().mockReturnValue({
-      from: vi.fn((table: string) => ({
-        upsert: vi.fn().mockResolvedValue({ error: null }),
-        update: vi.fn().mockReturnThis(),
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        is: vi.fn().mockReturnThis(),
-        maybeSingle: vi.fn().mockImplementation(async () => ({
-          data: {
-            id: 'a1b2c3d4-e5f6-7890-1234-56789abcdef0',
-            workspace_id: '00000000-0000-0000-0000-000000000001',
-            analytics_enabled: true,
-          },
-          error: null,
-        })),
-      })),
+      from: vi.fn((table: string) => {
+        const chain: any = {
+          upsert: vi.fn().mockResolvedValue({ error: null }),
+          update: vi.fn().mockReturnThis(),
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          lt: vi.fn().mockReturnThis(),
+          is: vi.fn().mockReturnThis(),
+          then: vi.fn().mockImplementation((fn: any) => Promise.resolve(fn ? fn({ error: null }) : { error: null })),
+          maybeSingle: vi.fn().mockImplementation(async () => ({
+            data: {
+              id: 'a1b2c3d4-e5f6-7890-1234-56789abcdef0',
+              workspace_id: '00000000-0000-0000-0000-000000000001',
+              analytics_enabled: true,
+            },
+            error: null,
+          })),
+        };
+        return chain;
+      }),
     }),
   },
 }));

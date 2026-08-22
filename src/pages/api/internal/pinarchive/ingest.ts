@@ -85,7 +85,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     request.headers.get('x-ingest-secret') ||
     (typeof payload.ingest_secret === 'string' ? payload.ingest_secret : null);
 
-  if (!providedSecret || !eff.value || !timingSafeEqual(providedSecret, eff.value)) {
+  if (!providedSecret || !eff.value || !(await timingSafeEqual(providedSecret, eff.value))) {
     return new Response(
       JSON.stringify({ success: false, error: 'Unauthorized: missing or invalid x-ingest-secret header.' }),
       { status: 401, headers: { 'Content-Type': 'application/json' } }

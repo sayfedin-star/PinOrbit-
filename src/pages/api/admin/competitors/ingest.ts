@@ -5,6 +5,8 @@ import { dbClients } from '../../../../server/db/clients';
 import { errorStatus } from '../../../../server/lib/http-error';
 import { parsePinterestPayload } from '../../../../lib/competitors';
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const json = (o: any, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { 'Content-Type': 'application/json' } });
 
 export const POST: APIRoute = async ({ request, locals }) => {
@@ -13,6 +15,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (!user || !schedulingClient || !ws) return json({ error: 'Unauthorized' }, 401);
   try { await assertWorkspaceAccess(schedulingClient, ws, user.id, 'admin'); }
   catch (e: any) { return json({ error: e.message || 'Forbidden' }, errorStatus(e)); }
+
+  if (!body.competitor_id || !UUID_REGEX.test(body.competitor_id)) {
+    return json({ success: false, error: 'Invalid competitor ID format.' }, 400);
+  }
 
   const db = dbClients.getCompetitors(locals.runtime?.env);
   const parsed = parsePinterestPayload(body.payload || '');
@@ -36,6 +42,14 @@ export const POST: APIRoute = async ({ request, locals }) => {
     }).eq('id', comp.data.id);
     await db.from('competitor_snapshots').insert({ competitor_id: comp.data.id, profile_reach: reach, profile_views: views, follower_count: fol, pin_count: pins, recorded_at: now });
     await db.from('competitor_daily_snapshots').upsert({ competitor_id: comp.data.id, snapshot_date: now.slice(0, 10), profile_reach: reach, profile_views: views, follower_count: fol, pin_count: pins }, { onConflict: 'competitor_id,snapshot_date' });
+
+    // Prune raw snapshots older than 30 days for this competitor
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
+    await db.from('competitor_snapshots')
+      .delete()
+      .eq('competitor_id', comp.data.id)
+      .lt('recorded_at', thirtyDaysAgo);
+
     return json({ success: true, type: parsed.type, message: 'Profile payload ingested.' });
   }
 
