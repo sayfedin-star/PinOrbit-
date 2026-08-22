@@ -11,6 +11,9 @@ export interface ServerEnvConfig {
   ANALYTICS_SUPABASE_URL: string;
   ANALYTICS_SUPABASE_PUBLISHABLE_KEY: string;
   ANALYTICS_SUPABASE_SECRET_KEY: string;
+  PINARCHIVE_SUPABASE_URL: string;
+  PINARCHIVE_SUPABASE_SECRET_KEY: string;
+  PINARCHIVE_GAS_URL: string;
   INGEST_SECRET_KEY: string;
   SNITCH_WEBHOOK_URL: string;
   FASTCRON_API_TOKEN: string;
@@ -68,6 +71,13 @@ export function getServerEnv(runtimeEnv?: Record<string, any>): ServerEnvConfig 
     'sb_publishable_cg8skREWZBWdUyJvuGCn_w_Y-WrWU55';
   const ANALYTICS_SUPABASE_SECRET_KEY = env.ANALYTICS_SUPABASE_SECRET_KEY || '';
 
+  const PINARCHIVE_SUPABASE_URL =
+    env.PINARCHIVE_SUPABASE_URL || 'https://kuuugffvyokywtgmdrfk.supabase.co';
+  const PINARCHIVE_SUPABASE_SECRET_KEY = env.PINARCHIVE_SUPABASE_SECRET_KEY || '';
+  const PINARCHIVE_GAS_URL =
+    env.PINARCHIVE_GAS_URL ||
+    'https://script.google.com/macros/s/AKfycbwBFmyisJ59ejbOLimfgLHAfPcGx4E_WhIiSEI56BhFSJ6HkHrM2wfoPeO-v3nJa5CA/exec';
+
   const INGEST_SECRET_KEY = env.INGEST_SECRET_KEY || 'pinorbit_ingest_secret_dev';
 
   const isProd =
@@ -112,6 +122,9 @@ export function getServerEnv(runtimeEnv?: Record<string, any>): ServerEnvConfig 
     ANALYTICS_SUPABASE_URL,
     ANALYTICS_SUPABASE_PUBLISHABLE_KEY,
     ANALYTICS_SUPABASE_SECRET_KEY,
+    PINARCHIVE_SUPABASE_URL,
+    PINARCHIVE_SUPABASE_SECRET_KEY,
+    PINARCHIVE_GAS_URL,
     INGEST_SECRET_KEY,
     SNITCH_WEBHOOK_URL,
     FASTCRON_API_TOKEN,
@@ -227,9 +240,30 @@ export function createAnalyticsClient(runtimeEnv?: Record<string, any>): Supabas
   });
 }
 
+/**
+ * Creates a server-only client for Project 4 (PinArchive).
+ * NEVER accessible or exposed to the browser.
+ */
+export function createPinArchiveClient(runtimeEnv?: Record<string, any>): SupabaseClient {
+  const env = getServerEnv(runtimeEnv);
+  const key = env.PINARCHIVE_SUPABASE_SECRET_KEY || env.SCHEDULING_SUPABASE_PUBLISHABLE_KEY;
+  return createClient(env.PINARCHIVE_SUPABASE_URL, key, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+    global: {
+      headers: {
+        'x-client-info': 'pinorbit-v2-pinarchive-server',
+      },
+    },
+  });
+}
+
 // Singleton instances for persistent server-side connection pooling
 let competitorsClientInstance: SupabaseClient | null = null;
 let analyticsClientInstance: SupabaseClient | null = null;
+let pinArchiveClientInstance: SupabaseClient | null = null;
 let schedulingAdminClientInstance: SupabaseClient | null = null;
 
 /**
@@ -237,8 +271,8 @@ let schedulingAdminClientInstance: SupabaseClient | null = null;
  *
  * Rules:
  * 1. Project 1 (Scheduling) is the sole authority for identity, sessions, and workspaces.
- * 2. Projects 2 (Competitors) and 3 (Analytics) are server-only and require prior Project 1 authorization.
- * 3. Browser code never receives secrets or direct access to Projects 2 and 3.
+ * 2. Projects 2 (Competitors), 3 (Analytics), and 4 (PinArchive) are server-only and require prior Project 1 authorization.
+ * 3. Browser code never receives secrets or direct access to Projects 2, 3, and 4.
  */
 export const dbClients = {
   /**
@@ -288,6 +322,17 @@ export const dbClients = {
       analyticsClientInstance = createAnalyticsClient(runtimeEnv);
     }
     return analyticsClientInstance;
+  },
+
+  /**
+   * Returns the server-only client for Project 4 (PinArchive).
+   * MUST only be called after verifying workspace membership via Project 1.
+   */
+  getPinArchive(runtimeEnv?: Record<string, any>): SupabaseClient {
+    if (!pinArchiveClientInstance || runtimeEnv) {
+      pinArchiveClientInstance = createPinArchiveClient(runtimeEnv);
+    }
+    return pinArchiveClientInstance;
   },
 
   /**
